@@ -1,13 +1,69 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import React, { useState } from 'react';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { MusicProvider } from '@/contexts/MusicContext';
+import { Sidebar } from '@/components/layout/Sidebar';
+import { AuthModal } from '@/components/auth/AuthModal';
+import { HomePage } from './HomePage';
+import { CreateMusicPage } from './CreateMusicPage';
+import { DashboardPage } from './DashboardPage';
 
-const Index = () => {
+type Page = 'home' | 'create' | 'dashboard';
+
+const AppContent: React.FC = () => {
+  const [currentPage, setCurrentPage] = useState<Page>('home');
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  const handleNavigate = (page: string) => {
+    setCurrentPage(page as Page);
+  };
+
+  const renderPage = () => {
+    switch (currentPage) {
+      case 'home':
+        return <HomePage onNavigate={handleNavigate} />;
+      case 'create':
+        return <CreateMusicPage onAuthClick={() => setShowAuthModal(true)} />;
+      case 'dashboard':
+        return (
+          <DashboardPage 
+            onAuthClick={() => setShowAuthModal(true)} 
+            onNavigate={handleNavigate}
+          />
+        );
+      default:
+        return <HomePage onNavigate={handleNavigate} />;
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen bg-background">
+      <Sidebar
+        currentPage={currentPage}
+        onNavigate={handleNavigate}
+        onAuthClick={() => setShowAuthModal(true)}
+      />
+      
+      {/* Main content area */}
+      <main className="ml-64">
+        {renderPage()}
+      </main>
+
+      {/* Auth Modal */}
+      <AuthModal 
+        isOpen={showAuthModal} 
+        onClose={() => setShowAuthModal(false)} 
+      />
     </div>
+  );
+};
+
+const Index: React.FC = () => {
+  return (
+    <AuthProvider>
+      <MusicProvider>
+        <AppContent />
+      </MusicProvider>
+    </AuthProvider>
   );
 };
 
