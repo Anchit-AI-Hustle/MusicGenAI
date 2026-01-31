@@ -14,7 +14,136 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      music_creations: {
+        Row: {
+          artist_inspiration: string | null
+          created_at: string
+          duration_seconds: number
+          generate_video: boolean
+          genres: string[]
+          id: string
+          lyrics: string | null
+          music_prompt: string
+          status: string
+          title: string
+          type: string
+          updated_at: string
+          user_id: string
+          video_style: string | null
+          vocal_languages: string[]
+        }
+        Insert: {
+          artist_inspiration?: string | null
+          created_at?: string
+          duration_seconds?: number
+          generate_video?: boolean
+          genres?: string[]
+          id?: string
+          lyrics?: string | null
+          music_prompt: string
+          status?: string
+          title: string
+          type: string
+          updated_at?: string
+          user_id: string
+          video_style?: string | null
+          vocal_languages?: string[]
+        }
+        Update: {
+          artist_inspiration?: string | null
+          created_at?: string
+          duration_seconds?: number
+          generate_video?: boolean
+          genres?: string[]
+          id?: string
+          lyrics?: string | null
+          music_prompt?: string
+          status?: string
+          title?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+          video_style?: string | null
+          vocal_languages?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "music_creations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          mobile_number: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mobile_number: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mobile_number?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      tracks: {
+        Row: {
+          audio_url: string | null
+          created_at: string
+          creation_id: string
+          duration_seconds: number
+          id: string
+          status: string
+          title: string
+          track_number: number
+          video_url: string | null
+        }
+        Insert: {
+          audio_url?: string | null
+          created_at?: string
+          creation_id: string
+          duration_seconds?: number
+          id?: string
+          status?: string
+          title: string
+          track_number?: number
+          video_url?: string | null
+        }
+        Update: {
+          audio_url?: string | null
+          created_at?: string
+          creation_id?: string
+          duration_seconds?: number
+          id?: string
+          status?: string
+          title?: string
+          track_number?: number
+          video_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tracks_creation_id_fkey"
+            columns: ["creation_id"]
+            isOneToOne: false
+            referencedRelation: "music_creations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
