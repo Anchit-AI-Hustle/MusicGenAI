@@ -1,17 +1,21 @@
 import React, { useState } from 'react';
-import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { MusicProvider } from '@/contexts/MusicContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { HomePage } from './HomePage';
 import { CreateMusicPage } from './CreateMusicPage';
 import { DashboardPage } from './DashboardPage';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Loader2 } from 'lucide-react';
 
 type Page = 'home' | 'create' | 'dashboard';
 
 const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const { isLoading } = useAuth();
+  const isMobile = useIsMobile();
 
   const handleNavigate = (page: string) => {
     setCurrentPage(page as Page);
@@ -35,6 +39,17 @@ const AppContent: React.FC = () => {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar
@@ -43,8 +58,8 @@ const AppContent: React.FC = () => {
         onAuthClick={() => setShowAuthModal(true)}
       />
       
-      {/* Main content area */}
-      <main className="ml-64">
+      {/* Main content area - responsive margin */}
+      <main className={isMobile ? "pt-16" : "ml-64 transition-all duration-300"}>
         {renderPage()}
       </main>
 

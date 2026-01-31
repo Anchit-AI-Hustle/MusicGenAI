@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
-import { useMusic, MusicCreation, Track } from '@/contexts/MusicContext';
+import { useMusic } from '@/contexts/MusicContext';
 
 const GENRES = [
   'Pop', 'Rock', 'Hip Hop', 'R&B', 'Jazz', 'Classical', 'Electronic', 
@@ -32,7 +32,7 @@ interface CreateMusicPageProps {
 
 export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick }) => {
   const { isAuthenticated, user } = useAuth();
-  const { addCreation, currentCreation } = useMusic();
+  const { createMusic, currentCreation, isCreating } = useMusic();
 
   // Mode selection
   const [mode, setMode] = useState<'song' | 'album'>('song');
@@ -62,9 +62,6 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   // Video
   const [generateVideo, setGenerateVideo] = useState(false);
   const [videoStyle, setVideoStyle] = useState('');
-
-  // Loading state
-  const [isGenerating, setIsGenerating] = useState(false);
 
   // Duration sync
   const updateFromSlider = (value: number[]) => {
@@ -110,38 +107,19 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       return;
     }
 
-    setIsGenerating(true);
-
-    // Simulate generation (replace with actual API call)
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    const tracks: Track[] = mode === 'song' 
-      ? [{
-          id: crypto.randomUUID(),
-          title: title || 'Untitled Track',
-          duration: durationSeconds,
-          createdAt: new Date(),
-        }]
-      : Array.from({ length: numberOfSongs }, (_, i) => ({
-          id: crypto.randomUUID(),
-          title: `Track ${i + 1}`,
-          duration: durationSeconds,
-          createdAt: new Date(),
-        }));
-
-    const creation: MusicCreation = {
-      id: crypto.randomUUID(),
-      userId: user!.id,
+    await createMusic({
       type: mode,
       title: title || (mode === 'song' ? 'Untitled Track' : 'Untitled Album'),
-      tracks,
-      createdAt: new Date(),
       musicPrompt,
       genres: selectedGenres,
-    };
-
-    addCreation(creation);
-    setIsGenerating(false);
+      durationSeconds,
+      generateVideo,
+      vocalLanguages: selectedLanguages,
+      lyrics: lyrics || undefined,
+      artistInspiration: artistInspiration || undefined,
+      videoStyle: generateVideo ? videoStyle : undefined,
+      numberOfTracks: mode === 'album' ? numberOfSongs : 1,
+    });
   };
 
   const formatDuration = (secs: number) => {
@@ -151,32 +129,32 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   };
 
   return (
-    <div className="min-h-screen p-8 overflow-y-auto">
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8 overflow-y-auto">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="mb-6 sm:mb-8"
         >
-          <h1 className="font-display text-3xl font-bold text-foreground mb-2">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground mb-2">
             Create Music
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground text-sm sm:text-base">
             Describe your musical vision and let AI bring it to life
           </p>
         </motion.div>
 
-        <div className="grid gap-8">
+        <div className="grid gap-6 sm:gap-8">
           {/* Mode Selection */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="glass-card rounded-xl p-6"
+            className="glass-card rounded-xl p-4 sm:p-6"
           >
             <Label className="text-foreground font-medium mb-4 block">Creation Mode</Label>
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <button
                 onClick={() => setMode('song')}
                 className={`flex-1 flex items-center gap-3 p-4 rounded-xl border-2 transition-smooth ${
@@ -232,7 +210,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                     />
                     <Button variant="aiSuggest" size="sm">
                       <Wand2 className="w-4 h-4 mr-1" />
-                      AI Suggest
+                      <span className="hidden sm:inline">AI Suggest</span>
                     </Button>
                   </div>
                 </motion.div>
@@ -245,15 +223,15 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
-            className="glass-card rounded-xl p-6"
+            className="glass-card rounded-xl p-4 sm:p-6"
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-4">
               <Label className="text-foreground font-medium">
                 {mode === 'song' ? 'Track Name' : 'Album Name'}
               </Label>
               <Button variant="aiSuggest" size="sm">
                 <Wand2 className="w-4 h-4 mr-1" />
-                AI Suggest
+                <span className="hidden sm:inline">AI Suggest</span>
               </Button>
             </div>
             <Input
@@ -269,18 +247,18 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="glass-card rounded-xl p-6"
+            className="glass-card rounded-xl p-4 sm:p-6"
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-0 mb-4">
               <div>
                 <Label className="text-foreground font-medium">Music Prompt</Label>
                 <p className="text-sm text-muted-foreground mt-1">
                   Describe the mood, energy, atmosphere, and imagery
                 </p>
               </div>
-              <Button variant="aiSuggest" size="sm">
+              <Button variant="aiSuggest" size="sm" className="self-start">
                 <Wand2 className="w-4 h-4 mr-1" />
-                AI Suggest
+                <span className="hidden sm:inline">AI Suggest</span>
               </Button>
             </div>
             <Textarea
@@ -296,13 +274,13 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25 }}
-            className="glass-card rounded-xl p-6"
+            className="glass-card rounded-xl p-4 sm:p-6"
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-4">
               <Label className="text-foreground font-medium">Genres</Label>
               <Button variant="aiSuggest" size="sm">
                 <Wand2 className="w-4 h-4 mr-1" />
-                AI Suggest
+                <span className="hidden sm:inline">AI Suggest</span>
               </Button>
             </div>
             
@@ -370,7 +348,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="glass-card rounded-xl p-6"
+            className="glass-card rounded-xl p-4 sm:p-6"
           >
             <div className="flex items-center gap-2 mb-4">
               <Clock className="w-5 h-5 text-muted-foreground" />
@@ -391,7 +369,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
             />
 
             {/* Time inputs */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
@@ -399,7 +377,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   max={1}
                   value={hours}
                   onChange={(e) => setHours(Math.min(1, parseInt(e.target.value) || 0))}
-                  className="w-16 bg-input border-border text-center"
+                  className="w-14 sm:w-16 bg-input border-border text-center"
                 />
                 <span className="text-muted-foreground text-sm">HH</span>
               </div>
@@ -411,7 +389,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   max={59}
                   value={minutes}
                   onChange={(e) => setMinutes(Math.min(59, parseInt(e.target.value) || 0))}
-                  className="w-16 bg-input border-border text-center"
+                  className="w-14 sm:w-16 bg-input border-border text-center"
                 />
                 <span className="text-muted-foreground text-sm">MM</span>
               </div>
@@ -423,7 +401,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   max={59}
                   value={seconds}
                   onChange={(e) => setSeconds(Math.min(59, parseInt(e.target.value) || 0))}
-                  className="w-16 bg-input border-border text-center"
+                  className="w-14 sm:w-16 bg-input border-border text-center"
                 />
                 <span className="text-muted-foreground text-sm">SS</span>
               </div>
@@ -435,16 +413,16 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35 }}
-            className="glass-card rounded-xl p-6"
+            className="glass-card rounded-xl p-4 sm:p-6"
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-4">
               <div className="flex items-center gap-2">
                 <Languages className="w-5 h-5 text-muted-foreground" />
                 <Label className="text-foreground font-medium">Vocal Language(s)</Label>
               </div>
               <Button variant="aiSuggest" size="sm">
                 <Wand2 className="w-4 h-4 mr-1" />
-                AI Suggest
+                <span className="hidden sm:inline">AI Suggest</span>
               </Button>
             </div>
             
@@ -512,9 +490,9 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className="glass-card rounded-xl p-6"
+            className="glass-card rounded-xl p-4 sm:p-6"
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-0 mb-4">
               <div className="flex items-center gap-2">
                 <Mic2 className="w-5 h-5 text-muted-foreground" />
                 <div>
@@ -524,9 +502,9 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </p>
                 </div>
               </div>
-              <Button variant="aiSuggest" size="sm">
+              <Button variant="aiSuggest" size="sm" className="self-start">
                 <Wand2 className="w-4 h-4 mr-1" />
-                AI Suggest
+                <span className="hidden sm:inline">AI Suggest</span>
               </Button>
             </div>
             <Textarea
@@ -542,16 +520,16 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.45 }}
-            className="glass-card rounded-xl p-6"
+            className="glass-card rounded-xl p-4 sm:p-6"
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-4">
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-muted-foreground" />
                 <Label className="text-foreground font-medium">Artist Inspiration</Label>
               </div>
               <Button variant="aiSuggest" size="sm">
                 <Wand2 className="w-4 h-4 mr-1" />
-                AI Suggest
+                <span className="hidden sm:inline">AI Suggest</span>
               </Button>
             </div>
             <Input
@@ -567,7 +545,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="glass-card rounded-xl p-6"
+            className="glass-card rounded-xl p-4 sm:p-6"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -594,14 +572,14 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   exit={{ opacity: 0, height: 0 }}
                   className="mt-6"
                 >
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-4">
                     <div className="flex items-center gap-2">
                       <Palette className="w-5 h-5 text-muted-foreground" />
                       <Label className="text-foreground font-medium">Video Style</Label>
                     </div>
                     <Button variant="aiSuggest" size="sm">
                       <Wand2 className="w-4 h-4 mr-1" />
-                      AI Suggest
+                      <span className="hidden sm:inline">AI Suggest</span>
                     </Button>
                   </div>
                   <Input
@@ -623,15 +601,15 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
           >
             <Button
               onClick={handleGenerate}
-              disabled={isGenerating}
+              disabled={isCreating}
               variant="glow"
               size="xl"
               className="w-full"
             >
-              {isGenerating ? (
+              {isCreating ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Generating...
+                  Creating...
                 </>
               ) : (
                 <>
@@ -649,23 +627,28 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="glass-card rounded-xl p-6 border-primary/30"
+                className="glass-card rounded-xl p-4 sm:p-6 border-primary/30"
               >
-                <h3 className="font-display text-xl font-semibold text-foreground mb-4">
-                  Your {currentCreation.type === 'song' ? 'Track' : 'Album'}
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-display text-xl font-semibold text-foreground">
+                    Your {currentCreation.type === 'song' ? 'Track' : 'Album'}
+                  </h3>
+                  <Badge variant="secondary" className="capitalize">
+                    {currentCreation.status}
+                  </Badge>
+                </div>
                 
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   {currentCreation.tracks.map((track, index) => (
                     <div
                       key={track.id}
-                      className="flex items-center gap-4 p-4 bg-secondary/50 rounded-lg"
+                      className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 bg-secondary/50 rounded-lg"
                     >
-                      <button className="w-10 h-10 rounded-full bg-primary flex items-center justify-center hover:opacity-90 transition-smooth">
+                      <button className="w-10 h-10 rounded-full bg-primary flex items-center justify-center hover:opacity-90 transition-smooth flex-shrink-0">
                         <Play className="w-5 h-5 text-primary-foreground ml-0.5" />
                       </button>
-                      <div className="flex-1">
-                        <p className="font-medium text-foreground">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-foreground truncate">
                           {currentCreation.type === 'album' && `${index + 1}. `}
                           {track.title}
                         </p>
@@ -673,7 +656,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                           {formatDuration(track.duration)}
                         </p>
                       </div>
-                      <Button variant="ghost" size="icon">
+                      <Button variant="ghost" size="icon" className="flex-shrink-0">
                         <Download className="w-5 h-5" />
                       </Button>
                     </div>
