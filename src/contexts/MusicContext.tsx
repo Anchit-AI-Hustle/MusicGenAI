@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
@@ -12,6 +12,10 @@ export interface Track {
   status: string;
   trackNumber: number;
   createdAt: Date;
+  progress?: number;
+  totalSegments?: number;
+  completedSegments?: number;
+  errorMessage?: string;
 }
 
 export interface MusicCreation {
@@ -30,6 +34,7 @@ export interface MusicCreation {
   lyrics?: string;
   artistInspiration?: string;
   videoStyle?: string;
+  progress?: number;
 }
 
 interface CreateMusicInput {
@@ -54,6 +59,7 @@ interface MusicContextType {
   createMusic: (input: CreateMusicInput) => Promise<MusicCreation | null>;
   setCurrentCreation: (creation: MusicCreation | null) => void;
   refreshCreations: () => Promise<void>;
+  aiSuggest: (field: string, value: string, context: Record<string, any>) => Promise<string | null>;
 }
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
@@ -64,48 +70,35 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [currentCreation, setCurrentCreation] = useState<MusicCreation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const realtimeChannelRef = useRef<any>(null);
 
-  // Fetch user's creations from Supabase
   const fetchCreations = useCallback(async () => {
     if (!user?.id) {
       setCreations([]);
       return;
     }
-
     setIsLoading(true);
     try {
-      // Fetch music creations
       const { data: creationsData, error: creationsError } = await supabase
         .from('music_creations')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (creationsError) {
-        console.error('Error fetching creations:', creationsError);
-        return;
-      }
+      if (creationsError) { console.error('Error fetching creations:', creationsError); return; }
 
-      // Fetch tracks for all creations
       const creationIds = creationsData?.map(c => c.id) || [];
       let tracksData: any[] = [];
-      
       if (creationIds.length > 0) {
         const { data, error: tracksError } = await supabase
           .from('tracks')
           .select('*')
           .in('creation_id', creationIds)
           .order('track_number', { ascending: true });
-
-        if (tracksError) {
-          console.error('Error fetching tracks:', tracksError);
-        } else {
-          tracksData = data || [];
-        }
+        if (!tracksError) tracksData = data || [];
       }
 
-      // Map to MusicCreation format
-      const mappedCreations: MusicCreation[] = (creationsData || []).map(creation => ({
+      const mapped: MusicCreation[] = (creationsData || []).map(creation => ({
         id: creation.id,
         userId: creation.user_id,
         type: creation.type as 'song' | 'album',
@@ -120,6 +113,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         artistInspiration: creation.artist_inspiration || undefined,
         videoStyle: creation.video_style || undefined,
         createdAt: new Date(creation.created_at),
+        progress: creation.progress ?? 0,
         tracks: tracksData
           .filter(t => t.creation_id === creation.id)
           .map(track => ({
@@ -131,10 +125,14 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             status: track.status,
             trackNumber: track.track_number,
             createdAt: new Date(track.created_at),
+            progress: track.progress ?? 0,
+            totalSegments: track.total_segments ?? 1,
+            completedSegments: track.completed_segments ?? 0,
+            errorMessage: track.error_message || undefined,
           })),
       }));
 
-      setCreations(mappedCreations);
+      setCreations(mapped);
     } catch (error) {
       console.error('Error in fetchCreations:', error);
     } finally {
@@ -142,7 +140,77 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   }, [user?.id]);
 
-  // Refresh creations when user changes
+  // Setup realtime subscriptions
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+
+    const channel = supabase
+      .channel('music-realtime')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tracks' }, (payload) => {
+        const updated = payload.new as any;
+        setCreations(prev => prev.map(c => ({
+          ...c,
+          tracks: c.tracks.map(t =>
+            t.id === updated.id
+              ? {
+                  ...t,
+                  status: updated.status,
+                  audioUrl: updated.audio_url || undefined,
+                  videoUrl: updated.video_url || undefined,
+                  progress: updated.progress ?? 0,
+                  totalSegments: updated.total_segments ?? 1,
+                  completedSegments: updated.completed_segments ?? 0,
+                  errorMessage: updated.error_message || undefined,
+                  duration: updated.duration_seconds,
+                }
+              : t
+          ),
+        })));
+        // Also update currentCreation
+        setCurrentCreation(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            tracks: prev.tracks.map(t =>
+              t.id === updated.id
+                ? {
+                    ...t,
+                    status: updated.status,
+                    audioUrl: updated.audio_url || undefined,
+                    videoUrl: updated.video_url || undefined,
+                    progress: updated.progress ?? 0,
+                    totalSegments: updated.total_segments ?? 1,
+                    completedSegments: updated.completed_segments ?? 0,
+                    errorMessage: updated.error_message || undefined,
+                    duration: updated.duration_seconds,
+                  }
+                : t
+            ),
+          };
+        });
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'music_creations' }, (payload) => {
+        const updated = payload.new as any;
+        setCreations(prev => prev.map(c =>
+          c.id === updated.id
+            ? { ...c, status: updated.status, progress: updated.progress ?? 0 }
+            : c
+        ));
+        setCurrentCreation(prev =>
+          prev?.id === updated.id
+            ? { ...prev, status: updated.status, progress: updated.progress ?? 0 }
+            : prev
+        );
+      })
+      .subscribe();
+
+    realtimeChannelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isAuthenticated, user?.id]);
+
   useEffect(() => {
     if (isAuthenticated && user?.id) {
       fetchCreations();
@@ -160,7 +228,6 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     setIsCreating(true);
     try {
-      // Create the music creation record
       const { data: creationData, error: creationError } = await supabase
         .from('music_creations')
         .insert({
@@ -186,11 +253,10 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return null;
       }
 
-      // Create tracks
       const numberOfTracks = input.type === 'song' ? 1 : (input.numberOfTracks || 5);
       const tracksToCreate = Array.from({ length: numberOfTracks }, (_, i) => ({
         creation_id: creationData.id,
-        title: input.type === 'song' 
+        title: input.type === 'song'
           ? (input.title || 'Untitled Track')
           : `Track ${i + 1}`,
         track_number: i + 1,
@@ -205,11 +271,10 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       if (tracksError) {
         console.error('Error creating tracks:', tracksError);
-        toast.error('Failed to create tracks. Please try again.');
+        toast.error('Failed to create tracks.');
         return null;
       }
 
-      // Map to MusicCreation format
       const newCreation: MusicCreation = {
         id: creationData.id,
         userId: creationData.user_id,
@@ -217,7 +282,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         title: creationData.title,
         musicPrompt: creationData.music_prompt,
         genres: creationData.genres || [],
-        status: creationData.status,
+        status: 'pending',
         durationSeconds: creationData.duration_seconds,
         generateVideo: creationData.generate_video,
         vocalLanguages: creationData.vocal_languages || [],
@@ -225,6 +290,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         artistInspiration: creationData.artist_inspiration || undefined,
         videoStyle: creationData.video_style || undefined,
         createdAt: new Date(creationData.created_at),
+        progress: 0,
         tracks: (tracksData || []).map(track => ({
           id: track.id,
           title: track.title,
@@ -234,13 +300,43 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           status: track.status,
           trackNumber: track.track_number,
           createdAt: new Date(track.created_at),
+          progress: 0,
+          totalSegments: 1,
+          completedSegments: 0,
         })),
       };
 
       setCreations(prev => [newCreation, ...prev]);
       setCurrentCreation(newCreation);
-      toast.success('Music creation started!');
-      
+      toast.success('Music creation started! Generating your track...');
+
+      // Trigger generation for each track (fire-and-forget)
+      for (const track of newCreation.tracks) {
+        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-music`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            trackId: track.id,
+            creationId: newCreation.id,
+            input: {
+              musicPrompt: input.musicPrompt,
+              genres: input.genres,
+              durationSeconds: input.durationSeconds,
+              vocalLanguages: input.vocalLanguages,
+              lyrics: input.lyrics,
+              artistInspiration: input.artistInspiration,
+            },
+          }),
+        }).catch(err => {
+          console.error('Generation trigger error:', err);
+          toast.error('Failed to start music generation.');
+        });
+      }
+
       return newCreation;
     } catch (error) {
       console.error('Error in createMusic:', error);
@@ -251,9 +347,34 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  const refreshCreations = async () => {
-    await fetchCreations();
+  const aiSuggest = async (field: string, value: string, context: Record<string, any>): Promise<string | null> => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-suggest`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ field, value, context }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        toast.error(err.error || 'AI suggestion failed');
+        return null;
+      }
+
+      const data = await response.json();
+      return data.suggestion || null;
+    } catch (e) {
+      console.error('AI suggest error:', e);
+      toast.error('Failed to get AI suggestion');
+      return null;
+    }
   };
+
+  const refreshCreations = async () => { await fetchCreations(); };
 
   return (
     <MusicContext.Provider value={{
@@ -264,6 +385,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       createMusic,
       setCurrentCreation,
       refreshCreations,
+      aiSuggest,
     }}>
       {children}
     </MusicContext.Provider>
