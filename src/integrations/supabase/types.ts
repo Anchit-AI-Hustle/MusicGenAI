@@ -24,6 +24,7 @@ export type Database = {
           id: string
           lyrics: string | null
           music_prompt: string
+          progress: number | null
           status: string
           title: string
           type: string
@@ -41,6 +42,7 @@ export type Database = {
           id?: string
           lyrics?: string | null
           music_prompt: string
+          progress?: number | null
           status?: string
           title: string
           type: string
@@ -58,6 +60,7 @@ export type Database = {
           id?: string
           lyrics?: string | null
           music_prompt?: string
+          progress?: number | null
           status?: string
           title?: string
           type?: string
@@ -100,37 +103,87 @@ export type Database = {
         }
         Relationships: []
       }
+      segments: {
+        Row: {
+          created_at: string
+          duration_seconds: number
+          id: string
+          segment_index: number
+          status: string
+          storage_path: string | null
+          track_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_seconds?: number
+          id?: string
+          segment_index?: number
+          status?: string
+          storage_path?: string | null
+          track_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_seconds?: number
+          id?: string
+          segment_index?: number
+          status?: string
+          storage_path?: string | null
+          track_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "segments_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tracks: {
         Row: {
           audio_url: string | null
+          completed_segments: number | null
           created_at: string
           creation_id: string
           duration_seconds: number
+          error_message: string | null
           id: string
+          progress: number | null
           status: string
           title: string
+          total_segments: number | null
           track_number: number
           video_url: string | null
         }
         Insert: {
           audio_url?: string | null
+          completed_segments?: number | null
           created_at?: string
           creation_id: string
           duration_seconds?: number
+          error_message?: string | null
           id?: string
+          progress?: number | null
           status?: string
           title: string
+          total_segments?: number | null
           track_number?: number
           video_url?: string | null
         }
         Update: {
           audio_url?: string | null
+          completed_segments?: number | null
           created_at?: string
           creation_id?: string
           duration_seconds?: number
+          error_message?: string | null
           id?: string
+          progress?: number | null
           status?: string
           title?: string
+          total_segments?: number | null
           track_number?: number
           video_url?: string | null
         }
