@@ -154,8 +154,11 @@ async function transcodeWebmToMp4(
     ]);
 
     const data = await ffmpeg.readFile(outputName);
-    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer);
-    return new Blob([bytes], { type: 'video/mp4' });
+    if (typeof data === 'string') {
+      throw new Error('Transcoder returned invalid binary output');
+    }
+    const normalizedBytes = Uint8Array.from(data);
+    return new Blob([normalizedBytes.buffer], { type: 'video/mp4' });
   } finally {
     ffmpeg.terminate();
   }
