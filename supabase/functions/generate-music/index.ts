@@ -648,7 +648,7 @@ Generate a production brief with: genre, subgenre, tempo description, mood, atmo
     // ================================================================
     // STEP 2 — PLANNING SONG STRUCTURE
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Planning song structure", 0.07, etaRemaining);
+    await updateProgress(supabase, trackId, creationId, "Planning song structure and segments", 0.07, etaRemaining);
 
     const planResult = await callAI(
       LOVABLE_API_KEY,
