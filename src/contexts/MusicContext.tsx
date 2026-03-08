@@ -471,16 +471,18 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             input.mood || '',
             input.videoStyle,
             (p) => {
-              updateTrackLocal(creationId, trackId, {
-                status: p.stage as string,
-                currentStage: p.stage === 'generating_video' ? 'Generating video visuals' : 'Encoding video',
-                progress: 0.84 + p.progress * 0.12,
-              });
-              updateTrackDB(trackId, creationId,
-                p.stage === 'generating_video' ? 'Generating video visuals' : 'Encoding video',
-                0.84 + p.progress * 0.12,
-                p.stage,
-              ).catch(console.warn);
+                const stageLabel = p.stage === 'generating_video'
+                  ? 'Generating video visuals'
+                  : p.stage === 'transcoding_video'
+                    ? 'Optimizing MP4 for all devices'
+                    : 'Encoding video';
+
+                updateTrackLocal(creationId, trackId, {
+                  status: p.stage as string,
+                  currentStage: stageLabel,
+                  progress: 0.84 + p.progress * 0.12,
+                });
+                updateTrackDB(trackId, creationId, stageLabel, 0.84 + p.progress * 0.12, p.stage).catch(console.warn);
               trackLastUpdateRef.current[trackId] = Date.now();
             },
           );
