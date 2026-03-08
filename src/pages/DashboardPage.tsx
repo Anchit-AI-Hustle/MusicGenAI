@@ -202,6 +202,7 @@ interface CreationCardProps {
   index: number;
   formatDuration: (secs: number) => string;
   formatDate: (date: Date) => string;
+  onNavigate: (page: string, params?: Record<string, string>) => void;
 }
 
 const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDuration, formatDate }) => {
