@@ -478,7 +478,7 @@ serve(async (req) => {
     await supabase.from("music_creations").update({ status: "processing", progress: 0 }).eq("id", creationId);
 
     const durationSec = frozenInput.durationSeconds;
-    const estSegmentTime = 25;
+    const estSegmentTime = 12; // ~12s per segment on free tier (gen + 10s delay)
     const estTotalSec = 20 + Math.ceil(durationSec / 30) * estSegmentTime + 10;
     let etaRemaining = estTotalSec;
 
