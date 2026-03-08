@@ -194,7 +194,7 @@ async function generateSegmentWithRetry(
   apiToken: string,
   prompt: string,
   duration: number,
-  maxRetries: number = 3,
+  maxRetries: number = 10,
 ): Promise<{ audioUrl: string; buffer: ArrayBuffer }> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
