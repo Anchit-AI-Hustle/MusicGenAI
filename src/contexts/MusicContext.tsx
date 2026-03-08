@@ -469,6 +469,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     toast.success('Retrying track generation...');
 
+    const jobId = `${trackId}-${Date.now()}`;
+    subscribeToBroadcast(jobId, trackId, creationId);
+
     // Re-trigger generation
     fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-music`, {
       method: 'POST',
@@ -480,6 +483,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       body: JSON.stringify({
         trackId,
         creationId,
+        jobId,
         input: {
           musicPrompt: creation.musicPrompt,
           genres: creation.genres,
