@@ -59,6 +59,7 @@ interface CreateMusicInput {
   vocalEffects?: string[];
   mood?: string;
   musicalKey?: string;
+  songStructure?: string;
 }
 
 type AiAction = 'suggest' | 'enhance';
