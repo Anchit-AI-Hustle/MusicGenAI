@@ -155,14 +155,14 @@ async function replicateCreatePrediction(
     predictionId = "";
 
     for (let attempt = 1; attempt <= maxCreateAttempts; attempt++) {
-      const createRes = await fetch("https://api.replicate.com/v1/predictions", {
+      // Use the model-specific predictions endpoint (works for all models without version)
+      const createRes = await fetch(`https://api.replicate.com/v1/models/${model}/predictions`, {
         method: "POST",
         headers: {
           Authorization: `Token ${apiToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model,
           input: {
             prompt,
             duration: modelDuration,
