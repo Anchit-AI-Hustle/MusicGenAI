@@ -276,32 +276,7 @@ const VideoPlayerInner: React.FC<VideoPlayerProps> = ({ videoUrl, title, duratio
               {viewMode === 'theatre' ? <Monitor className="w-4 h-4" /> : <RectangleHorizontal className="w-4 h-4" />}
             </button>
 
-            {/* Download */}
-            <button
-              onClick={async (e) => {
-                e.stopPropagation();
-                try {
-                  const response = await fetch(videoUrl);
-                  const blob = await response.blob();
-                  const blobUrl = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = blobUrl;
-                  const ext = getVideoExtension(blob);
-                  a.download = `${title || 'video'}_video.${ext}`;
-                  a.style.display = 'none';
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(blobUrl);
-                } catch {
-                  window.open(videoUrl, '_blank');
-                }
-              }}
-              className="text-white/80 hover:text-white transition-colors p-1"
-              title="Download Video (MP4)"
-            >
-              <Download className="w-4 h-4" />
-            </button>
+            {/* Download removed — use top-level download instead */}
 
             {/* Fullscreen */}
             <button
