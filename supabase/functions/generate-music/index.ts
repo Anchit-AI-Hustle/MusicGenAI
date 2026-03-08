@@ -225,17 +225,25 @@ serve(async (req) => {
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const REPLICATE_API_TOKEN = Deno.env.get("REPLICATE_API_TOKEN");
+  const MUSIC_WORKER_URL = Deno.env.get("MUSIC_WORKER_URL");
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-  if (!REPLICATE_API_TOKEN) {
-    return new Response(JSON.stringify({ error: "REPLICATE_API_TOKEN not configured" }), {
+  if (!MUSIC_WORKER_URL) {
+    return new Response(JSON.stringify({ error: "MUSIC_WORKER_URL not configured. Deploy the Python music worker and set the URL." }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
   if (!LOVABLE_API_KEY) {
     return new Response(JSON.stringify({ error: "LOVABLE_API_KEY not configured" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Verify worker is healthy before starting pipeline
+  const workerHealthy = await checkWorkerHealth(MUSIC_WORKER_URL);
+  if (!workerHealthy) {
+    return new Response(JSON.stringify({ error: "Music generation worker unavailable. Check that the worker service is running." }), {
+      status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
