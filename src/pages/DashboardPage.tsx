@@ -306,7 +306,7 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-t border-border">
             <div className="p-3 sm:p-4 space-y-2">
               {creation.tracks.map((track, i) => (
-                <TrackRow key={track.id} track={track} index={i} formatDuration={formatDuration} creation={creation} />
+                <TrackRow key={track.id} track={track} index={i} formatDuration={formatDuration} creation={creation} onNavigate={onNavigate} />
               ))}
             </div>
           </motion.div>
