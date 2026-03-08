@@ -267,6 +267,10 @@ Prompt: "${frozenInput.musicPrompt}"
 Genres: ${frozenInput.genres.join(", ") || "Not specified"}
 Lyrics: "${frozenInput.lyrics || "No lyrics"}"
 Artist Inspiration: "${frozenInput.artistInspiration || "None"}"
+Tempo: ${frozenInput.tempoBpm} BPM
+Vocal Structure: ${frozenInput.vocalStructure}
+Vocal Style: ${frozenInput.vocalStyle || "Not specified"}
+Vocal Intensity: ${frozenInput.vocalIntensity}/10
 
 Extract emotional polarity, energy intensity, darkness/brightness, aggression level, melodic complexity, and rhythmic density.`,
       "extract_sentiment",
