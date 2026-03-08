@@ -706,14 +706,14 @@ Generate a production brief with: genre, subgenre, tempo description, mood, atmo
 Each segment should be a distinct musical section. Use varied structures — never produce identical plans.
 Consider: genre=${frozenInput.genres.join(", ") || "electronic"}, tempo=${frozenInput.tempoBpm}BPM, mood=${sentiment.emotionPolarity}, energy=${sentiment.energyIntensity}/10.
 Vocal structure requested: "${frozenInput.vocalStructure}".
-IMPORTANT: segment durations MUST sum to exactly ${durationSec} seconds. Each segment MUST be between 10 and 30 seconds (MusicGen limit).
+IMPORTANT: segment durations MUST sum to exactly ${durationSec} seconds. Each segment MUST be between 4 and 8 seconds (MusicGen model limit).
 Add slight randomness to durations to ensure uniqueness across generations.`,
       `Plan the structure for a ${durationSec}-second ${frozenInput.genres[0] || "electronic"} track at ${frozenInput.tempoBpm} BPM.
 The user wants vocal structure: "${frozenInput.vocalStructure}".
 Mood: ${sentiment.emotionPolarity}. Energy: ${sentiment.energyIntensity}/10. Aggression: ${sentiment.aggressionLevel}/10.
 Artist inspiration: "${frozenInput.artistInspiration || "None"}".
 
-Return an array of segments with name, duration (seconds, max 30 each), and a vivid description.
+Return an array of segments with name, duration (seconds, max 8 each), and a vivid description.
 Durations MUST sum to exactly ${durationSec}.`,
       "plan_song_structure",
       "Generate structured song plan with named segments",
@@ -724,7 +724,7 @@ Durations MUST sum to exactly ${durationSec}.`,
             type: "object",
             properties: {
               name: { type: "string", description: "Section name e.g. intro, build, drop, breakdown, outro" },
-              duration: { type: "number", description: "Duration in seconds (max 30)" },
+              duration: { type: "number", description: "Duration in seconds (max 8)" },
               description: { type: "string", description: "What happens musically in this section" },
             },
             required: ["name", "duration", "description"],
@@ -736,28 +736,28 @@ Durations MUST sum to exactly ${durationSec}.`,
 
     let songPlan: SongPlan;
     if (planResult?.segments?.length > 0) {
-      // Cap each segment at 30s, floor at 5s
+      // Cap each segment at 8s, floor at 3s
       for (const seg of planResult.segments) {
-        if (seg.duration > 30) seg.duration = 30;
-        if (seg.duration < 5) seg.duration = 10;
+        if (seg.duration > 8) seg.duration = 8;
+        if (seg.duration < 3) seg.duration = 4;
       }
       const totalPlanned = planResult.segments.reduce((s: number, seg: any) => s + seg.duration, 0);
       if (totalPlanned !== durationSec) {
         const diff = durationSec - totalPlanned;
-        if (diff > 0 && diff <= 30) {
+        if (diff > 0 && diff <= 8) {
           planResult.segments.push({ name: "extension", duration: diff, description: "Extended section to match duration" });
-        } else if (diff > 30) {
+        } else if (diff > 8) {
           let remaining = diff;
           let extIdx = 1;
           while (remaining > 0) {
-            const segDur = Math.min(30, remaining);
+            const segDur = Math.min(8, remaining);
             planResult.segments.push({ name: `extension_${extIdx}`, duration: segDur, description: "Extended section" });
             remaining -= segDur;
             extIdx++;
           }
         } else if (diff < 0) {
           planResult.segments[planResult.segments.length - 1].duration += diff;
-          if (planResult.segments[planResult.segments.length - 1].duration < 5) {
+          if (planResult.segments[planResult.segments.length - 1].duration < 3) {
             planResult.segments.pop();
           }
         }
