@@ -149,7 +149,9 @@ async function replicateCreatePrediction(
   let lastError = "";
 
   for (const model of REPLICATE_MODELS) {
-    console.log(`[Replicate] Trying model: ${model}`);
+    // meta/musicgen max duration is ~8s; other models may support more
+    const modelDuration = model === "meta/musicgen" ? Math.min(duration, 8) : Math.min(duration, 30);
+    console.log(`[Replicate] Trying model: ${model} (duration=${modelDuration}s)`);
     predictionId = "";
 
     for (let attempt = 1; attempt <= maxCreateAttempts; attempt++) {
@@ -163,7 +165,7 @@ async function replicateCreatePrediction(
           model,
           input: {
             prompt,
-            duration,
+            duration: modelDuration,
             seed: actualSeed,
           },
         }),
@@ -205,9 +207,9 @@ async function replicateCreatePrediction(
     throw new Error(`All Replicate models failed. Last error: ${lastError}`);
   }
 
-  // Poll for completion (max 5 minutes)
-  const maxPolls = 60;
-  const pollInterval = 5000;
+  // Poll for completion every 2s (max 5 minutes)
+  const maxPolls = 150;
+  const pollInterval = 2000;
 
   for (let i = 0; i < maxPolls; i++) {
     await new Promise(r => setTimeout(r, pollInterval));
@@ -225,16 +227,21 @@ async function replicateCreatePrediction(
       continue;
     }
 
-    const status = await pollRes.json();
+    const result = await pollRes.json();
+    console.log(`[Replicate] Poll ${i + 1}: status=${result.status}`);
 
-    if (status.status === "succeeded") {
-      const outputUrl = status.output;
-      console.log(`[Replicate] ✅ Prediction ${predictionId} complete`);
+    if (result.status === "succeeded") {
+      // output can be a string URL or an array of URLs
+      const outputUrl = Array.isArray(result.output) ? result.output[0] : result.output;
+      if (!outputUrl) {
+        throw new Error(`Replicate prediction succeeded but output is empty: ${JSON.stringify(result.output)}`);
+      }
+      console.log(`[Replicate] ✅ Prediction ${predictionId} complete: ${outputUrl}`);
       return outputUrl;
     }
 
-    if (status.status === "failed" || status.status === "canceled") {
-      throw new Error(`Replicate prediction ${status.status}: ${status.error || "Unknown"}`);
+    if (result.status === "failed" || result.status === "canceled") {
+      throw new Error(`Replicate prediction ${result.status}: ${result.error || "Unknown"}`);
     }
   }
 
