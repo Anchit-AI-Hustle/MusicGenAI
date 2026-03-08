@@ -95,6 +95,16 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const [vocalIntensity, setVocalIntensity] = useState(5);
   const [selectedVocalEffects, setSelectedVocalEffects] = useState<string[]>([]);
   const [showVocalEffectsDropdown, setShowVocalEffectsDropdown] = useState(false);
+  const [songStructure, setSongStructure] = useState('');
+
+  const SONG_STRUCTURE_PRESETS = [
+    'Intro → Build → Drop → Breakdown → Drop → Outro',
+    'Intro → Verse → Chorus → Verse → Chorus → Bridge → Chorus → Outro',
+    'Intro → Verse → Hook → Verse → Hook → Outro',
+    'Intro → Theme → Solo → Theme → Outro',
+    'Exposition → Development → Recapitulation → Coda',
+    'Intro → Build → Climax → Resolution → Outro',
+  ];
 
   // Track which field+action pairs are loading (supports parallel)
   const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
