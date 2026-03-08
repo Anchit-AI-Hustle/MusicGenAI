@@ -111,14 +111,13 @@ async function replicateCreatePrediction(
   let predictionId = "";
 
   for (let attempt = 1; attempt <= maxCreateAttempts; attempt++) {
-    const createRes = await fetch("https://api.replicate.com/v1/predictions", {
+    const createRes = await fetch("https://api.replicate.com/v1/models/lucataco/musicgen-songstarter/predictions", {
       method: "POST",
       headers: {
         Authorization: `Token ${apiToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "lucataco/musicgen-songstarter",
         input: {
           prompt,
           seed: actualSeed,
