@@ -290,17 +290,21 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const togglePlay = (trackId: string, audioUrl: string) => {
-    if (playingTrackId === trackId) {
-      audioRef.current?.pause();
-      setPlayingTrackId(null);
+  const handleTrackPlay = (track: { id: string; title: string; audioUrl?: string; videoUrl?: string; duration: number }) => {
+    if (!track.audioUrl) return;
+    const isCurrentTrack = player.currentTrack?.id === track.id;
+    if (isCurrentTrack) {
+      player.togglePlay();
     } else {
-      if (audioRef.current) audioRef.current.pause();
-      const audio = new Audio(audioUrl);
-      audio.play();
-      audio.onended = () => setPlayingTrackId(null);
-      audioRef.current = audio;
-      setPlayingTrackId(trackId);
+      player.play({
+        id: track.id,
+        title: track.title,
+        artist: currentCreation?.title || 'HarmonyAI',
+        audioUrl: track.audioUrl,
+        videoUrl: track.videoUrl,
+        duration: track.duration,
+        genres: currentCreation?.genres,
+      });
     }
   };
 
