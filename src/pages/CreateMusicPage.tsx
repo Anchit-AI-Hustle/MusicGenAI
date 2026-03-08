@@ -562,21 +562,17 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                 <Input placeholder="e.g., Dark, euphoric, melancholic, aggressive..." value={mood} onChange={e => setMood(e.target.value)} className="bg-input border-border" />
               </motion.div>
 
-              {/* Musical Key */}
+              {/* Song Structure */}
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32 }} className="glass-card rounded-xl p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
-                  <Label className="text-foreground font-medium">Musical Key</Label>
-                  <AiToolbar field="musicalKey" />
+                  <Label className="text-foreground font-medium">Song Structure</Label>
+                  <AiToolbar field="songStructure" />
                 </div>
-                <div className="relative">
-                  <select value={musicalKey} onChange={e => setMusicalKey(e.target.value)} className="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground appearance-none cursor-pointer">
-                    {['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].flatMap(note =>
-                      ['minor', 'major', 'dorian', 'phrygian'].map(scale => (
-                        <option key={`${note} ${scale}`} value={`${note} ${scale}`}>{note} {scale}</option>
-                      ))
-                    )}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <Input placeholder="e.g., Intro → Verse → Chorus → Outro" value={songStructure} onChange={e => setSongStructure(e.target.value)} className="bg-input border-border" />
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {SONG_STRUCTURE_PRESETS.map(p => (
+                    <button key={p} onClick={() => setSongStructure(p)} className={`px-2 py-1 text-xs rounded-md border transition-smooth ${songStructure === p ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>{p.length > 40 ? p.slice(0, 40) + '...' : p}</button>
+                  ))}
                 </div>
               </motion.div>
 
