@@ -200,8 +200,8 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="font-display font-semibold text-foreground truncate">{creation.title}</h3>
-              <Badge variant="secondary" className={`capitalize text-xs flex-shrink-0 ${creation.status === 'completed' ? 'bg-green-500/20 text-green-400' : creation.status === 'failed' ? 'bg-destructive/20 text-destructive' : ''}`}>
-                {creation.status}
+              <Badge variant="secondary" className={`text-xs flex-shrink-0 ${creation.status === 'completed' ? 'bg-green-500/20 text-green-400' : creation.status === 'failed' ? 'bg-destructive/20 text-destructive' : isActiveStatus(creation.status) ? 'bg-primary/20 text-primary' : ''}`}>
+                {STATUS_LABELS[creation.status] || creation.status}
               </Badge>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-muted-foreground flex-wrap">
@@ -211,7 +211,7 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
               <span className="hidden sm:inline">•</span>
               <span className="hidden sm:inline">{formatDuration(totalDuration)}</span>
             </div>
-            {creation.status === 'processing' && (
+            {isActiveStatus(creation.status) && (
               <div className="mt-2">
                 <Progress value={(creation.progress || 0) * 100} className="h-1.5" />
               </div>
