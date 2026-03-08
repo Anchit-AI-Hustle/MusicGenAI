@@ -714,13 +714,13 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
     }
 
     // ================================================================
-    // STAGE 7b — VOCAL GENERATION (Bark via Replicate)
+    // STAGE 7b — VOCAL GENERATION (Bark via Python Worker)
     // ================================================================
     let vocalBuffer: ArrayBuffer | null = null;
 
     if (hasVocals) {
       await updateProgress(supabase, trackId, creationId, "vocal-generation", 0.70);
-      console.log(`[${trackId}] Generating vocals with Bark...`);
+      console.log(`[${trackId}] Generating vocals via worker...`);
 
       // Split lyrics into chunks for Bark (it handles ~15s per generation)
       const lyricsLines = frozenInput.lyrics.split(/[.\n]+/).filter((l: string) => l.trim().length > 0);
@@ -730,35 +730,35 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
         const line = lyricsLines[i].trim();
         if (!line) continue;
 
-        console.log(`[${trackId}] Bark vocal chunk ${i + 1}/${lyricsLines.length}: "${line.substring(0, 50)}..."`);
+        console.log(`[${trackId}] Vocal chunk ${i + 1}/${lyricsLines.length}: "${line.substring(0, 50)}..."`);
 
         // Map vocal intensity (1-10) to Bark temperature params
-        // Lower intensity = lower temps (more controlled/whisper), higher = more expressive
-        const textTemp = 0.4 + (frozenInput.vocalIntensity / 10) * 0.6; // 0.46 to 1.0
-        const waveformTemp = 0.4 + (frozenInput.vocalIntensity / 10) * 0.5; // 0.44 to 0.9
+        const textTemp = 0.4 + (frozenInput.vocalIntensity / 10) * 0.6;
+        const waveformTemp = 0.4 + (frozenInput.vocalIntensity / 10) * 0.5;
 
-        const barkInput: Record<string, any> = {
-          prompt: `[${frozenInput.vocalStyle || vocalPlan.style}] ${line}`,
-          text_temp: textTemp,
-          waveform_temp: waveformTemp,
-          history_prompt: vocalPlan.historyPrompt,
-        };
+        const vocalText = `[${frozenInput.vocalStyle || vocalPlan.style}] ${line}`;
 
         let retries = 0;
-        let chunkUrl: string | null = null;
+        let chunkBuffer: ArrayBuffer | null = null;
 
-        while (retries < 3 && !chunkUrl) {
-          chunkUrl = await runReplicate(REPLICATE_API_TOKEN, BARK_VERSION, barkInput, 180000);
-          if (!chunkUrl) {
+        while (retries < 3 && !chunkBuffer) {
+          chunkBuffer = await callVocalWorker(
+            MUSIC_WORKER_URL,
+            vocalText,
+            vocalPlan.historyPrompt,
+            textTemp,
+            waveformTemp,
+            180000
+          );
+          if (!chunkBuffer) {
             retries++;
+            console.error(`[${trackId}] Vocal worker failed for chunk ${i + 1}, retry ${retries}/3`);
             if (retries < 3) await new Promise(r => setTimeout(r, 2000 * retries));
           }
         }
 
-        if (chunkUrl) {
-          const chunkBuffer = await downloadAudio(chunkUrl);
-          if (chunkBuffer) {
-            vocalChunks.push(chunkBuffer);
+        if (chunkBuffer) {
+          vocalChunks.push(chunkBuffer);
           }
         }
 
