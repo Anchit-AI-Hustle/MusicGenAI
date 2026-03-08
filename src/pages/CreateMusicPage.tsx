@@ -86,6 +86,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   // New fields
   const [tempoBpm, setTempoBpm] = useState(120);
+  const [mood, setMood] = useState('');
+  const [musicalKey, setMusicalKey] = useState('D minor');
   const [vocalStructure, setVocalStructure] = useState('Instrumental');
   const [showVocalStructureDropdown, setShowVocalStructureDropdown] = useState(false);
   const [vocalStyle, setVocalStyle] = useState('');
