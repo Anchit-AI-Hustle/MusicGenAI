@@ -265,7 +265,6 @@ const DashboardTrackProgress: React.FC<{
 }> = ({ currentStage, progress, estimatedTimeLeft }) => {
   const currentStepIdx = DASH_PIPELINE_STEPS.findIndex(s => s.match.test(currentStage));
   const activeIdx = currentStepIdx >= 0 ? currentStepIdx : 0;
-  const activeIdx = currentStepIdx >= 0 ? currentStepIdx : 0;
 
   const formatEta = (secs: number) => {
     if (secs <= 0) return '';
