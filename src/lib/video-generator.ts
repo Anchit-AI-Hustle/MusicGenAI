@@ -121,6 +121,135 @@ export function getVideoExtension(blob: Blob): string {
   return 'webm';
 }
 
+type FfmpegRuntime = {
+  ffmpeg: {
+    loaded?: boolean;
+    load: (options: { coreURL: string; wasmURL: string }) => Promise<void>;
+    writeFile: (path: string, data: Uint8Array) => Promise<void>;
+    readFile: (path: string) => Promise<Uint8Array | ArrayBuffer>;
+    exec: (args: string[]) => Promise<void>;
+    deleteFile?: (path: string) => Promise<void>;
+    on?: (event: string, callback: (payload: { progress: number }) => void) => void;
+    off?: (event: string, callback: (payload: { progress: number }) => void) => void;
+  };
+  fetchFile: (file: Blob) => Promise<Uint8Array>;
+};
+
+let ffmpegRuntimePromise: Promise<FfmpegRuntime> | null = null;
+let ffmpegJobQueue: Promise<void> = Promise.resolve();
+
+function enqueueTranscodeJob<T>(job: () => Promise<T>): Promise<T> {
+  const nextJob = ffmpegJobQueue.then(job, job);
+  ffmpegJobQueue = nextJob.then(() => undefined, () => undefined);
+  return nextJob;
+}
+
+async function loadFfmpegRuntime(): Promise<FfmpegRuntime> {
+  if (!ffmpegRuntimePromise) {
+    ffmpegRuntimePromise = (async () => {
+      const ffmpegModuleUrl = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js';
+      const utilModuleUrl = 'https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js';
+      const ffmpegCoreBaseUrl = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+
+      const [ffmpegModule, utilModule] = await Promise.all([
+        import(/* @vite-ignore */ ffmpegModuleUrl),
+        import(/* @vite-ignore */ utilModuleUrl),
+      ]);
+
+      const ffmpeg = new ffmpegModule.FFmpeg();
+      const toBlobURL = utilModule.toBlobURL as (url: string, mimeType: string) => Promise<string>;
+      const fetchFile = utilModule.fetchFile as (file: Blob) => Promise<Uint8Array>;
+
+      const coreURL = await toBlobURL(`${ffmpegCoreBaseUrl}/ffmpeg-core.js`, 'text/javascript');
+      const wasmURL = await toBlobURL(`${ffmpegCoreBaseUrl}/ffmpeg-core.wasm`, 'application/wasm');
+
+      await ffmpeg.load({ coreURL, wasmURL });
+
+      return { ffmpeg, fetchFile };
+    })().catch((error) => {
+      ffmpegRuntimePromise = null;
+      throw error;
+    });
+  }
+
+  return ffmpegRuntimePromise;
+}
+
+async function transcodeToUniversalMp4Blob(
+  videoBlob: Blob,
+  onProgress?: (p: VideoGenerationProgress) => void,
+): Promise<Blob> {
+  const { ffmpeg, fetchFile } = await loadFfmpegRuntime();
+  const uniqueId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  const inputName = `input-${uniqueId}.${getVideoExtension(videoBlob)}`;
+  const outputName = `output-${uniqueId}.mp4`;
+
+  onProgress?.({ stage: 'transcoding_video', progress: 0.02 });
+
+  const progressHandler = ({ progress }: { progress: number }) => {
+    onProgress?.({
+      stage: 'transcoding_video',
+      progress: Math.min(0.98, Math.max(0.02, progress || 0)),
+    });
+  };
+
+  if (typeof ffmpeg.on === 'function') {
+    ffmpeg.on('progress', progressHandler);
+  }
+
+  try {
+    const inputData = await fetchFile(videoBlob);
+    await ffmpeg.writeFile(inputName, inputData);
+
+    await ffmpeg.exec([
+      '-i', inputName,
+      '-map', '0:v:0',
+      '-map', '0:a:0?',
+      '-c:v', 'libx264',
+      '-preset', 'medium',
+      '-profile:v', 'high',
+      '-level', '4.0',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-ar', '44100',
+      '-movflags', '+faststart',
+      '-y',
+      outputName,
+    ]);
+
+    const outputData = await ffmpeg.readFile(outputName);
+    const bytes = outputData instanceof Uint8Array ? outputData : new Uint8Array(outputData);
+    onProgress?.({ stage: 'transcoding_video', progress: 1 });
+
+    return new Blob([bytes], { type: 'video/mp4' });
+  } finally {
+    if (typeof ffmpeg.off === 'function') {
+      ffmpeg.off('progress', progressHandler);
+    }
+    if (typeof ffmpeg.deleteFile === 'function') {
+      await Promise.allSettled([
+        ffmpeg.deleteFile(inputName),
+        ffmpeg.deleteFile(outputName),
+      ]);
+    }
+  }
+}
+
+export async function ensureUniversalMp4Blob(
+  videoBlob: Blob,
+  onProgress?: (p: VideoGenerationProgress) => void,
+): Promise<Blob> {
+  if (!videoBlob.type.startsWith('video/')) {
+    return videoBlob;
+  }
+
+  return enqueueTranscodeJob(() => transcodeToUniversalMp4Blob(videoBlob, onProgress));
+}
+
 /**
  * Generate a video from an audio blob using Canvas-based visualization + MediaRecorder.
  */
