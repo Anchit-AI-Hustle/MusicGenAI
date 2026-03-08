@@ -352,17 +352,15 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     );
   };
 
-  // ===== 9-Step Pipeline Progress Component =====
+  // ===== Pipeline Progress Component =====
   const PIPELINE_STEPS = [
-    { key: 'analyzing', label: 'Analyzing user inputs', icon: '🔍', match: /analyz/i },
-    { key: 'expanding', label: 'Expanding production brief', icon: '📝', match: /expand/i },
+    { key: 'analyzing', label: 'Analyzing musical vision', icon: '🔍', match: /analyz/i },
     { key: 'planning', label: 'Planning song structure', icon: '🎼', match: /plan/i },
-    { key: 'generating', label: 'Generating audio segments', icon: '🎵', match: /generat/i },
-    { key: 'downloading', label: 'Downloading audio segments', icon: '⬇️', match: /download/i },
-    { key: 'stitching', label: 'Stitching into final track', icon: '🔗', match: /stitch/i },
-    { key: 'finalizing', label: 'Finalizing audio output', icon: '💾', match: /finaliz.*(?:sav|audio)/i },
-    { key: 'video', label: 'Generating video', icon: '🎬', match: /video/i },
-    { key: 'complete', label: 'Preparing download', icon: '✅', match: /prepar|complete/i },
+    { key: 'midi', label: 'Composing MIDI patterns', icon: '🎹', match: /midi|compos/i },
+    { key: 'rendering', label: 'Rendering audio synthesis', icon: '🎵', match: /render/i },
+    { key: 'mixing', label: 'Mixing & mastering', icon: '🎚️', match: /mix|master/i },
+    { key: 'finalizing', label: 'Finalizing & uploading', icon: '💾', match: /finaliz|upload/i },
+    { key: 'complete', label: 'Complete', icon: '✅', match: /complete/i },
   ];
 
   const PipelineProgress: React.FC<{
