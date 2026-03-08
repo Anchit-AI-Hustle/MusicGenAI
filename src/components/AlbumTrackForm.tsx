@@ -333,7 +333,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                     <Input value={config.vocalStructure} onChange={e => update({ vocalStructure: e.target.value })} onFocus={() => setShowVocalStructDD(true)} className="bg-input border-border" />
                     <AnimatePresence>
                       {showVocalStructDD && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-20 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
+                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
                           {VOCAL_STRUCTURE_PRESETS.map(p => (
                             <button key={p} onClick={() => { update({ vocalStructure: p }); setShowVocalStructDD(false); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-secondary text-foreground">{p}</button>
                           ))}
