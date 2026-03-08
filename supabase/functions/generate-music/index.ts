@@ -628,50 +628,59 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
         segProgressStart + (segIdx / totalSegments) * (segProgressEnd - segProgressStart)
       );
 
-      // Generate with MusicGen via Replicate (with retry)
+      // Generate with MusicGen via Python worker (with retry)
       let audioBuffer: ArrayBuffer | null = null;
       let retries = 0;
       const MAX_RETRIES = 3;
 
       while (retries < MAX_RETRIES && !audioBuffer) {
         try {
-          console.log(`[${trackId}] MusicGen segment ${segIdx + 1}/${totalSegments} (attempt ${retries + 1})`);
+          console.log(`[${trackId}] MusicGen worker segment ${segIdx + 1}/${totalSegments} (attempt ${retries + 1})`);
 
-          const musicGenInput: Record<string, any> = {
-            prompt: segPrompt,
-            duration: segDuration,
-            model_version: "stereo-melody-large",
-            output_format: "wav",
-            normalization_strategy: "peak",
-          };
+          // Build continuation context from previously stored segment
+          let continuationUrl: string | undefined;
+          let continuationStart: number | undefined;
 
-          // Use previous segment as continuation input for conditioning
           if (segIdx > 0 && segmentBuffers.length > 0) {
-            // Upload previous segment temporarily to get a URL for conditioning
             const prevSegPath = `tracks/${trackId}/segment_${segIdx - 1}.wav`;
             const { data: prevUrl } = supabase.storage.from("music-files").getPublicUrl(prevSegPath);
             if (prevUrl?.publicUrl) {
-              musicGenInput.continuation = true;
-              musicGenInput.continuation_start = Math.max(0, SEGMENT_DURATION - 10); // Last 10s for context
-              musicGenInput.input_audio = prevUrl.publicUrl;
+              continuationUrl = prevUrl.publicUrl;
+              continuationStart = Math.max(0, SEGMENT_DURATION - 10); // Last 10s for context
             }
           }
 
-          const outputUrl = await runReplicate(REPLICATE_API_TOKEN, MUSICGEN_VERSION, musicGenInput, 300000);
-
-          if (outputUrl) {
-            audioBuffer = await downloadAudio(outputUrl);
-          }
+          audioBuffer = await callMusicWorker(
+            MUSIC_WORKER_URL,
+            segPrompt,
+            segDuration,
+            continuationUrl,
+            continuationStart,
+            musicIntent.tempo,
+            300000
+          );
 
           if (!audioBuffer) {
             retries++;
+            console.error(`[${trackId}] Music worker returned no audio for segment ${segIdx + 1}, retry ${retries}/${MAX_RETRIES}`);
             if (retries < MAX_RETRIES) await new Promise(r => setTimeout(r, 3000 * retries));
           }
         } catch (e) {
-          console.error(`MusicGen segment ${segIdx} error:`, e);
+          const errMsg = e instanceof Error ? e.message : String(e);
+          console.error(`[${trackId}] MusicGen worker error (segment ${segIdx + 1}):`, { segmentIndex: segIdx, prompt: segPrompt.substring(0, 100), errorMessage: errMsg });
           retries++;
           if (retries < MAX_RETRIES) await new Promise(r => setTimeout(r, 3000 * retries));
         }
+      }
+
+      if (!audioBuffer) {
+        const errorMsg = `Music generation worker failed for segment ${segIdx + 1}/${totalSegments} after ${MAX_RETRIES} retries. Ensure the worker is running at ${MUSIC_WORKER_URL}`;
+        console.error(`[${trackId}] ${errorMsg}`);
+        await supabase.from("tracks").update({ status: "failed", error_message: errorMsg }).eq("id", trackId);
+        await supabase.from("music_creations").update({ status: "failed" }).eq("id", creationId);
+        return new Response(JSON.stringify({ error: errorMsg }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       if (!audioBuffer) {
