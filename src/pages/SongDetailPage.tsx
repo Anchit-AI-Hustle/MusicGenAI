@@ -74,7 +74,7 @@ const triggerDownload = async (url: string, filename: string) => {
 /** Single download button with dropdown for MP3/MP4 options */
 const SongDownloadMenu: React.FC<{ track: Track; triggerDownload: (url: string, filename: string) => Promise<void> }> = ({ track, triggerDownload }) => {
   const [open, setOpen] = useState(false);
-  const hasAudio = !!track.audioUrl;
+  const triggerBtnRef = useRef<HTMLDivElement>(null);
   const hasVideo = !!track.videoUrl;
 
   // If only one type, download directly
