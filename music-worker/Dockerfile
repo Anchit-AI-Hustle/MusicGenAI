@@ -10,11 +10,13 @@ RUN apt-get update && apt-get install -y \
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip
 RUN pip install --upgrade pip
 
-# Install torch first (prebuilt wheel)
+# Install PyTorch CPU wheel
 RUN pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Install audiocraft separately
+RUN pip install audiocraft
 
 # Copy requirements
 COPY requirements.txt .
