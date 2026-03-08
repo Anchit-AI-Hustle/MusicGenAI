@@ -268,14 +268,20 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     songStructure: tc.songStructure || undefined,
   });
 
-  // BROWSER-BASED MUSIC GENERATION
+  // Track-level stall detection ref: trackId -> lastUpdateTimestamp
+  const trackLastUpdateRef = useRef<Record<string, number>>({});
+
+  // BROWSER-BASED MUSIC GENERATION (single track, no retry logic here)
   const generateTrackInBrowser = async (
     trackId: string, creationId: string, input: CreateMusicInput, trackTitle: string
-  ): Promise<void> => {
+  ): Promise<'completed' | 'failed'> => {
     try {
+      trackLastUpdateRef.current[trackId] = Date.now();
+
       // Step 1: Analyze with AI
       updateTrackLocal(creationId, trackId, { status: 'analyzing', currentStage: 'Analyzing your musical vision', progress: 0.05 });
       await updateTrackDB(trackId, creationId, 'Analyzing your musical vision', 0.05, 'analyzing');
+      trackLastUpdateRef.current[trackId] = Date.now();
 
       const analyzeResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-music`, {
         method: 'POST',
@@ -301,6 +307,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }),
       });
 
+      trackLastUpdateRef.current[trackId] = Date.now();
+
       if (!analyzeResponse.ok) {
         const err = await analyzeResponse.json().catch(() => ({ error: 'Analysis failed' }));
         throw new Error(err.error || 'AI analysis failed');
@@ -311,6 +319,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       // Step 2: Planning
       updateTrackLocal(creationId, trackId, { status: 'planning_structure', currentStage: 'Planning song structure', progress: 0.10 });
       await updateTrackDB(trackId, creationId, 'Planning song structure', 0.10, 'planning_structure');
+      trackLastUpdateRef.current[trackId] = Date.now();
 
       // Step 3-5: Generate audio
       const onProgress = (stage: string, progress: number) => {
@@ -323,9 +332,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const label = stageLabels[stage] || stage;
         updateTrackLocal(creationId, trackId, { status: stage, currentStage: label, progress });
         updateTrackDB(trackId, creationId, label, progress, stage).catch(console.warn);
+        trackLastUpdateRef.current[trackId] = Date.now();
       };
 
       const wavBlob = await generateTrack(musicIntent, onProgress);
+      trackLastUpdateRef.current[trackId] = Date.now();
 
       // Step 6: Upload
       updateTrackLocal(creationId, trackId, { status: 'finalizing', currentStage: 'Uploading final track', progress: 0.94 });
@@ -353,6 +364,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       });
 
       toast.success(`"${trackTitle}" is ready! 🎵`);
+      delete trackLastUpdateRef.current[trackId];
+      return 'completed';
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       console.error(`[${trackId}] Generation failed:`, errorMsg);
@@ -366,8 +379,70 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         status: 'failed', currentStage: 'Failed', errorMessage: errorMsg, progress: 0,
       });
 
-      toast.error(`Generation failed: ${errorMsg}`);
+      delete trackLastUpdateRef.current[trackId];
+      return 'failed';
     }
+  };
+
+  // ALBUM ORCHESTRATOR: sequential generation with retry + skip-on-failure
+  const MAX_RETRIES = 3;
+
+  const orchestrateAlbum = async (
+    tracks: { id: string; title: string; trackNumber: number }[],
+    creationId: string,
+    getTrackInput: (index: number) => CreateMusicInput,
+  ) => {
+    const sortedTracks = [...tracks].sort((a, b) => a.trackNumber - b.trackNumber);
+
+    // Mark all as waiting
+    for (const track of sortedTracks) {
+      updateTrackLocal(creationId, track.id, { status: 'pending', currentStage: 'Waiting to start', progress: 0 });
+      await supabase.from('tracks').update({ status: 'pending', current_stage: 'Waiting to start', progress: 0 }).eq('id', track.id);
+    }
+
+    for (let i = 0; i < sortedTracks.length; i++) {
+      const track = sortedTracks[i];
+      const trackInput = getTrackInput(i);
+      let result: 'completed' | 'failed' = 'failed';
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        console.log(`[Orchestrator] Track ${track.trackNumber} "${track.title}" — attempt ${attempt}/${MAX_RETRIES}`);
+
+        // Reset track for retry
+        if (attempt > 1) {
+          updateTrackLocal(creationId, track.id, { status: 'analyzing', currentStage: `Retrying (attempt ${attempt})...`, progress: 0, errorMessage: undefined });
+          await supabase.from('tracks').update({
+            status: 'pending', progress: 0, error_message: null,
+            current_stage: `Retrying (attempt ${attempt})`, estimated_time_left: 0,
+          }).eq('id', track.id);
+          // Small delay before retry
+          await new Promise(r => setTimeout(r, 2000));
+        }
+
+        result = await generateTrackInBrowser(track.id, creationId, trackInput, track.title);
+
+        if (result === 'completed') break;
+
+        if (attempt < MAX_RETRIES) {
+          toast.error(`Track "${track.title}" failed (attempt ${attempt}/${MAX_RETRIES}), retrying...`);
+        }
+      }
+
+      if (result === 'failed') {
+        toast.error(`Track "${track.title}" failed after ${MAX_RETRIES} attempts. Skipping to next track.`);
+        // Continue with the next track — don't freeze the album
+      }
+    }
+
+    // Derive final album status from track statuses
+    const { data: finalTracks } = await supabase.from('tracks').select('status').eq('creation_id', creationId);
+    const statuses = (finalTracks || []).map(t => t.status);
+    const albumStatus = statuses.every(s => s === 'completed') ? 'completed'
+      : statuses.some(s => s === 'failed') ? 'completed' // album is "done" even if some tracks failed
+      : 'completed';
+
+    await supabase.from('music_creations').update({ status: albumStatus, progress: 1 }).eq('id', creationId);
+    toast.success('Album generation complete!');
   };
 
   const createMusic = async (input: CreateMusicInput): Promise<MusicCreation | null> => {
@@ -452,24 +527,27 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setCurrentCreation(newCreation);
       toast.success(`${input.type === 'album' ? 'Album' : 'Music'} creation started!`);
 
-      // Start sequential generation
-      (async () => {
-        const sortedTracks = [...newCreation.tracks].sort((a, b) => a.trackNumber - b.trackNumber);
-        for (let i = 0; i < sortedTracks.length; i++) {
-          const track = sortedTracks[i];
-          // Build per-track input
-          let trackInput: CreateMusicInput;
-          if (isAlbumWithTracks) {
-            trackInput = trackConfigToInput(input.albumTracks![i]);
-          } else {
-            trackInput = input;
-          }
-          await generateTrackInBrowser(track.id, newCreation.id, trackInput, track.title);
-        }
-        // Update creation status when all done
-        const finalCreation = await supabase.from('music_creations').select('*').eq('id', newCreation.id).single();
-        // Derive from tracks
-      })();
+      // Build track input resolver
+      const getTrackInput = (index: number): CreateMusicInput => {
+        if (isAlbumWithTracks) return trackConfigToInput(input.albumTracks![index]);
+        return input;
+      };
+
+      // Launch orchestrator (fire-and-forget, non-blocking)
+      if (numberOfTracks === 1) {
+        // Single song: direct generation
+        generateTrackInBrowser(newCreation.tracks[0].id, newCreation.id, getTrackInput(0), newCreation.tracks[0].title)
+          .then(async () => {
+            await supabase.from('music_creations').update({ status: 'completed', progress: 1 }).eq('id', newCreation.id);
+          });
+      } else {
+        // Album: use orchestrator with retry logic
+        orchestrateAlbum(
+          newCreation.tracks.map(t => ({ id: t.id, title: t.title, trackNumber: t.trackNumber })),
+          newCreation.id,
+          getTrackInput,
+        );
+      }
 
       return newCreation;
     } catch (error) {
