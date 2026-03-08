@@ -138,14 +138,17 @@ export const GlobalPlayer: React.FC = () => {
     try {
       const response = await fetch(url);
       const blob = await response.blob();
+      const downloadBlob = blob.type.includes('webm')
+        ? await ensureCompatibleMp4Blob(blob)
+        : blob;
       // Fix extension based on actual blob type
       let finalFilename = filename;
-      if (blob.type.includes('webm') && filename.endsWith('.mp4')) {
+      if (downloadBlob.type.includes('webm') && filename.endsWith('.mp4')) {
         finalFilename = filename.replace('.mp4', '.webm');
-      } else if (blob.type.includes('mp4') && filename.endsWith('.webm')) {
+      } else if (downloadBlob.type.includes('mp4') && filename.endsWith('.webm')) {
         finalFilename = filename.replace('.webm', '.mp4');
       }
-      const blobUrl = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(downloadBlob);
       const a = document.createElement('a');
       a.href = blobUrl;
       a.download = finalFilename;

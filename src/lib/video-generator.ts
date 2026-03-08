@@ -164,6 +164,14 @@ async function transcodeWebmToMp4(
   }
 }
 
+export async function ensureCompatibleMp4Blob(
+  videoBlob: Blob,
+  onProgress?: (progress: number) => void,
+): Promise<Blob> {
+  if (videoBlob.type.includes('mp4')) return videoBlob;
+  return transcodeWebmToMp4(videoBlob, onProgress);
+}
+
 /**
  * Generate a video from an audio blob using Canvas-based visualization + MediaRecorder.
  */
