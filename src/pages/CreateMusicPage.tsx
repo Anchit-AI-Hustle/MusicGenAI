@@ -44,8 +44,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const [generateVideo, setGenerateVideo] = useState(false);
   const [videoStyle, setVideoStyle] = useState('');
 
-  // Track which field+action is loading
-  const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  // Track which field+action pairs are loading (supports parallel)
+  const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
 
   // Audio player state
   const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
