@@ -285,7 +285,8 @@ const VideoPlayerInner: React.FC<VideoPlayerProps> = ({ videoUrl, title, duratio
                   const blobUrl = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = blobUrl;
-                  a.download = `${title || 'video'}_video.mp4`;
+                  const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+                  a.download = `${title || 'video'}_video.${ext}`;
                   a.style.display = 'none';
                   document.body.appendChild(a);
                   a.click();

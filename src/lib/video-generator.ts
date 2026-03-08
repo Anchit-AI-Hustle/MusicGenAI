@@ -219,8 +219,25 @@ export async function generateVideoFromAudio(
     stream.addTrack(track);
   }
 
+  // Pick the best supported MIME type — prefer MP4 for mobile compatibility
+  const mimeOptions = [
+    'video/mp4;codecs=avc1,mp4a.40.2',
+    'video/mp4',
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+  ];
+  let selectedMime = 'video/webm';
+  for (const mime of mimeOptions) {
+    if (MediaRecorder.isTypeSupported(mime)) {
+      selectedMime = mime;
+      break;
+    }
+  }
+  const isMP4 = selectedMime.startsWith('video/mp4');
+
   const mediaRecorder = new MediaRecorder(stream, {
-    mimeType: 'video/webm;codecs=vp9,opus',
+    mimeType: selectedMime,
     videoBitsPerSecond: 4_000_000,
   });
 
@@ -234,7 +251,8 @@ export async function generateVideoFromAudio(
   return new Promise<Blob>((resolve, reject) => {
     mediaRecorder.onstop = () => {
       audioContext.close();
-      const blob = new Blob(chunks, { type: 'video/webm' });
+      const blobType = isMP4 ? 'video/mp4' : 'video/webm';
+      const blob = new Blob(chunks, { type: blobType });
       resolve(blob);
     };
     mediaRecorder.onerror = (e) => reject(e);
