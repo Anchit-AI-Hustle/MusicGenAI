@@ -12,7 +12,7 @@ import {
 import { getGenreProfile, blendGenreProfiles, type GenreProfile } from './genre-ontology';
 import { getGrooveTemplate, applyGrooveTiming, getGrooveVelocity } from './groove-engine';
 import { getDrumPattern, getDrumFill, type DrumHit } from './drum-patterns';
-import { generateBassline, chooseBassStyle } from './bassline-generator';
+import { generateBassline, chooseBassStyle, type BassStyle } from './bassline-generator';
 import { generateMelody, generateChords, chooseMelodyStyle } from './melody-generator';
 import { generateArrangement, getTransitionType } from './arrangement-engine';
 import { renderTransition } from './transition-engine';
