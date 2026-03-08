@@ -319,25 +319,6 @@ const DashboardTrackProgress: React.FC<{
         </div>
         <Progress value={progress * 100} className="h-2" />
       </div>
-
-      {/* Segment sub-progress during generation */}
-      {activeIdx === 3 && totalSegments > 1 && (
-        <div className="space-y-1">
-          <div className="flex gap-1">
-            {Array.from({ length: totalSegments }).map((_, i) => (
-              <div
-                key={i}
-                className={`h-1.5 flex-1 rounded-full ${
-                  i < completedSegments ? 'bg-primary' : i === completedSegments ? 'bg-primary/50 animate-pulse' : 'bg-muted'
-                }`}
-              />
-            ))}
-          </div>
-          <p className="text-center text-xs text-muted-foreground">
-            {completedSegments} of {totalSegments} segments complete
-          </p>
-        </div>
-      )}
     </div>
   );
 };
