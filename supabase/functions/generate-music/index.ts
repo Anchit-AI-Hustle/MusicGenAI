@@ -612,7 +612,9 @@ Durations MUST sum to exactly ${durationSec}.`,
       });
     }
 
-    const MAX_PARALLEL = 3;
+    // Sequential generation to respect Replicate rate limits (free tier: 6/min, burst 1)
+    // Upgrade to paid Replicate for parallel generation
+    const MAX_PARALLEL = 1;
     const segProgressStart = 0.10;
     const segProgressEnd = 0.70;
     let completedSegments = 0;
