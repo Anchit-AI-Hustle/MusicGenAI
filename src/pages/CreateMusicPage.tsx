@@ -600,20 +600,15 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                   <AiToolbar field="vocalStructure" />
                 </div>
-                <div className="relative">
+                <div className="relative" ref={vocalStructureRef}>
                   <Input placeholder="Type or select..." value={vocalStructure} onChange={e => setVocalStructure(e.target.value)} onFocus={() => setShowVocalStructureDropdown(true)} className="bg-input border-border" />
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <AnimatePresence>
-                    {showVocalStructureDropdown && (
-                       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute z-50 w-full mt-2 max-h-48 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
-                        {VOCAL_STRUCTURE_PRESETS.map(preset => (
-                          <button key={preset} onClick={() => { setVocalStructure(preset); setShowVocalStructureDropdown(false); }} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${vocalStructure === preset ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{preset}</button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  <PortalDropdown open={showVocalStructureDropdown} onClose={() => setShowVocalStructureDropdown(false)} triggerRef={vocalStructureRef as React.RefObject<HTMLElement>} matchTriggerWidth>
+                    {VOCAL_STRUCTURE_PRESETS.map(preset => (
+                      <button key={preset} onClick={() => { setVocalStructure(preset); setShowVocalStructureDropdown(false); }} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${vocalStructure === preset ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{preset}</button>
+                    ))}
+                  </PortalDropdown>
                 </div>
-                {showVocalStructureDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowVocalStructureDropdown(false)} />}
               </motion.div>
 
               {/* Vocal Style */}
