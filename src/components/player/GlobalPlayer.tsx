@@ -142,7 +142,6 @@ export const GlobalPlayer: React.FC = () => {
     a.click();
     document.body.removeChild(a);
   }, []);
-  const playerRef = useRef<HTMLDivElement>(null);
 
   const toggleFullscreen = useCallback(() => {
     if (!playerRef.current) return;
