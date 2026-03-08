@@ -167,11 +167,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'videoStyle': return videoStyle;
       case 'tempoBpm': return String(tempoBpm);
       case 'mood': return mood;
-      case 'musicalKey': return musicalKey;
+      case 'songStructure': return songStructure;
       case 'vocalStructure': return vocalStructure;
       case 'vocalStyle': return vocalStyle;
       case 'vocalIntensity': return String(vocalIntensity);
       case 'vocalEffects': return selectedVocalEffects.join(', ');
+      case 'duration': return String(durationSeconds);
       default: return '';
     }
   };
