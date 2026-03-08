@@ -272,7 +272,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   <Input placeholder="Search genres..." value={genreSearch} onChange={e => setGenreSearch(e.target.value)} onFocus={() => setShowGenreDropdown(true)} className="bg-input border-border" />
                   <AnimatePresence>
                     {showGenreDropdown && (
-                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-20 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
+                       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
                         {filteredGenres.slice(0, 30).map(g => (
                           <button key={g} onClick={() => update({ genres: config.genres.includes(g) ? config.genres.filter(x => x !== g) : [...config.genres, g] })} className={`w-full text-left px-3 py-1.5 text-sm hover:bg-secondary ${config.genres.includes(g) ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{g}</button>
                         ))}
