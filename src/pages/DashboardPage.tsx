@@ -11,17 +11,19 @@ type FilterType = 'all' | 'songs' | 'albums';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Waiting to start',
-  analyzing: 'Analyzing prompt',
+  analyzing: 'Analyzing inputs',
+  planning_structure: 'Planning song structure',
   generating_segments: 'Generating music',
+  downloading_segments: 'Downloading audio',
   stitching_audio: 'Stitching track',
-  rendering_video: 'Rendering video',
-  uploading: 'Finalizing assets',
+  finalizing_audio: 'Finalizing audio',
+  rendering_video: 'Generating video',
+  preparing_download: 'Preparing download',
   completed: 'Ready',
   failed: 'Failed',
-  processing: 'Processing',
 };
 
-const ACTIVE_STATUSES = ['analyzing', 'generating_segments', 'stitching_audio', 'rendering_video', 'uploading', 'processing'];
+const ACTIVE_STATUSES = ['analyzing', 'planning_structure', 'generating_segments', 'downloading_segments', 'stitching_audio', 'finalizing_audio', 'rendering_video', 'preparing_download'];
 
 const isActiveStatus = (status: string) => ACTIVE_STATUSES.includes(status);
 
