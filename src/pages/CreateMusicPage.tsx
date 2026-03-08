@@ -272,7 +272,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         lyrics: lyrics || undefined,
         artistInspiration: artistInspiration || undefined,
         videoStyle: generateVideo ? videoStyle : undefined,
-        tempoBpm, mood: mood || undefined, musicalKey,
+        tempoBpm, mood: mood || undefined,
         vocalStructure, vocalStyle: vocalStyle || undefined,
         vocalIntensity, vocalEffects: selectedVocalEffects,
         songStructure: songStructure || undefined,
