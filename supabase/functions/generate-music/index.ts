@@ -841,7 +841,7 @@ Durations MUST sum to exactly ${durationSec}.`,
     // ================================================================
     // STEP 5 — STITCHING SEGMENTS (with crossfade + trim to exact duration)
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Stitching segments into final track", 0.82, 10);
+    await updateProgress(supabase, trackId, creationId, "Stitching segments into final track", 0.82, 10, jobId, 6, totalSegments, totalSegments);
 
     let stitchedBuffer: ArrayBuffer;
     try {
