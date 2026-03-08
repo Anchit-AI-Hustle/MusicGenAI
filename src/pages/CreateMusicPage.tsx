@@ -529,10 +529,13 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
               {/* Duration */}
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card rounded-xl p-4 sm:p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Clock className="w-5 h-5 text-muted-foreground" />
-                  <Label className="text-foreground font-medium">Duration</Label>
-                  <span className="ml-auto text-lg font-display text-primary">{formatDuration(durationSeconds)}</span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-4">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-muted-foreground" />
+                    <Label className="text-foreground font-medium">Duration</Label>
+                    <span className="ml-2 text-lg font-display text-primary">{formatDuration(durationSeconds)}</span>
+                  </div>
+                  <AiToolbar field="duration" />
                 </div>
                 <Slider value={[durationSeconds]} onValueChange={updateFromSlider} max={600} min={30} step={1} className="mb-6" />
                 <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
