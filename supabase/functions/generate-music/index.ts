@@ -207,9 +207,10 @@ async function replicateCreatePrediction(
     throw new Error(`All Replicate models failed. Last error: ${lastError}`);
   }
 
-  // Poll for completion every 2s (max 5 minutes)
-  const maxPolls = 150;
+  // Poll for completion every 2s (max 120s per segment attempt)
   const pollInterval = 2000;
+  const maxPollDurationMs = 120_000;
+  const maxPolls = Math.floor(maxPollDurationMs / pollInterval);
 
   for (let i = 0; i < maxPolls; i++) {
     await new Promise(r => setTimeout(r, pollInterval));
@@ -228,7 +229,7 @@ async function replicateCreatePrediction(
     }
 
     const result = await pollRes.json();
-    console.log(`[Replicate] Poll ${i + 1}: status=${result.status}`);
+    console.log(`[Replicate] Poll ${i + 1}/${maxPolls}: status=${result.status}`);
 
     if (result.status === "succeeded") {
       // output can be a string URL or an array of URLs
@@ -245,7 +246,7 @@ async function replicateCreatePrediction(
     }
   }
 
-  throw new Error(`Replicate prediction timed out after ${maxPolls * pollInterval / 1000}s`);
+  throw new Error(`Replicate prediction timed out after ${maxPollDurationMs / 1000}s`);
 }
 
 // ===== HELPER: Download audio from URL =====
