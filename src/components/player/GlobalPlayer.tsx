@@ -228,22 +228,34 @@ export const GlobalPlayer: React.FC = () => {
                 <AudioVisualizer barCount={64} />
               </div>
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-primary/10 via-background to-background">
-                {currentTrack.coverArt ? (
-                  <img
-                    src={currentTrack.coverArt}
-                    alt={currentTrack.title}
-                    className="w-28 h-28 sm:w-40 sm:h-40 rounded-2xl object-cover shadow-2xl shadow-primary/20"
-                  />
-                ) : (
-                  <div className="w-28 h-28 sm:w-40 sm:h-40 rounded-2xl bg-secondary/80 flex items-center justify-center shadow-2xl shadow-primary/10">
-                    <Music className="w-14 h-14 sm:w-20 sm:h-20 text-primary/60" />
+              <div className="w-full h-full flex items-center justify-center gap-6 bg-gradient-to-b from-primary/10 via-background to-background px-6">
+                {/* Cover art */}
+                <div className="flex flex-col items-center gap-3 flex-shrink-0">
+                  {currentTrack.coverArt ? (
+                    <img
+                      src={currentTrack.coverArt}
+                      alt={currentTrack.title}
+                      className="w-24 h-24 sm:w-36 sm:h-36 rounded-2xl object-cover shadow-2xl shadow-primary/20"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 sm:w-36 sm:h-36 rounded-2xl bg-secondary/80 flex items-center justify-center shadow-2xl shadow-primary/10">
+                      <Music className="w-12 h-12 sm:w-18 sm:h-18 text-primary/60" />
+                    </div>
+                  )}
+                  <div className="text-center">
+                    <p className="font-display text-lg font-semibold text-foreground">{currentTrack.title}</p>
+                    <p className="text-sm text-muted-foreground">{currentTrack.artist || 'HarmonyAI'}</p>
+                  </div>
+                </div>
+                {/* Lyrics */}
+                {currentTrack.lyrics && (
+                  <div className="flex-1 h-full overflow-y-auto max-h-full py-4 hidden sm:block">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2 font-medium">Lyrics</p>
+                    <pre className="whitespace-pre-wrap text-sm leading-7 text-foreground/70 font-sans">
+                      {currentTrack.lyrics}
+                    </pre>
                   </div>
                 )}
-                <div className="text-center">
-                  <p className="font-display text-lg font-semibold text-foreground">{currentTrack.title}</p>
-                  <p className="text-sm text-muted-foreground">{currentTrack.artist || 'HarmonyAI'}</p>
-                </div>
               </div>
             )}
           </div>
