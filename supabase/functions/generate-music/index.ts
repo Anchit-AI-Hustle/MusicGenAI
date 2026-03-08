@@ -925,6 +925,14 @@ Durations MUST sum to exactly ${durationSec}.`,
 
   } catch (e) {
     console.error("generate-music error:", e);
+    // Broadcast failure
+    try {
+      const supabaseForBroadcast = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { trackId: tid, jobId: jid } = await req.clone().json().catch(() => ({ trackId: "", jobId: "" }));
+      if (jid || tid) {
+        await broadcastProgress(supabaseForBroadcast, jid || tid, -1, "Failed", 100, 0, 0, "0 seconds");
+      }
+    } catch { /* ignore broadcast errors */ }
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
