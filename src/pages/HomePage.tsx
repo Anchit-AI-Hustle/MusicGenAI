@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Music, Wand2, Sparkles, ArrowRight, Play, X } from 'lucide-react';
+import React from 'react';
+import { motion } from 'framer-motion';
+import { Music, Wand2, Sparkles, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface HomePageProps {
@@ -26,8 +26,6 @@ const steps = [
 ];
 
 export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
-  const [showDemo, setShowDemo] = useState(false);
-
   return (
     <div className="min-h-screen overflow-y-auto">
       {/* Hero Section */}
@@ -68,27 +66,16 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               and let our AI bring it to life with professional-quality music.
             </p>
 
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-              <Button
-                onClick={() => onNavigate('create')}
-                variant="glow"
-                size="xl"
-                className="group w-full sm:w-auto"
-              >
-                Create Music
-                <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
-              </Button>
-              <Button
-                variant="glass"
-                size="xl"
-                className="group w-full sm:w-auto"
-                onClick={() => setShowDemo(true)}
-              >
-                <Play className="w-5 h-5" />
-                Watch Demo
-              </Button>
-            </div>
+            {/* CTA Button */}
+            <Button
+              onClick={() => onNavigate('create')}
+              variant="glow"
+              size="xl"
+              className="group w-full sm:w-auto"
+            >
+              Create Music
+              <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+            </Button>
           </motion.div>
 
           {/* Animated waveform decoration */}
@@ -147,17 +134,12 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                   className="relative group"
                 >
                   <div className="glass-card rounded-2xl p-6 sm:p-8 h-full transition-smooth hover:border-primary/30">
-                    {/* Step number */}
                     <div className="absolute -top-3 -left-3 sm:-top-4 sm:-left-4 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary text-primary-foreground font-bold text-sm flex items-center justify-center">
                       {index + 1}
                     </div>
-                    
-                    {/* Icon */}
                     <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-primary/10 flex items-center justify-center mb-5 sm:mb-6 group-hover:bg-primary/20 transition-smooth">
                       <Icon className="w-6 h-6 sm:w-7 sm:h-7 text-primary" />
                     </div>
-                    
-                    {/* Content */}
                     <h3 className="font-display text-lg sm:text-xl font-semibold text-foreground mb-3">
                       {step.title}
                     </h3>
@@ -181,9 +163,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           className="max-w-4xl mx-auto"
         >
           <div className="relative glass-card rounded-2xl sm:rounded-3xl p-8 sm:p-12 md:p-16 text-center overflow-hidden">
-            {/* Background gradient */}
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10" />
-            
             <div className="relative">
               <h2 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-4">
                 Ready to Create?
@@ -204,41 +184,6 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           </div>
         </motion.div>
       </section>
-      {/* Demo Video Modal */}
-      <AnimatePresence>
-        {showDemo && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-            onClick={() => setShowDemo(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-4xl aspect-video rounded-2xl overflow-hidden bg-black shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={() => setShowDemo(false)}
-                className="absolute top-3 right-3 z-10 p-2 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              <video
-                src="https://vgmwpdktxsjaymdszvvn.supabase.co/storage/v1/object/public/assets/demo.mp4"
-                controls
-                autoPlay
-                className="w-full h-full object-contain"
-                playsInline
-                preload="metadata"
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };

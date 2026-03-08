@@ -162,18 +162,18 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
                   <Button
                     variant="outline"
                     size="lg"
-                    onClick={() => triggerDownload(track.audioUrl!, `${track.title}_audio.mp3`)}
+                    onClick={() => triggerDownload(track.audioUrl!, `${track.title}.mp3`)}
                   >
-                    <Download className="w-4 h-4" /> MP3
+                    <Download className="w-4 h-4" /> Download MP3
                   </Button>
                 )}
                 {track?.videoUrl && (
                   <Button
                     variant="outline"
                     size="lg"
-                    onClick={() => triggerDownload(track.videoUrl!, `${track.title}_video.mp4`)}
+                    onClick={() => triggerDownload(track.videoUrl!, `${track.title}.mp4`)}
                   >
-                    <MonitorPlay className="w-4 h-4" /> MP4
+                    <MonitorPlay className="w-4 h-4" /> Download MP4
                   </Button>
                 )}
               </div>

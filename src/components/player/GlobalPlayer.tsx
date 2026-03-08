@@ -415,18 +415,18 @@ export const GlobalPlayer: React.FC = () => {
                       >
                         {currentTrack.audioUrl && (
                           <button
-                            onClick={() => { triggerDownload(currentTrack.audioUrl!, `${currentTrack.title || 'track'}_audio.mp3`); setShowDownloadMenu(false); }}
+                            onClick={() => { triggerDownload(currentTrack.audioUrl!, `${currentTrack.title || 'track'}.mp3`); setShowDownloadMenu(false); }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
                           >
-                            <Music className="w-4 h-4" /> Audio (MP3)
+                            <Music className="w-4 h-4" /> Download Audio
                           </button>
                         )}
                         {currentTrack.videoUrl && (
                           <button
-                            onClick={() => { triggerDownload(currentTrack.videoUrl!, `${currentTrack.title || 'track'}_video.mp4`); setShowDownloadMenu(false); }}
+                            onClick={() => { triggerDownload(currentTrack.videoUrl!, `${currentTrack.title || 'track'}.mp4`); setShowDownloadMenu(false); }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
                           >
-                            <MonitorPlay className="w-4 h-4" /> Video (MP4)
+                            <MonitorPlay className="w-4 h-4" /> Download Video
                           </button>
                         )}
                       </motion.div>

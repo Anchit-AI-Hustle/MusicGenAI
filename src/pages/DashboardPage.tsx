@@ -465,9 +465,26 @@ const TrackRow: React.FC<{ track: Track; index: number; formatDuration: (s: numb
         )}
         <span className="text-sm text-muted-foreground">{formatDuration(track.duration)}</span>
         {track.status === 'completed' && track.audioUrl && (
-          <a href={track.audioUrl} download={`${track.title || 'track'}.wav`}>
-            <Button variant="ghost" size="icon" className="h-8 w-8 hidden sm:flex"><Download className="w-4 h-4" /></Button>
-          </a>
+          <Button variant="ghost" size="icon" className="h-8 w-8 hidden sm:flex" onClick={async (e) => {
+            e.stopPropagation();
+            try {
+              const res = await fetch(track.audioUrl!);
+              const blob = await res.blob();
+              const blobUrl = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = blobUrl;
+              a.download = `${track.title}.mp3`;
+              a.style.display = 'none';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(blobUrl);
+            } catch {
+              window.open(track.audioUrl!, '_blank');
+            }
+          }}>
+            <Download className="w-4 h-4" />
+          </Button>
         )}
       </div>
       {track.status === 'completed' && track.videoUrl && (
