@@ -219,11 +219,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'videoStyle': setVideoStyle(''); break;
       case 'tempoBpm': setTempoBpm(120); break;
       case 'mood': setMood(''); break;
-      case 'musicalKey': setMusicalKey('D minor'); break;
+      case 'songStructure': setSongStructure(''); break;
       case 'vocalStructure': setVocalStructure('Instrumental'); break;
       case 'vocalStyle': setVocalStyle(''); break;
       case 'vocalIntensity': setVocalIntensity(5); break;
       case 'vocalEffects': setSelectedVocalEffects([]); break;
+      case 'duration': { setDurationSeconds(180); setHours(0); setMinutes(3); setSeconds(0); break; }
     }
   };
 
