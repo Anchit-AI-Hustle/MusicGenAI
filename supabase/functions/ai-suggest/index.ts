@@ -57,7 +57,9 @@ const FIELD_PROMPTS: Record<string, string> = {
 };
 
 const ENHANCE_PROMPTS: Record<string, string> = {
-  trackName: "Take this track name and make it more evocative, unique, and memorable. Preserve the core idea but elevate it.",
+  albumName: "Take this album name and make it more evocative and memorable. Return ONLY the improved title (2-5 words), no descriptions.",
+  albumVibe: "Enhance this album vibe description — add richer sonic textures, stronger emotional arcs, and more specific imagery.",
+  trackName: "Take this track name and make it more evocative, unique, and memorable. Return ONLY the improved title (2-5 words), no descriptions.",
   prompt: "Take this music prompt and expand it with richer detail — add specific instruments, textures, spatial qualities, and emotional arcs.",
   genres: "Refine these genre selections — suggest more specific sub-genres or complementary genres. Return as comma-separated list.",
   lyrics: "Enhance these lyrics/themes — add more poetic depth, stronger imagery, better flow. Keep the core meaning.",
@@ -65,6 +67,7 @@ const ENHANCE_PROMPTS: Record<string, string> = {
   vocalLanguage: "Refine the language selection — suggest languages that add unique character while fitting the genre.",
   videoStyle: "Enhance this video style — add specific visual techniques, color palettes, camera movements.",
   tempoBpm: "Adjust this BPM slightly to improve musical fit. Return ONLY a number between 60-200.",
+  duration: "Adjust this duration to better fit the genre and structure. Return ONLY a number in seconds between 30-600.",
   vocalStructure: "Refine this vocal structure with additional sections. Return section names separated by ' – '.",
   vocalStyle: "Refine this vocal style to be more specific and nuanced. Add descriptive modifiers.",
   vocalIntensity: "Adjust this intensity value based on the genre and energy context. Return ONLY a number between 1-10.",
