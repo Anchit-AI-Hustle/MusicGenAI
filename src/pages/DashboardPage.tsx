@@ -251,13 +251,13 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
 };
 
 const DASH_PIPELINE_STEPS = [
-  { key: 'analyzing', label: 'Analyzing', match: /analyz/i },
+  { key: 'analyzing', label: 'Analyzing prompt', match: /analyz/i },
   { key: 'expanding', label: 'Production brief', match: /expand/i },
   { key: 'planning', label: 'Planning structure', match: /plan/i },
-  { key: 'generating', label: 'Generating segments', match: /generat/i },
+  { key: 'generating', label: 'Generating music', match: /generat/i },
   { key: 'downloading', label: 'Downloading audio', match: /download/i },
   { key: 'stitching', label: 'Stitching track', match: /stitch/i },
-  { key: 'finalizing', label: 'Finalizing', match: /finaliz/i },
+  { key: 'uploading', label: 'Finalizing assets', match: /finaliz|upload/i },
 ];
 
 const DashboardTrackProgress: React.FC<{
