@@ -841,7 +841,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                         <div className="flex items-center gap-1 flex-shrink-0">
                           {track.status === 'completed' && track.audioUrl && (
                             <>
-                              <a href={track.audioUrl} download>
+                              <a href={track.audioUrl} download={`${track.title || 'track'}.wav`}>
                                 <Button variant="ghost" size="icon"><Download className="w-5 h-5" /></Button>
                               </a>
                               <Button variant="ghost" size="icon" onClick={() => { navigator.clipboard.writeText(track.audioUrl!); toast.success('Link copied!'); }}>

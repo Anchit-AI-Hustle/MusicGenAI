@@ -399,7 +399,7 @@ const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number
         )}
         <span className="text-sm text-muted-foreground">{formatDuration(track.duration)}</span>
         {track.status === 'completed' && track.audioUrl && (
-          <a href={track.audioUrl} download>
+          <a href={track.audioUrl} download={`${track.title || 'track'}.wav`}>
             <Button variant="ghost" size="icon" className="h-8 w-8 hidden sm:flex"><Download className="w-4 h-4" /></Button>
           </a>
         )}
