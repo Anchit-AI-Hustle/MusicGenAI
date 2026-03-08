@@ -771,12 +771,15 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
           }
         }
 
+        if (chunkBuffer) {
+          vocalChunks.push(chunkBuffer);
         }
 
         await updateProgress(
           supabase, trackId, creationId,
-          `vocal-chunk-${i + 1}/${lyricsLines.length}`,
-          0.70 + (i / lyricsLines.length) * 0.10
+          `Generating vocal ${i + 1} of ${lyricsLines.length}`,
+          0.70 + ((i + 1) / lyricsLines.length) * 0.10,
+          Math.max(0, 15 + (lyricsLines.length - i - 1) * 8)
         );
       }
 
