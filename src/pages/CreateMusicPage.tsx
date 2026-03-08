@@ -710,7 +710,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
             </Button>
           </motion.div>
 
-          {/* Output Section with Progress + Audio Player */}
+          {/* Output Section with Pipeline Progress + Audio Player */}
           <AnimatePresence>
             {currentCreation && (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="glass-card rounded-xl p-4 sm:p-6 border-primary/30">
@@ -751,28 +751,18 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                           <p className="font-medium text-foreground truncate">
                             {currentCreation.type === 'album' && `${index + 1}. `}{track.title}
                           </p>
+
+                          {/* 7-Step Pipeline Progress */}
                           {track.status === 'processing' && (
-                            <div className="mt-2">
-                              {track.currentStage && (
-                                <div className="flex items-center gap-2 mb-1.5">
-                                  <span className="text-xs font-medium text-primary animate-pulse">●</span>
-                                  <span className="text-xs font-medium text-foreground">{track.currentStage}</span>
-                                  {(track.estimatedTimeLeft ?? 0) > 0 && (
-                                    <span className="text-xs text-muted-foreground ml-auto">
-                                      ~{track.estimatedTimeLeft! >= 60
-                                        ? `${Math.floor(track.estimatedTimeLeft! / 60)}m ${track.estimatedTimeLeft! % 60}s`
-                                        : `${track.estimatedTimeLeft}s`} left
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                                <span>Segment {track.completedSegments || 0}/{track.totalSegments || 1}</span>
-                                <span>{Math.round((track.progress || 0) * 100)}%</span>
-                              </div>
-                              <Progress value={(track.progress || 0) * 100} className="h-2" />
-                            </div>
+                            <PipelineProgress
+                              currentStage={track.currentStage || 'pending'}
+                              progress={track.progress || 0}
+                              estimatedTimeLeft={track.estimatedTimeLeft || 0}
+                              completedSegments={track.completedSegments || 0}
+                              totalSegments={track.totalSegments || 1}
+                            />
                           )}
+
                           {track.status === 'completed' && (
                             <p className="text-sm text-muted-foreground">{formatDuration(track.duration)}</p>
                           )}
@@ -780,11 +770,25 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                             <p className="text-sm text-destructive">{track.errorMessage}</p>
                           )}
                         </div>
-                        {track.status === 'completed' && track.audioUrl && (
-                          <a href={track.audioUrl} download className="flex-shrink-0">
-                            <Button variant="ghost" size="icon"><Download className="w-5 h-5" /></Button>
-                          </a>
-                        )}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {track.status === 'completed' && track.audioUrl && (
+                            <>
+                              <a href={track.audioUrl} download>
+                                <Button variant="ghost" size="icon"><Download className="w-5 h-5" /></Button>
+                              </a>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(track.audioUrl!);
+                                  toast.success('Link copied to clipboard!');
+                                }}
+                              >
+                                <Share2 className="w-5 h-5" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
                       {track.status === 'completed' && track.audioUrl && (
                         <audio controls className="w-full mt-3" src={track.audioUrl} />
