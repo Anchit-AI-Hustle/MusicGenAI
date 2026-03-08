@@ -2,24 +2,20 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    git \
-    build-essential \
-    libsndfile1 \
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg git build-essential libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip
-RUN pip install --upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
 
-# Install torch first (prebuilt wheel)
-RUN pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+# Layer 1: PyTorch CPU wheels (cached)
+RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu
 
-# Install audiocraft separately (heavy dependency)
-RUN pip install audiocraft
+# Layer 2: audiocraft (depends on torch, cached)
+RUN pip install --no-cache-dir audiocraft
 
-# Copy requirements and install remaining packages
+# Layer 3: Lightweight app deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

@@ -1,6 +1,5 @@
 fastapi
-uvicorn
-audiocraft
+uvicorn[standard]
 numpy
 soundfile
 scipy
