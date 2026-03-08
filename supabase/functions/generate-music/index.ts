@@ -111,14 +111,16 @@ async function broadcastProgress(
 async function updateProgress(
   supabase: any, trackId: string, creationId: string,
   stage: string, progress: number, estimatedTimeLeft?: number,
-  jobId?: string, stepNumber?: number, segmentsCompleted?: number, totalSegments?: number
+  jobId?: string, stepNumber?: number, segmentsCompleted?: number, totalSegments?: number,
+  trackStatus?: string
 ) {
+  const status = trackStatus || "processing";
   await supabase.from("tracks").update({
-    progress, status: "processing", current_stage: stage,
+    progress, status, current_stage: stage,
     estimated_time_left: estimatedTimeLeft ?? 0,
   }).eq("id", trackId);
-  await supabase.from("music_creations").update({ progress, status: "processing" }).eq("id", creationId);
-  console.log(`[${trackId}] Stage: ${stage} | Progress: ${Math.round(progress * 100)}% | ETA: ${estimatedTimeLeft ?? 0}s`);
+  await supabase.from("music_creations").update({ progress, status }).eq("id", creationId);
+  console.log(`[${trackId}] Status: ${status} | Stage: ${stage} | Progress: ${Math.round(progress * 100)}% | ETA: ${estimatedTimeLeft ?? 0}s`);
 
   if (jobId && stepNumber !== undefined) {
     const eta = estimatedTimeLeft ?? 0;
