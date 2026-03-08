@@ -129,7 +129,19 @@ export const GlobalPlayer: React.FC = () => {
   const isMobile = useIsMobile();
   const [showQueue, setShowQueue] = useState(false);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const playerRef = useRef<HTMLDivElement>(null);
+
+  const triggerDownload = useCallback((url: string, filename: string) => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }, []);
   const playerRef = useRef<HTMLDivElement>(null);
 
   const toggleFullscreen = useCallback(() => {
