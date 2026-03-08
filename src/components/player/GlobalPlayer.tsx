@@ -411,7 +411,7 @@ export const GlobalPlayer: React.FC = () => {
                         )}
                         {currentTrack.videoUrl && (
                           <button
-                            onClick={() => { triggerDownload(currentTrack.videoUrl!, `${currentTrack.title || 'track'}.mp4`); setShowDownloadMenu(false); }}
+                            onClick={() => { triggerDownload(currentTrack.videoUrl!, `${currentTrack.title || 'track'}_video.mp4`); setShowDownloadMenu(false); }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
                           >
                             <MonitorPlay className="w-4 h-4" /> Video (MP4)
