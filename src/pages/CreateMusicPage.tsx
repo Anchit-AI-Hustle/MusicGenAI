@@ -390,7 +390,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
               <div key={step.key} className={`flex items-center gap-2.5 text-xs py-1 px-2 rounded-md transition-all ${
                 isActive ? 'bg-primary/10 border border-primary/20' : ''
               } ${isPending ? 'opacity-30' : ''}`}>
-                {isComplete ? (
+              {isComplete ? (
                   <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
                 ) : isActive ? (
                   <Loader2 className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" />
@@ -401,13 +401,6 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                 <span className={`font-medium ${isActive ? 'text-primary' : isComplete ? 'text-green-400' : 'text-muted-foreground'}`}>
                   {step.label}
                 </span>
-                {/* Segment detail for the generating step */}
-                {isActive && step.key === 'generating' && (
-                  <span className="text-primary/70 ml-auto">
-                    {segmentName && <span className="capitalize">{segmentName} · </span>}
-                    {completedSegments}/{totalSegments} segments
-                  </span>
-                )}
               </div>
             );
           })}
