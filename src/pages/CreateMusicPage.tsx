@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Music, Disc, Wand2, Clock, Languages, Mic2, Users, 
   Video, Palette, Sparkles, Loader2, Play, Pause, Download, ChevronDown, X,
-  RefreshCw, Zap, Trash2, Activity, AudioWaveform
+  RefreshCw, Zap, Trash2, Activity, AudioWaveform, Share2, Check, Circle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
