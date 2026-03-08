@@ -497,15 +497,22 @@ Describe kick, snare, hi-hat patterns and percussion layers. Use musical termino
     if (hasVocals) {
       const vocalResult = await callAI(
         LOVABLE_API_KEY,
-        `You are a vocal producer and phonetics expert. Plan vocal performance for a ${musicIntent.genreIdentity} track.`,
+        `You are a vocal producer and phonetics expert. Plan vocal performance for a ${musicIntent.genreIdentity} track.
+Vocal style: ${frozenInput.vocalStyle || musicIntent.vocalStyle}. Vocal intensity: ${frozenInput.vocalIntensity}/10 (1=whisper, 10=powerful).
+Vocal effects to apply: ${frozenInput.vocalEffects.join(", ") || "none"}.
+Vocal structure: ${frozenInput.vocalStructure}.`,
         `Plan vocal performance for these lyrics in a ${musicIntent.genreIdentity} track:
 Lyrics: "${frozenInput.lyrics}"
 Key: ${musicIntent.key} ${musicIntent.scale}
-Tempo: ${musicIntent.tempo} BPM
-Vocal style requested: ${musicIntent.vocalStyle}
+Tempo: ${musicIntent.tempo} BPM (beat duration: ${(60 / musicIntent.tempo).toFixed(4)}s)
+Vocal style requested: ${frozenInput.vocalStyle || musicIntent.vocalStyle}
+Vocal intensity: ${frozenInput.vocalIntensity}/10 (1=soft whisper, 10=powerful performance)
+Vocal effects: ${frozenInput.vocalEffects.join(", ") || "none"}
+Vocal structure: ${frozenInput.vocalStructure}
 Languages: ${frozenInput.vocalLanguages.join(", ") || "English"}
 
-Map the lyrics to phoneme timing, describe the melodic contour, and recommend a vocal performance approach.
+Map the lyrics to phoneme timing aligned with the beat grid (${musicIntent.tempo} BPM). Each syllable must land on a beat or sub-beat position.
+Describe the melodic contour, and recommend a vocal performance approach that matches intensity ${frozenInput.vocalIntensity}/10.
 Choose one of these Bark voice presets: v2/en_speaker_0, v2/en_speaker_1, v2/en_speaker_2, v2/en_speaker_3, v2/en_speaker_4, v2/en_speaker_5, v2/en_speaker_6, v2/en_speaker_7, v2/en_speaker_8, v2/en_speaker_9
 For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speaker_0, v2/ko_speaker_0, v2/zh_speaker_0`,
         "plan_vocals",
