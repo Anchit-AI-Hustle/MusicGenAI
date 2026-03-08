@@ -425,20 +425,77 @@ async function runSequentialWithDelay<T>(
   return results;
 }
 
-// ===== SECTION VARIATIONS for unique prompts =====
+// ===== SECTION MODIFIERS for structural guidance =====
 const SECTION_MODIFIERS: Record<string, string> = {
-  intro: "atmospheric opening, building tension slowly",
-  build: "rising energy, adding layers and percussion",
-  peak: "maximum intensity, full arrangement",
-  drop: "heavy bass drop, distorted elements, powerful rhythm",
-  breakdown: "stripped back, ethereal, breathing space",
-  bridge: "transitional, melodic shift, emotional pivot",
-  climax: "emotional peak, all elements converging",
-  outro: "gradual fade, resolving energy, final atmosphere",
-  verse: "narrative section, melodic foundation",
-  chorus: "catchy hook, elevated energy, memorable melody",
-  extension: "sustained mood, gentle continuation",
+  intro: "atmospheric opening, building tension slowly, sparse arrangement",
+  build: "rising energy, adding layers and percussion, increasing intensity",
+  peak: "maximum intensity, full arrangement, all elements firing",
+  drop: "heavy bass drop, distorted elements, powerful rhythm, maximum impact",
+  breakdown: "stripped back, ethereal, breathing space, ambient textures",
+  bridge: "transitional, melodic shift, emotional pivot, textural change",
+  climax: "emotional peak, all elements converging, maximum density",
+  outro: "gradual fade, resolving energy, final atmosphere, gentle release",
+  verse: "narrative section, melodic foundation, rhythmic groove",
+  chorus: "catchy hook, elevated energy, memorable melody, full arrangement",
+  extension: "sustained mood, gentle continuation, evolving textures",
 };
+
+// ===== VARIATION POOLS for prompt uniqueness =====
+const TEXTURE_VARIATIONS = [
+  "metallic textures", "analog warmth", "granular synthesis", "tape saturation",
+  "bit-crushed elements", "reverb-drenched pads", "filtered white noise",
+  "detuned oscillators", "FM synthesis bells", "ring-modulated tones",
+  "convolution reverb spaces", "spectral processing", "waveshaping distortion",
+  "comb-filtered layers", "phase-shifted textures", "harmonic overtones",
+];
+
+const RHYTHM_VARIATIONS = [
+  "syncopated hi-hats", "polyrhythmic percussion", "shuffled groove",
+  "off-beat accents", "triplet patterns", "straight 4/4 drive",
+  "breakbeat influenced", "half-time feel", "double-time energy",
+  "ghost note patterns", "swung rhythms", "militaristic precision",
+];
+
+function pickRandom<T>(arr: T[], count: number = 1): T[] {
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
+// ===== BUILD RICH SEGMENT PROMPT from production brief =====
+function buildSegmentPrompt(
+  brief: ProductionBrief,
+  seg: SegmentPlan,
+  segIdx: number,
+  totalSegments: number,
+  userPrompt: string,
+  artistInspiration: string,
+): string {
+  const sectionMod = SECTION_MODIFIERS[seg.name.replace(/_\d+$/, "")] || seg.description;
+  const textureVar = pickRandom(TEXTURE_VARIATIONS, 1)[0];
+  const rhythmVar = pickRandom(RHYTHM_VARIATIONS, 1)[0];
+  // Pick 1-2 keywords from brief's texture pool
+  const briefTextures = brief.textureKeywords?.length
+    ? pickRandom(brief.textureKeywords, Math.min(2, brief.textureKeywords.length)).join(", ")
+    : "";
+
+  const parts = [
+    `${brief.genre} ${brief.subgenre} ${seg.name} section`,
+    `${brief.tempo}`,
+    `${brief.mood} mood, ${brief.atmosphere}`,
+    `${sectionMod}`,
+    `Instrumentation: ${brief.instrumentation}`,
+    `Rhythm: ${brief.rhythmicStyle}, ${rhythmVar}`,
+    `Texture: ${textureVar}${briefTextures ? `, ${briefTextures}` : ""}`,
+    `Environment: ${brief.environment}`,
+    artistInspiration ? `Influenced by: ${artistInspiration}` : "",
+    segIdx === 0 ? "Begin the track with a clear, intentional opening."
+      : segIdx === totalSegments - 1 ? "Bring the track to a natural, resolved conclusion."
+      : "Continue seamlessly from the previous section with natural musical flow.",
+    userPrompt,  // Include original prompt for flavor
+  ];
+
+  return parts.filter(Boolean).join(". ") + ".";
+}
 
 // ===== MAIN PIPELINE =====
 
