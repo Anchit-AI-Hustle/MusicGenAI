@@ -223,9 +223,10 @@ async function transcodeToUniversalMp4Blob(
 
     const outputData = await ffmpeg.readFile(outputName);
     const bytes = outputData instanceof Uint8Array ? outputData : new Uint8Array(outputData);
+    const outputBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     onProgress?.({ stage: 'transcoding_video', progress: 1 });
 
-    return new Blob([bytes], { type: 'video/mp4' });
+    return new Blob([outputBuffer], { type: 'video/mp4' });
   } finally {
     if (typeof ffmpeg.off === 'function') {
       ffmpeg.off('progress', progressHandler);
