@@ -382,7 +382,8 @@ Define musical key, scale, instruments, vocal style, chord progression, bassline
     // ================================================================
     // STAGE 4 — SONG STRUCTURE PLANNING
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "structure-planning", 0.10);
+    etaRemaining -= 10;
+    await updateProgress(supabase, trackId, creationId, "Planning song structure", 0.10, etaRemaining);
 
     const structureResult = await callAI(
       LOVABLE_API_KEY,
