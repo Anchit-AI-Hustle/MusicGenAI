@@ -88,18 +88,19 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     }
   };
 
-  // Instant AI Suggest — applies directly
+  const startLoading = (key: string) => setLoadingActions(prev => new Set(prev).add(key));
+  const stopLoading = (key: string) => setLoadingActions(prev => { const next = new Set(prev); next.delete(key); return next; });
+
+  // Instant AI Suggest — applies directly (parallel-safe)
   const handleAiSuggest = async (field: string) => {
     const key = `suggest-${field}`;
-    setLoadingAction(key);
+    startLoading(key);
     const suggestion = await aiSuggest(field, getFieldValue(field), getFormContext(), 'suggest');
-    setLoadingAction(null);
-    if (suggestion) {
-      applyToField(field, suggestion);
-    }
+    stopLoading(key);
+    if (suggestion) applyToField(field, suggestion);
   };
 
-  // Instant Enhance — applies directly
+  // Instant Enhance — applies directly (parallel-safe)
   const handleEnhance = async (field: string) => {
     const currentVal = getFieldValue(field);
     if (!currentVal.trim()) {
@@ -107,23 +108,19 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       return;
     }
     const key = `enhance-${field}`;
-    setLoadingAction(key);
+    startLoading(key);
     const enhanced = await aiSuggest(field, currentVal, getFormContext(), 'enhance');
-    setLoadingAction(null);
-    if (enhanced) {
-      applyToField(field, enhanced);
-    }
+    stopLoading(key);
+    if (enhanced) applyToField(field, enhanced);
   };
 
-  // New Suggestions — generates fresh and applies directly
+  // New Suggestions — generates fresh and applies directly (parallel-safe)
   const handleNewSuggestion = async (field: string) => {
     const key = `new-${field}`;
-    setLoadingAction(key);
+    startLoading(key);
     const suggestion = await aiSuggest(field, '', getFormContext(), 'suggest');
-    setLoadingAction(null);
-    if (suggestion) {
-      applyToField(field, suggestion);
-    }
+    stopLoading(key);
+    if (suggestion) applyToField(field, suggestion);
   };
 
   // Clear field
