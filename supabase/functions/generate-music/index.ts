@@ -883,7 +883,7 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
         rhythm: rhythmResult.timeSignature,
         hasVocals,
         vocalVoice: vocalPlan.historyPrompt,
-        engine: "musicgen+bark",
+        engine: "musicgen+bark (worker)",
       },
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
