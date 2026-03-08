@@ -742,14 +742,15 @@ Durations MUST sum to exactly ${durationSec}.`,
     });
 
     if (frozenInput.generateVideo) {
-      await updateProgress(supabase, trackId, creationId, "Rendering video", 0.94, 6, jobId, 8, totalSegments, totalSegments, "rendering_video");
-      // Video generation placeholder
+      await updateProgress(supabase, trackId, creationId, "Generating video visuals", 0.86, 20, jobId, 8, totalSegments, totalSegments, "generating_video");
+      // Video generation happens client-side via Canvas + MediaRecorder
+      // The edge function marks the track as audio-complete so the client can pick up video generation
     }
 
     // ================================================================
     // STEP 7 — PREPARING DOWNLOAD
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Preparing download", 0.97, 4, jobId, 8, totalSegments, totalSegments, "preparing_download");
+    await updateProgress(supabase, trackId, creationId, "Preparing download", 0.95, 4, jobId, 9, totalSegments, totalSegments, "finalizing");
 
     const finalPath = `tracks/${trackId}/final.wav`;
     const { error: uploadError } = await supabase.storage
