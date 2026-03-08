@@ -574,53 +574,61 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // Session suggestion history
   const suggestionHistoryRef = useRef<Record<string, string[]>>({});
 
+  const aiSuggestQueueRef = useRef(Promise.resolve());
+
   const aiSuggest = async (field: string, value: string, context: Record<string, any>, action: AiAction = 'suggest'): Promise<string | null> => {
-    const maxRetries = 3;
-    const history = suggestionHistoryRef.current[field] || [];
-    const randomSeed = Math.floor(Math.random() * 100000);
+    // Serialize requests to avoid flooding the API
+    const result = aiSuggestQueueRef.current.then(async () => {
+      const maxRetries = 4;
+      const history = suggestionHistoryRef.current[field] || [];
+      const randomSeed = Math.floor(Math.random() * 100000);
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-suggest`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({
-            field, value, context, action,
-            previousSuggestions: history.slice(-10),
-            randomSeed,
-          }),
-        });
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-suggest`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify({
+              field, value, context, action,
+              previousSuggestions: history.slice(-10),
+              randomSeed,
+            }),
+          });
 
-        if (response.status === 429 && attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, (attempt + 1) * 2000 + Math.random() * 1000));
-          continue;
+          if (response.status === 429 && attempt < maxRetries) {
+            const delay = Math.min(2000 * Math.pow(2, attempt) + Math.random() * 1000, 15000);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+
+          if (!response.ok) {
+            const err = await response.json();
+            toast.error(err.error || 'AI suggestion failed');
+            return null;
+          }
+
+          const data = await response.json();
+          const suggestion = data.suggestion || null;
+
+          if (suggestion) {
+            if (!suggestionHistoryRef.current[field]) suggestionHistoryRef.current[field] = [];
+            suggestionHistoryRef.current[field].push(suggestion);
+          }
+
+          return suggestion;
+        } catch (e) {
+          if (attempt === maxRetries) { toast.error('Failed to get AI suggestion'); return null; }
+          await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
         }
-
-        if (!response.ok) {
-          const err = await response.json();
-          toast.error(err.error || 'AI suggestion failed');
-          return null;
-        }
-
-        const data = await response.json();
-        const suggestion = data.suggestion || null;
-
-        if (suggestion) {
-          if (!suggestionHistoryRef.current[field]) suggestionHistoryRef.current[field] = [];
-          suggestionHistoryRef.current[field].push(suggestion);
-        }
-
-        return suggestion;
-      } catch (e) {
-        if (attempt === maxRetries) { toast.error('Failed to get AI suggestion'); return null; }
-        await new Promise(r => setTimeout(r, (attempt + 1) * 1500));
       }
-    }
-    return null;
+      return null;
+    });
+    aiSuggestQueueRef.current = result.then(() => {}, () => {});
+    return result;
   };
 
   const refreshCreations = async () => { await fetchCreations(); };
