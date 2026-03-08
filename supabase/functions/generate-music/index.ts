@@ -701,10 +701,15 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
 
         console.log(`[${trackId}] Bark vocal chunk ${i + 1}/${lyricsLines.length}: "${line.substring(0, 50)}..."`);
 
+        // Map vocal intensity (1-10) to Bark temperature params
+        // Lower intensity = lower temps (more controlled/whisper), higher = more expressive
+        const textTemp = 0.4 + (frozenInput.vocalIntensity / 10) * 0.6; // 0.46 to 1.0
+        const waveformTemp = 0.4 + (frozenInput.vocalIntensity / 10) * 0.5; // 0.44 to 0.9
+
         const barkInput: Record<string, any> = {
-          prompt: line,
-          text_temp: 0.7,
-          waveform_temp: 0.7,
+          prompt: `[${frozenInput.vocalStyle || vocalPlan.style}] ${line}`,
+          text_temp: textTemp,
+          waveform_temp: waveformTemp,
           history_prompt: vocalPlan.historyPrompt,
         };
 
