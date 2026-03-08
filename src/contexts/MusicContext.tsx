@@ -49,6 +49,11 @@ interface CreateMusicInput {
   artistInspiration?: string;
   videoStyle?: string;
   numberOfTracks?: number;
+  tempoBpm?: number;
+  vocalStructure?: string;
+  vocalStyle?: string;
+  vocalIntensity?: number;
+  vocalEffects?: string[];
 }
 
 type AiAction = 'suggest' | 'enhance';
