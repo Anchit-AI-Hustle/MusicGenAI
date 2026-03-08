@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Music, Disc, Play, Pause, Download, Calendar, Clock, Filter, Loader2, RefreshCw, X, Check, Circle, RotateCcw } from 'lucide-react';
+import { Music, Disc, Play, Pause, Download, Calendar, Clock, Filter, Loader2, RefreshCw, X, Check, Circle, RotateCcw, ListMusic } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/contexts/AuthContext';
-import { useMusic, MusicCreation } from '@/contexts/MusicContext';
+import { useMusic, MusicCreation, Track } from '@/contexts/MusicContext';
+import { usePlayer, PlayerTrack } from '@/contexts/PlayerContext';
 
 type FilterType = 'all' | 'songs' | 'albums';
 
@@ -29,6 +30,18 @@ const STATUS_LABELS: Record<string, string> = {
 const ACTIVE_STATUSES = ['analyzing', 'planning_structure', 'composing_music', 'generating_instrumental', 'generating_vocals', 'vocal_alignment', 'mixing_mastering', 'generating_video', 'encoding_video', 'finalizing'];
 
 const isActiveStatus = (status: string) => ACTIVE_STATUSES.includes(status);
+
+const toPlayerTrack = (track: Track, creation: MusicCreation): PlayerTrack => ({
+  id: track.id,
+  title: track.title,
+  artist: creation.title,
+  audioUrl: track.audioUrl || '',
+  videoUrl: track.videoUrl,
+  duration: track.duration,
+  creationId: creation.id,
+  creationType: creation.type,
+  genres: creation.genres,
+});
 
 interface DashboardPageProps {
   onAuthClick: () => void;
@@ -192,8 +205,18 @@ interface CreationCardProps {
 const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDuration, formatDate }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const { retryTrack } = useMusic();
+  const player = usePlayer();
   const Icon = creation.type === 'song' ? Music : Disc;
   const totalDuration = creation.tracks.reduce((acc, t) => acc + t.duration, 0);
+
+  const completedTracks = creation.tracks.filter(t => t.status === 'completed' && t.audioUrl);
+
+  const handlePlayAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (completedTracks.length === 0) return;
+    const playerTracks = completedTracks.map(t => toPlayerTrack(t, creation));
+    player.setQueue(playerTracks, 0);
+  };
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ delay: index * 0.05 }} className="glass-card rounded-xl overflow-hidden">
@@ -222,10 +245,17 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
               </div>
             )}
           </div>
-          <div className="text-right hidden md:block">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Calendar className="w-4 h-4" />
-              {formatDate(creation.createdAt)}
+          <div className="flex items-center gap-2">
+            {completedTracks.length > 0 && (
+              <Button variant="ghost" size="icon" onClick={handlePlayAll} className="h-10 w-10 rounded-full bg-primary/10 hover:bg-primary/20">
+                <Play className="w-5 h-5 text-primary ml-0.5" />
+              </Button>
+            )}
+            <div className="text-right hidden md:block">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Calendar className="w-4 h-4" />
+                {formatDate(creation.createdAt)}
+              </div>
             </div>
           </div>
         </div>
@@ -245,7 +275,7 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-t border-border">
             <div className="p-3 sm:p-4 space-y-2">
               {creation.tracks.map((track, i) => (
-                <TrackRow key={track.id} track={track} index={i} formatDuration={formatDuration} creationId={creation.id} onRetry={retryTrack} />
+                <TrackRow key={track.id} track={track} index={i} formatDuration={formatDuration} creation={creation} />
               ))}
             </div>
           </motion.div>
@@ -284,43 +314,26 @@ const DashboardTrackProgress: React.FC<{
 
   return (
     <div className="mt-3 space-y-2.5">
-      {/* Step indicators - full pipeline list */}
       <div className="space-y-1">
         {DASH_PIPELINE_STEPS.map((step, idx) => {
           const isComplete = idx < activeIdx;
           const isActive = idx === activeIdx;
           const isPending = idx > activeIdx;
-
           return (
-            <div key={step.key} className={`flex items-center gap-2 text-xs py-1 px-2 rounded-md transition-all ${
-              isActive ? 'bg-primary/10 border border-primary/20' : ''
-            } ${isPending ? 'opacity-30' : ''}`}>
-              {isComplete ? (
-                <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
-              ) : isActive ? (
-                <Loader2 className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" />
-              ) : (
-                <Circle className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" />
-              )}
+            <div key={step.key} className={`flex items-center gap-2 text-xs py-1 px-2 rounded-md transition-all ${isActive ? 'bg-primary/10 border border-primary/20' : ''} ${isPending ? 'opacity-30' : ''}`}>
+              {isComplete ? <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" /> : isActive ? <Loader2 className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" /> : <Circle className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" />}
               <span className="mr-0.5">{step.icon}</span>
-              <span className={`font-medium ${isActive ? 'text-primary' : isComplete ? 'text-green-400' : 'text-muted-foreground'}`}>
-                {step.label}
-              </span>
+              <span className={`font-medium ${isActive ? 'text-primary' : isComplete ? 'text-green-400' : 'text-muted-foreground'}`}>{step.label}</span>
             </div>
           );
         })}
       </div>
-
-      {/* Overall progress bar */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span className="font-medium">Step {activeIdx + 1} of {DASH_PIPELINE_STEPS.length}</span>
           <div className="flex items-center gap-3">
             {estimatedTimeLeft > 0 && (
-              <span className="flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {formatEta(estimatedTimeLeft)} remaining
-              </span>
+              <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatEta(estimatedTimeLeft)} remaining</span>
             )}
             <span className="font-mono">{Math.round(progress * 100)}%</span>
           </div>
@@ -331,40 +344,37 @@ const DashboardTrackProgress: React.FC<{
   );
 };
 
-const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number) => string; creationId: string; onRetry: (trackId: string, creationId: string) => Promise<void> }> = ({ track, index, formatDuration, creationId, onRetry }) => {
-  const [isPlaying, setIsPlaying] = useState(false);
+const TrackRow: React.FC<{ track: Track; index: number; formatDuration: (s: number) => string; creation: MusicCreation }> = ({ track, index, formatDuration, creation }) => {
   const [isRetrying, setIsRetrying] = useState(false);
-  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const { retryTrack } = useMusic();
+  const player = usePlayer();
 
-  const togglePlay = () => {
+  const isCurrentTrack = player.currentTrack?.id === track.id;
+  const isTrackPlaying = isCurrentTrack && player.isPlaying;
+
+  const handlePlay = () => {
     if (!track.audioUrl) return;
-    if (isPlaying) {
-      audioRef.current?.pause();
-      setIsPlaying(false);
+    if (isCurrentTrack) {
+      player.togglePlay();
     } else {
-      if (!audioRef.current) {
-        audioRef.current = new Audio(track.audioUrl);
-        audioRef.current.onended = () => setIsPlaying(false);
-      }
-      audioRef.current.play();
-      setIsPlaying(true);
+      player.play(toPlayerTrack(track, creation));
     }
   };
 
   const handleRetry = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsRetrying(true);
-    await onRetry(track.id, creationId);
+    await retryTrack(track.id, creation.id);
     setIsRetrying(false);
   };
 
   return (
-    <div className="p-2 sm:p-3 rounded-lg hover:bg-secondary/50 transition-smooth">
+    <div className={`p-2 sm:p-3 rounded-lg transition-smooth ${isCurrentTrack ? 'bg-primary/5 border border-primary/20' : 'hover:bg-secondary/50'}`}>
       <div className="flex items-center gap-3 sm:gap-4">
         <span className="w-6 text-center text-sm text-muted-foreground">{index + 1}</span>
         {track.status === 'completed' && track.audioUrl ? (
-          <button onClick={togglePlay} className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/30 transition-smooth flex-shrink-0">
-            {isPlaying ? <Pause className="w-4 h-4 text-primary" /> : <Play className="w-4 h-4 text-primary ml-0.5" />}
+          <button onClick={handlePlay} className={`w-8 h-8 rounded-full flex items-center justify-center transition-smooth flex-shrink-0 ${isCurrentTrack ? 'bg-primary' : 'bg-primary/20 hover:bg-primary/30'}`}>
+            {isTrackPlaying ? <Pause className={`w-4 h-4 ${isCurrentTrack ? 'text-primary-foreground' : 'text-primary'}`} /> : <Play className={`w-4 h-4 ml-0.5 ${isCurrentTrack ? 'text-primary-foreground' : 'text-primary'}`} />}
           </button>
         ) : isActiveStatus(track.status) ? (
           <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
@@ -380,7 +390,7 @@ const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-foreground truncate">{track.title}</p>
+          <p className={`font-medium truncate ${isCurrentTrack ? 'text-primary' : 'text-foreground'}`}>{track.title}</p>
           {isActiveStatus(track.status) && (
             <DashboardTrackProgress
               currentStage={track.currentStage || track.status}
@@ -408,10 +418,6 @@ const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number
           </a>
         )}
       </div>
-      {/* Full audio controls for completed tracks */}
-      {track.status === 'completed' && track.audioUrl && (
-        <audio controls className="w-full mt-2 h-8" src={track.audioUrl} />
-      )}
     </div>
   );
 };
