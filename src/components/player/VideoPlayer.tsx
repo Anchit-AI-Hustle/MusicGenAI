@@ -15,7 +15,7 @@
 import React, { useRef, useState, useEffect, useCallback, memo } from 'react';
 import {
   Play, Pause, Maximize, Minimize, RectangleHorizontal,
-  Volume2, VolumeX, Volume1, Monitor
+  Volume2, VolumeX, Volume1, Monitor, Download
 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 
