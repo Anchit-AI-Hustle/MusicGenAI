@@ -515,7 +515,8 @@ Describe kick, snare, hi-hat patterns and percussion layers. Use musical termino
     // ================================================================
     // STAGE 7 — VOCAL SYNTHESIS PLANNING
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "vocal-planning", 0.20);
+    etaRemaining -= 10;
+    await updateProgress(supabase, trackId, creationId, "Planning vocal synthesis", 0.20, etaRemaining);
 
     const hasVocals = !!(frozenInput.lyrics && frozenInput.lyrics.trim().length > 0);
     let vocalPlan: VocalPlan = {
