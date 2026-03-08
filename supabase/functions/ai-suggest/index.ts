@@ -154,6 +154,8 @@ CRITICAL RULES:
 - Analyze the user's filled fields deeply: genre influences mood, mood influences lyrics, BPM influences energy.
 - Be specific, vivid, and inspiring. Avoid generic or cliché descriptions.
 - Keep output concise (1-3 sentences max for text fields, or a short comma-separated list for selection fields).
+- For "albumName": return ONLY a short album title (2-5 words). No descriptions, no genre labels, no dashes or subtitles.
+- For "trackName": return ONLY a short track title (2-5 words). No descriptions, no genre labels, no dashes or subtitles.
 - For "genres": return ONLY a comma-separated list of genre names.
 - For "vocalLanguage": return ONLY a comma-separated list of language names.
 - For "tempoBpm": return ONLY a single integer number between 60-200.
