@@ -765,7 +765,7 @@ Durations MUST sum to exactly ${durationSec}.`,
       songPlan = { segments: planResult.segments };
     } else {
       // Fallback plan
-      const numSegments = Math.ceil(durationSec / 30);
+      const numSegments = Math.ceil(durationSec / 8);
       const baseDuration = Math.floor(durationSec / numSegments);
       const remainder = durationSec - baseDuration * numSegments;
       const names = ["intro", "build", "peak", "breakdown", "drop", "bridge", "climax", "outro"];
