@@ -111,18 +111,20 @@ async function replicateCreatePrediction(
   let predictionId = "";
 
   for (let attempt = 1; attempt <= maxCreateAttempts; attempt++) {
-    const createRes = await fetch("https://api.replicate.com/v1/models/meta/musicgen/predictions", {
+    const createRes = await fetch("https://api.replicate.com/v1/predictions", {
       method: "POST",
       headers: {
         Authorization: `Token ${apiToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        version: "meta/musicgen",
         input: {
           prompt,
           duration: Math.min(duration, 30),
+          model_version: "stereo-melody-large",
           output_format: "wav",
-          normalization_strategy: "peak",
+          normalization_strategy: "loudness",
           seed: actualSeed,
           temperature: 1.0 + Math.random() * 0.1,
         },
