@@ -1,5 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { PortalDropdown } from '@/components/ui/portal-dropdown';
 import { 
   Music, Disc, Wand2, Clock, Languages, Mic2, Users, 
   Video, Palette, Sparkles, Loader2, Play, Pause, Download, ChevronDown, X,
