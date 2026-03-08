@@ -201,6 +201,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             totalSegments: track.total_segments ?? 1,
             completedSegments: track.completed_segments ?? 0,
             errorMessage: track.error_message || undefined,
+            currentStage: track.current_stage || undefined,
+            estimatedTimeLeft: track.estimated_time_left ?? 0,
           })),
       }));
 
