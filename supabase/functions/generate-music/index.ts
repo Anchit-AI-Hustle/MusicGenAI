@@ -322,7 +322,8 @@ Extract emotional polarity, energy intensity, darkness/brightness, aggression le
     // ================================================================
     // STAGE 3 — MUSICAL INTENT OBJECT
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "music-intent", 0.06);
+    etaRemaining -= 10;
+    await updateProgress(supabase, trackId, creationId, "Building music intent", 0.06, etaRemaining);
 
     const intentResult = await callAI(
       LOVABLE_API_KEY,
