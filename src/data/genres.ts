@@ -17,9 +17,11 @@ export const GENRES = [
   "UK Bass", "Grime",
   "Footwork", "Juke",
 
-  // Hip Hop & R&B
-  "Hip Hop", "Boom Bap", "Trap", "Drill", "UK Drill",
+  // Hip Hop, Rap & R&B
+  "Hip Hop", "Rap", "Boom Bap", "Trap", "Drill", "UK Drill",
   "Lo-fi Hip Hop", "Cloud Rap", "Phonk", "Memphis Rap",
+  "Gangsta Rap", "Conscious Rap", "Mumble Rap", "Emo Rap", "Jazz Rap",
+  "Crunk", "Snap", "Chopped & Screwed", "Dirty South",
   "R&B", "Neo-Soul", "Alternative R&B", "Contemporary R&B",
 
   // Rock & Metal
