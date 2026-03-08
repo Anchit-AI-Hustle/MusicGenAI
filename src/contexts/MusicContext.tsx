@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 import { generateTrack, MusicIntent } from '@/lib/music-engine';
+import type { TrackConfig } from '@/components/AlbumTrackForm';
 
 export interface Track {
   id: string;
@@ -40,7 +41,7 @@ export interface MusicCreation {
   progress?: number;
 }
 
-interface CreateMusicInput {
+export interface CreateMusicInput {
   type: 'song' | 'album';
   title: string;
   musicPrompt: string;
@@ -60,6 +61,8 @@ interface CreateMusicInput {
   mood?: string;
   musicalKey?: string;
   songStructure?: string;
+  // Per-track configs for album mode
+  albumTracks?: TrackConfig[];
 }
 
 type AiAction = 'suggest' | 'enhance';
@@ -77,12 +80,6 @@ interface MusicContextType {
 }
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
-
-// Pipeline status labels
-const STATUS_FLOW = [
-  'pending', 'analyzing', 'planning_structure', 'generating_midi',
-  'rendering_audio', 'mixing_mastering', 'finalizing', 'completed', 'failed',
-];
 
 export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
@@ -159,7 +156,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   }, [user?.id]);
 
-  // Setup realtime subscriptions for external updates
+  // Realtime subscriptions
   useEffect(() => {
     if (!isAuthenticated || !user?.id) return;
 
@@ -193,6 +190,17 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           const derivedProgress = tracks.reduce((a, t) => a + (t.progress ?? 0), 0) / (tracks.length || 1);
           return { ...c, tracks, status: derivedStatus, progress: derivedProgress };
         }));
+
+        setCurrentCreation(prev => {
+          if (!prev) return prev;
+          const tracks = prev.tracks.map(mapTrack);
+          const statuses = tracks.map(t => t.status);
+          const derivedStatus = statuses.some(s => s === 'failed') ? 'failed'
+            : statuses.every(s => s === 'completed') ? 'completed'
+            : statuses.find(s => !['pending', 'completed'].includes(s)) || 'pending';
+          const derivedProgress = tracks.reduce((a, t) => a + (t.progress ?? 0), 0) / (tracks.length || 1);
+          return { ...prev, tracks, status: derivedStatus, progress: derivedProgress };
+        });
       })
       .subscribe();
 
@@ -208,8 +216,26 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // Helper to update track state locally
   const updateTrackLocal = (creationId: string, trackId: string, updates: Partial<Track>) => {
     const mapTrack = (t: Track): Track => t.id === trackId ? { ...t, ...updates } : t;
-    setCreations(prev => prev.map(c => c.id === creationId ? { ...c, tracks: c.tracks.map(mapTrack), progress: updates.progress ?? c.progress, status: updates.status ?? c.status } : c));
-    setCurrentCreation(prev => prev?.id === creationId ? { ...prev, tracks: prev.tracks.map(mapTrack), progress: updates.progress ?? prev.progress, status: updates.status ?? prev.status } : prev);
+    setCreations(prev => prev.map(c => {
+      if (c.id !== creationId) return c;
+      const tracks = c.tracks.map(mapTrack);
+      const statuses = tracks.map(t => t.status);
+      const derivedStatus = statuses.some(s => s === 'failed') ? 'failed'
+        : statuses.every(s => s === 'completed') ? 'completed'
+        : statuses.find(s => !['pending', 'completed'].includes(s)) || 'pending';
+      const derivedProgress = tracks.reduce((a, t) => a + (t.progress ?? 0), 0) / (tracks.length || 1);
+      return { ...c, tracks, status: derivedStatus, progress: derivedProgress };
+    }));
+    setCurrentCreation(prev => {
+      if (prev?.id !== creationId) return prev;
+      const tracks = prev.tracks.map(mapTrack);
+      const statuses = tracks.map(t => t.status);
+      const derivedStatus = statuses.some(s => s === 'failed') ? 'failed'
+        : statuses.every(s => s === 'completed') ? 'completed'
+        : statuses.find(s => !['pending', 'completed'].includes(s)) || 'pending';
+      const derivedProgress = tracks.reduce((a, t) => a + (t.progress ?? 0), 0) / (tracks.length || 1);
+      return { ...prev, tracks, status: derivedStatus, progress: derivedProgress };
+    });
   };
 
   // Helper to update track in DB
@@ -217,17 +243,37 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     await supabase.from('tracks').update({
       current_stage: stage, progress, status,
     }).eq('id', trackId);
-    await supabase.from('music_creations').update({
-      progress, status,
-    }).eq('id', creationId);
+    // Don't update creation status directly - derive from tracks
   };
 
-  // ===== BROWSER-BASED MUSIC GENERATION =====
+  // Build a CreateMusicInput from a TrackConfig
+  const trackConfigToInput = (tc: TrackConfig): CreateMusicInput => ({
+    type: 'song',
+    title: tc.trackName,
+    musicPrompt: tc.musicPrompt,
+    genres: tc.genres,
+    durationSeconds: tc.durationSeconds,
+    generateVideo: tc.generateVideo,
+    vocalLanguages: tc.vocalLanguages,
+    lyrics: tc.lyrics || undefined,
+    artistInspiration: tc.artistInspiration || undefined,
+    videoStyle: tc.generateVideo ? tc.videoStyle : undefined,
+    tempoBpm: tc.tempoBpm,
+    mood: tc.mood || undefined,
+    musicalKey: tc.musicalKey,
+    vocalStructure: tc.vocalStructure,
+    vocalStyle: tc.vocalStyle || undefined,
+    vocalIntensity: tc.vocalIntensity,
+    vocalEffects: tc.vocalEffects,
+    songStructure: tc.songStructure || undefined,
+  });
+
+  // BROWSER-BASED MUSIC GENERATION
   const generateTrackInBrowser = async (
     trackId: string, creationId: string, input: CreateMusicInput, trackTitle: string
   ): Promise<void> => {
     try {
-      // Step 1: Analyze with AI (edge function)
+      // Step 1: Analyze with AI
       updateTrackLocal(creationId, trackId, { status: 'analyzing', currentStage: 'Analyzing your musical vision', progress: 0.05 });
       await updateTrackDB(trackId, creationId, 'Analyzing your musical vision', 0.05, 'analyzing');
 
@@ -262,13 +308,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       const { musicIntent } = await analyzeResponse.json() as { musicIntent: MusicIntent };
 
-      // Step 2: Planning structure
+      // Step 2: Planning
       updateTrackLocal(creationId, trackId, { status: 'planning_structure', currentStage: 'Planning song structure', progress: 0.10 });
       await updateTrackDB(trackId, creationId, 'Planning song structure', 0.10, 'planning_structure');
 
-      console.log(`[${trackId}] MusicIntent:`, musicIntent);
-
-      // Step 3-5: Generate audio in browser with Tone.js
+      // Step 3-5: Generate audio
       const onProgress = (stage: string, progress: number) => {
         const stageLabels: Record<string, string> = {
           generating_midi: 'Composing MIDI patterns',
@@ -277,16 +321,13 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           finalizing: 'Finalizing track',
         };
         const label = stageLabels[stage] || stage;
-        updateTrackLocal(creationId, trackId, {
-          status: stage, currentStage: label, progress,
-        });
-        // Don't await DB update during rapid progress - fire and forget
+        updateTrackLocal(creationId, trackId, { status: stage, currentStage: label, progress });
         updateTrackDB(trackId, creationId, label, progress, stage).catch(console.warn);
       };
 
       const wavBlob = await generateTrack(musicIntent, onProgress);
 
-      // Step 6: Upload to storage
+      // Step 6: Upload
       updateTrackLocal(creationId, trackId, { status: 'finalizing', currentStage: 'Uploading final track', progress: 0.94 });
       await updateTrackDB(trackId, creationId, 'Uploading final track', 0.94, 'finalizing');
 
@@ -307,10 +348,6 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         current_stage: 'Completed', estimated_time_left: 0,
       }).eq('id', trackId);
 
-      await supabase.from('music_creations').update({
-        status: 'completed', progress: 1,
-      }).eq('id', creationId);
-
       updateTrackLocal(creationId, trackId, {
         status: 'completed', currentStage: 'Completed', progress: 1, audioUrl,
       });
@@ -324,7 +361,6 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         status: 'failed', current_stage: 'Failed', error_message: errorMsg,
         estimated_time_left: 0,
       }).eq('id', trackId);
-      await supabase.from('music_creations').update({ status: 'failed' }).eq('id', creationId);
 
       updateTrackLocal(creationId, trackId, {
         status: 'failed', currentStage: 'Failed', errorMessage: errorMsg, progress: 0,
@@ -346,7 +382,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           user_id: user.id,
           type: input.type,
           title: input.title || (input.type === 'song' ? 'Untitled Track' : 'Untitled Album'),
-          music_prompt: input.musicPrompt,
+          music_prompt: input.musicPrompt || (input.type === 'album' ? 'Album' : ''),
           genres: input.genres,
           duration_seconds: input.durationSeconds,
           generate_video: input.generateVideo,
@@ -361,15 +397,20 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       if (creationError) { toast.error('Failed to create music.'); return null; }
 
-      // Create track records
-      const numberOfTracks = input.type === 'song' ? 1 : (input.numberOfTracks || 5);
-      const tracksToCreate = Array.from({ length: numberOfTracks }, (_, i) => ({
-        creation_id: creationData.id,
-        title: input.type === 'song' ? (input.title || 'Untitled Track') : `Track ${i + 1}`,
-        track_number: i + 1,
-        duration_seconds: input.durationSeconds,
-        status: 'pending',
-      }));
+      // Build per-track data
+      const isAlbumWithTracks = input.type === 'album' && input.albumTracks && input.albumTracks.length > 0;
+      const numberOfTracks = isAlbumWithTracks ? input.albumTracks!.length : (input.type === 'song' ? 1 : (input.numberOfTracks || 5));
+
+      const tracksToCreate = Array.from({ length: numberOfTracks }, (_, i) => {
+        const tc = isAlbumWithTracks ? input.albumTracks![i] : null;
+        return {
+          creation_id: creationData.id,
+          title: tc ? tc.trackName : (input.type === 'song' ? (input.title || 'Untitled Track') : `Track ${i + 1}`),
+          track_number: i + 1,
+          duration_seconds: tc ? tc.durationSeconds : input.durationSeconds,
+          status: 'pending',
+        };
+      });
 
       const { data: tracksData, error: tracksError } = await supabase
         .from('tracks')
@@ -409,13 +450,25 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       setCreations(prev => [newCreation, ...prev]);
       setCurrentCreation(newCreation);
-      toast.success('Music creation started! Generating your track...');
+      toast.success(`${input.type === 'album' ? 'Album' : 'Music'} creation started!`);
 
-      // Start browser-based generation for each track sequentially
+      // Start sequential generation
       (async () => {
-        for (const track of newCreation.tracks) {
-          await generateTrackInBrowser(track.id, newCreation.id, input, track.title);
+        const sortedTracks = [...newCreation.tracks].sort((a, b) => a.trackNumber - b.trackNumber);
+        for (let i = 0; i < sortedTracks.length; i++) {
+          const track = sortedTracks[i];
+          // Build per-track input
+          let trackInput: CreateMusicInput;
+          if (isAlbumWithTracks) {
+            trackInput = trackConfigToInput(input.albumTracks![i]);
+          } else {
+            trackInput = input;
+          }
+          await generateTrackInBrowser(track.id, newCreation.id, trackInput, track.title);
         }
+        // Update creation status when all done
+        const finalCreation = await supabase.from('music_creations').select('*').eq('id', newCreation.id).single();
+        // Derive from tracks
       })();
 
       return newCreation;
@@ -428,7 +481,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  // Session suggestion history to prevent repeats
+  // Session suggestion history
   const suggestionHistoryRef = useRef<Record<string, string[]>>({});
 
   const aiSuggest = async (field: string, value: string, context: Record<string, any>, action: AiAction = 'suggest'): Promise<string | null> => {
@@ -466,7 +519,6 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const data = await response.json();
         const suggestion = data.suggestion || null;
 
-        // Store in history to prevent future repeats
         if (suggestion) {
           if (!suggestionHistoryRef.current[field]) suggestionHistoryRef.current[field] = [];
           suggestionHistoryRef.current[field].push(suggestion);
@@ -487,20 +539,17 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const creation = creations.find(c => c.id === creationId);
     if (!creation) { toast.error('Creation not found'); return; }
 
-    // Reset track status
     await supabase.from('tracks').update({
       status: 'pending', progress: 0, error_message: null,
       completed_segments: 0, current_stage: 'pending', estimated_time_left: 0,
     }).eq('id', trackId);
-    await supabase.from('music_creations').update({ status: 'pending', progress: 0 }).eq('id', creationId);
 
     const updateTrack = (t: Track): Track =>
       t.id === trackId ? { ...t, status: 'pending', progress: 0, errorMessage: undefined, completedSegments: 0, currentStage: 'pending', estimatedTimeLeft: 0 } : t;
-    setCreations(prev => prev.map(c => c.id === creationId ? { ...c, status: 'pending', progress: 0, tracks: c.tracks.map(updateTrack) } : c));
+    setCreations(prev => prev.map(c => c.id === creationId ? { ...c, tracks: c.tracks.map(updateTrack) } : c));
 
     toast.success('Retrying track generation...');
 
-    // Rebuild input from creation data
     const input: CreateMusicInput = {
       type: creation.type,
       title: creation.title,
