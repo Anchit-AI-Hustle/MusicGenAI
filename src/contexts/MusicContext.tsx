@@ -324,33 +324,105 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       await updateTrackDB(trackId, creationId, 'Planning song structure', 0.10, 'planning_structure');
       trackLastUpdateRef.current[trackId] = Date.now();
 
-      // Step 3-5: Generate audio (segmented rendering)
+      // Step 3-5: Generate instrumental audio (segmented rendering)
       const totalSegments = Math.ceil(input.durationSeconds / 20);
       const onProgress = (stage: string, progress: number) => {
         const stageLabels: Record<string, string> = {
-          generating_midi: 'Composing MIDI patterns',
-          rendering_audio: 'Rendering audio synthesis',
+          composing_music: 'Composing musical patterns',
+          generating_instrumental: 'Generating instrumental',
+          generating_vocals: 'Generating vocals',
+          vocal_alignment: 'Aligning vocals to music',
           mixing_mastering: 'Mixing and mastering',
           finalizing: 'Finalizing track',
         };
         let label = stageLabels[stage] || stage;
 
         // Add segment info during rendering
-        if (stage === 'rendering_audio' && totalSegments > 1) {
-          const segIdx = Math.min(totalSegments, Math.floor(((progress - 0.20) / 0.50) * totalSegments) + 1);
-          label = `Rendering audio segment ${Math.max(1, segIdx)} / ${totalSegments}`;
+        if (stage === 'generating_instrumental' && totalSegments > 1) {
+          const segIdx = Math.min(totalSegments, Math.floor(((progress - 0.20) / 0.35) * totalSegments) + 1);
+          label = `Rendering instrumental segment ${Math.max(1, segIdx)} / ${totalSegments}`;
         }
 
         updateTrackLocal(creationId, trackId, {
           status: stage, currentStage: label, progress,
-          totalSegments: stage === 'rendering_audio' ? totalSegments : undefined,
-          completedSegments: stage === 'rendering_audio' ? Math.floor(((progress - 0.20) / 0.50) * totalSegments) : undefined,
+          totalSegments: stage === 'generating_instrumental' ? totalSegments : undefined,
+          completedSegments: stage === 'generating_instrumental' ? Math.floor(((progress - 0.20) / 0.35) * totalSegments) : undefined,
         });
         updateTrackDB(trackId, creationId, label, progress, stage).catch(console.warn);
         trackLastUpdateRef.current[trackId] = Date.now();
       };
 
-      const wavBlob = await generateTrack(musicIntent, onProgress);
+      const trackResult = await generateTrack(musicIntent, onProgress);
+      trackLastUpdateRef.current[trackId] = Date.now();
+
+      // Step 5b: Vocal synthesis (if lyrics provided and not purely instrumental)
+      const isInstrumental = (input.vocalStructure || '').toLowerCase() === 'instrumental';
+      let finalBlob = trackResult.blob;
+      
+      if (!isInstrumental && (input.lyrics || input.musicPrompt)) {
+        try {
+          updateTrackLocal(creationId, trackId, { status: 'generating_vocals', currentStage: 'Generating vocals', progress: 0.66 });
+          await updateTrackDB(trackId, creationId, 'Generating vocals', 0.66, 'generating_vocals');
+
+          const vocalStyle = inferVocalStyle(input.genres, input.vocalStyle);
+          const lyricsText = input.lyrics || generateDefaultLyrics(
+            input.musicPrompt, input.genres, input.mood || '', musicIntent.structure
+          );
+
+          const vocalConfig: VocalConfig = {
+            lyrics: lyricsText,
+            tempo: musicIntent.tempo,
+            key: musicIntent.key,
+            scale: musicIntent.scale,
+            structure: musicIntent.structure,
+            durationSeconds: input.durationSeconds,
+            vocalStyle,
+            vocalIntensity: input.vocalIntensity || 5,
+            vocalEffects: input.vocalEffects || [],
+            genres: input.genres,
+            mood: input.mood || '',
+          };
+
+          const vocalBuffer = await generateVocals(vocalConfig, (p) => {
+            const vocalProgress = 0.66 + p.progress * 0.08;
+            const vocalStageLabels: Record<string, string> = {
+              parsing: 'Parsing lyrics',
+              aligning: 'Aligning vocals to structure',
+              generating: 'Synthesizing vocal audio',
+              mixing: 'Mixing vocals',
+            };
+            updateTrackLocal(creationId, trackId, {
+              status: 'generating_vocals',
+              currentStage: vocalStageLabels[p.stage] || 'Generating vocals',
+              progress: vocalProgress,
+            });
+            updateTrackDB(trackId, creationId, vocalStageLabels[p.stage] || 'Generating vocals', vocalProgress, 'generating_vocals').catch(console.warn);
+            trackLastUpdateRef.current[trackId] = Date.now();
+          }, createRng(trackResult.rngState));
+
+          if (vocalBuffer) {
+            updateTrackLocal(creationId, trackId, { status: 'vocal_alignment', currentStage: 'Mixing vocals into track', progress: 0.74 });
+            await updateTrackDB(trackId, creationId, 'Mixing vocals into track', 0.74, 'vocal_alignment');
+
+            // Mix vocals into instrumental
+            const mixedBuffer = mixVocalsIntoInstrumental(trackResult.instrumentalBuffer, vocalBuffer, 0.7);
+            
+            // Master the mixed version
+            updateTrackLocal(creationId, trackId, { status: 'mixing_mastering', currentStage: 'Mastering final mix with vocals', progress: 0.76 });
+            await updateTrackDB(trackId, creationId, 'Mastering final mix with vocals', 0.76, 'mixing_mastering');
+            
+            const mixedMaster = masterAudio(mixedBuffer, 2);
+            finalBlob = mixedMaster.blob;
+            
+            console.log(`[Vocals] Mixed & mastered — Peak: ${mixedMaster.stats.peakDb.toFixed(1)} dB, LUFS: ${mixedMaster.stats.lufs.toFixed(1)}`);
+          }
+        } catch (vocalError) {
+          console.error(`[${trackId}] Vocal generation failed:`, vocalError);
+          toast.error(`Vocal synthesis failed — continuing with instrumental version.`);
+          // Continue with instrumental blob
+        }
+      }
+
       trackLastUpdateRef.current[trackId] = Date.now();
 
       // Step 6: Upload audio
@@ -360,12 +432,20 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const filePath = `tracks/${trackId}/final.wav`;
       const { error: uploadError } = await supabase.storage
         .from('music-files')
-        .upload(filePath, wavBlob, { contentType: 'audio/wav', upsert: true });
+        .upload(filePath, finalBlob, { contentType: 'audio/wav', upsert: true });
 
       if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
 
       const { data: urlData } = supabase.storage.from('music-files').getPublicUrl(filePath);
       const audioUrl = urlData.publicUrl;
+
+      // Also upload instrumental version separately if vocals were added
+      if (!isInstrumental && finalBlob !== trackResult.blob) {
+        const instPath = `tracks/${trackId}/instrumental.wav`;
+        await supabase.storage.from('music-files')
+          .upload(instPath, trackResult.blob, { contentType: 'audio/wav', upsert: true })
+          .catch(e => console.warn('Instrumental upload failed:', e));
+      }
 
       // Update track with audio URL
       await supabase.from('tracks').update({

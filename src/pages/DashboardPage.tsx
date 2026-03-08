@@ -258,8 +258,10 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
 const DASH_PIPELINE_STEPS = [
   { key: 'analyzing', label: 'Analyzing musical vision', icon: '🔍', match: /analyz/i },
   { key: 'planning', label: 'Planning song structure', icon: '🎼', match: /plan/i },
-  { key: 'midi', label: 'Composing MIDI patterns', icon: '🎹', match: /midi|compos/i },
-  { key: 'rendering', label: 'Rendering audio synthesis', icon: '🎵', match: /render.*audio|generat.*segment/i },
+  { key: 'composing', label: 'Composing musical patterns', icon: '🎹', match: /compos/i },
+  { key: 'instrumental', label: 'Generating instrumental', icon: '🎵', match: /instrumental|render.*audio|generat.*segment/i },
+  { key: 'vocals', label: 'Generating vocals', icon: '🎤', match: /vocal|lyric|singing|synthe/i },
+  { key: 'vocal_align', label: 'Aligning & mixing vocals', icon: '🎙️', match: /align.*vocal|mix.*vocal/i },
   { key: 'mixing', label: 'Mixing & mastering', icon: '🎚️', match: /mix|master/i },
   { key: 'video_gen', label: 'Generating video visuals', icon: '🎬', match: /generat.*video/i },
   { key: 'video_enc', label: 'Encoding video', icon: '📹', match: /encod.*video/i },
