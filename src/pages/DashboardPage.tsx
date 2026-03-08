@@ -47,7 +47,7 @@ const toPlayerTrack = (track: Track, creation: MusicCreation): PlayerTrack => ({
 
 interface DashboardPageProps {
   onAuthClick: () => void;
-  onNavigate: (page: string) => void;
+  onNavigate: (page: string, params?: Record<string, string>) => void;
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onAuthClick, onNavigate }) => {
