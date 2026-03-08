@@ -839,7 +839,7 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
     // ================================================================
     // STAGE 13 — FINAL OUTPUT
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "encoding", 0.95);
+    await updateProgress(supabase, trackId, creationId, "Encoding final track", 0.95, 3);
 
     const finalPath = `tracks/${trackId}/final.wav`;
     const { error: uploadError } = await supabase.storage
