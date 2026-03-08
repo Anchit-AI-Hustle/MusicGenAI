@@ -107,6 +107,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     'Intro → Build → Climax → Resolution → Outro',
   ];
 
+  const genreInputRef = useRef<HTMLDivElement>(null);
+  const vocalStructureRef = useRef<HTMLDivElement>(null);
+  const vocalStyleRef = useRef<HTMLDivElement>(null);
+  const vocalEffectsRef = useRef<HTMLDivElement>(null);
+  const languageRef = useRef<HTMLDivElement>(null);
+
   const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
 
   // Sync album track count
