@@ -278,7 +278,13 @@ serve(async (req) => {
     // ================================================================
     // STAGE 2 — SEMANTIC SENTIMENT ANALYSIS
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "sentiment-analysis", 0.02);
+    // Estimate total time: ~10s per AI call (7 calls) + ~60s per segment + ~30s vocals + ~15s post
+    const totalSegments_est = Math.ceil(durationSec / 30);
+    const hasVocals_est = !!(frozenInput.lyrics && frozenInput.lyrics.trim().length > 0);
+    const totalEstSec = 70 + (totalSegments_est * 60) + (hasVocals_est ? 40 : 0) + 15;
+    let etaRemaining = totalEstSec;
+
+    await updateProgress(supabase, trackId, creationId, "Analyzing sentiment", 0.02, etaRemaining);
 
     const sentiment: SentimentAnalysis = await callAI(
       LOVABLE_API_KEY,
