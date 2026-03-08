@@ -733,7 +733,7 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
     let vocalBuffer: ArrayBuffer | null = null;
 
     if (hasVocals) {
-      await updateProgress(supabase, trackId, creationId, "vocal-generation", 0.70);
+      await updateProgress(supabase, trackId, creationId, "Generating vocals", 0.70, 55);
       console.log(`[${trackId}] Generating vocals via worker...`);
 
       // Split lyrics into chunks for Bark (it handles ~15s per generation)
