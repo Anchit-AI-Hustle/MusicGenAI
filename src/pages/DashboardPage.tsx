@@ -284,7 +284,20 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
               <span className="hidden sm:inline">{formatDuration(totalDuration)}</span>
             </div>
             {isActiveStatus(creation.status) && (
-              <div className="mt-2">
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="font-mono">{Math.round((creation.progress || 0) * 100)}%</span>
+                  {(() => {
+                    const totalEta = creation.tracks.reduce((sum, t) => sum + (t.estimatedTimeLeft || 0), 0);
+                    if (totalEta <= 0) return null;
+                    const etaStr = totalEta >= 3600
+                      ? `~${Math.floor(totalEta / 3600)}h ${Math.floor((totalEta % 3600) / 60)}m`
+                      : totalEta >= 60
+                        ? `~${Math.floor(totalEta / 60)}m ${totalEta % 60}s`
+                        : `~${totalEta}s`;
+                    return <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{etaStr} left</span>;
+                  })()}
+                </div>
                 <Progress value={(creation.progress || 0) * 100} className="h-1.5" />
               </div>
             )}
