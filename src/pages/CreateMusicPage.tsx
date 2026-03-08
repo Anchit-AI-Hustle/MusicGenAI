@@ -861,9 +861,9 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                           </p>
 
                           {/* 7-Step Pipeline Progress */}
-                          {track.status === 'processing' && (
+                          {ACTIVE_STATUSES.includes(track.status) && (
                             <PipelineProgress
-                              currentStage={track.currentStage || 'pending'}
+                              currentStage={track.currentStage || track.status}
                               progress={track.progress || 0}
                               estimatedTimeLeft={track.estimatedTimeLeft || 0}
                               completedSegments={track.completedSegments || 0}
