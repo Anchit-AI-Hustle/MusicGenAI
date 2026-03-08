@@ -103,11 +103,10 @@ async function replicateCreatePrediction(
   apiToken: string,
   prompt: string,
   duration: number,
-  modelVersion: string = "large",
   seed?: number,
 ): Promise<string> {
   const actualSeed = seed ?? Math.floor(Math.random() * 2147483647);
-  const maxCreateAttempts = 10; // Handle 429s gracefully
+  const maxCreateAttempts = 10;
 
   let predictionId = "";
 
@@ -119,14 +118,14 @@ async function replicateCreatePrediction(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        version: "671ac645ce5e552cc63a54a2bbff63fcf798043055f2a26a81582518d03277d4",
+        model: "meta/musicgen",
         input: {
           prompt,
           duration: Math.min(duration, 30),
-          model_version: modelVersion,
           output_format: "wav",
           normalization_strategy: "peak",
           seed: actualSeed,
+          temperature: 1.0 + Math.random() * 0.1,
         },
       }),
     });
@@ -141,7 +140,6 @@ async function replicateCreatePrediction(
     const errBody = await createRes.text();
 
     if (createRes.status === 429) {
-      // Parse retry_after from response, default to exponential backoff
       let waitSec = 10 * attempt;
       try {
         const parsed = JSON.parse(errBody);
@@ -149,6 +147,12 @@ async function replicateCreatePrediction(
       } catch { /* use default */ }
       console.warn(`[Replicate] Rate limited (attempt ${attempt}/${maxCreateAttempts}). Waiting ${waitSec}s...`);
       await new Promise(r => setTimeout(r, waitSec * 1000));
+      continue;
+    }
+
+    if (createRes.status === 422) {
+      console.warn(`[Replicate] 422 error (attempt ${attempt}/${maxCreateAttempts}): ${errBody}. Retrying...`);
+      await new Promise(r => setTimeout(r, 3000));
       continue;
     }
 
