@@ -57,7 +57,7 @@ const VOCAL_EFFECTS_OPTIONS = ['Reverb', 'Delay', 'Chorus', 'Distortion', 'Autot
 export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick }) => {
   const { isAuthenticated } = useAuth();
   const { createMusic, currentCreation, isCreating, aiSuggest } = useMusic();
-
+  const player = usePlayer();
   const [mode, setMode] = useState<'song' | 'album'>('song');
   
   // Album state
