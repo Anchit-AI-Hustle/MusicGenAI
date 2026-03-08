@@ -23,6 +23,7 @@ export interface PlayerTrack {
   creationId?: string;
   creationType?: 'song' | 'album';
   genres?: string[];
+  lyrics?: string;
 }
 
 // Stable refs for high-frequency values (currentTime) to avoid re-render storms
