@@ -61,7 +61,7 @@ interface VocalPlan {
   style: string;
   phonemeMapping: string;
   melodicContour: string;
-  voiceId: string;
+  historyPrompt: string;
 }
 
 // ===== HELPER: Call Lovable AI with tool calling =====
@@ -125,6 +125,85 @@ async function updateProgress(supabase: any, trackId: string, creationId: string
   console.log(`[${trackId}] Stage: ${stage} | Progress: ${Math.round(progress * 100)}%`);
 }
 
+// ===== HELPER: Run Replicate prediction (poll-based) =====
+async function runReplicate(
+  apiToken: string,
+  modelVersion: string,
+  input: Record<string, any>,
+  timeoutMs: number = 300000
+): Promise<string | null> {
+  // Create prediction
+  const createRes = await fetch("https://api.replicate.com/v1/predictions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ version: modelVersion, input }),
+  });
+
+  if (!createRes.ok) {
+    const errText = await createRes.text();
+    console.error("Replicate create error:", createRes.status, errText);
+    return null;
+  }
+
+  const prediction = await createRes.json();
+  const predictionId = prediction.id;
+  const getUrl = prediction.urls?.get || `https://api.replicate.com/v1/predictions/${predictionId}`;
+
+  console.log(`Replicate prediction created: ${predictionId}`);
+
+  // Poll for completion
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    await new Promise(r => setTimeout(r, 3000));
+
+    const pollRes = await fetch(getUrl, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
+    const pollData = await pollRes.json();
+
+    if (pollData.status === "succeeded") {
+      // MusicGen returns a string URL, Bark returns { audio_out: url }
+      if (typeof pollData.output === "string") return pollData.output;
+      if (pollData.output?.audio_out) return pollData.output.audio_out;
+      // If output is an array, take first element
+      if (Array.isArray(pollData.output) && pollData.output.length > 0) return pollData.output[0];
+      console.error("Unexpected output shape:", JSON.stringify(pollData.output));
+      return null;
+    }
+
+    if (pollData.status === "failed" || pollData.status === "canceled") {
+      console.error(`Replicate prediction ${pollData.status}:`, pollData.error);
+      return null;
+    }
+  }
+
+  console.error("Replicate prediction timed out");
+  return null;
+}
+
+// ===== HELPER: Download audio from URL as ArrayBuffer =====
+async function downloadAudio(url: string): Promise<ArrayBuffer | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.error("Download failed:", res.status);
+      return null;
+    }
+    return await res.arrayBuffer();
+  } catch (e) {
+    console.error("Download error:", e);
+    return null;
+  }
+}
+
+// MusicGen model version (meta/musicgen latest stable)
+const MUSICGEN_VERSION = "671ac645ce5e552cc63a54a2bbff63fcf798043055d2dac5fc9e36a837eedcfb";
+// Bark model version (suno-ai/bark latest stable)
+const BARK_VERSION = "b76242b40d67c76ab6742e987628a2a9ac019e11d56ab96c4e91ce03b79b2787";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -132,11 +211,11 @@ serve(async (req) => {
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
+  const REPLICATE_API_TOKEN = Deno.env.get("REPLICATE_API_TOKEN");
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-  if (!ELEVENLABS_API_KEY) {
-    return new Response(JSON.stringify({ error: "ELEVENLABS_API_KEY not configured" }), {
+  if (!REPLICATE_API_TOKEN) {
+    return new Response(JSON.stringify({ error: "REPLICATE_API_TOKEN not configured" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -299,7 +378,6 @@ Make sure sections perfectly tile from 0 to ${durationSec} seconds.`,
     if (structureResult?.sections?.length > 0) {
       sections = structureResult.sections;
     } else {
-      // Fallback structure
       const introDur = Math.min(30, Math.floor(durationSec * 0.1));
       const outroDur = Math.min(30, Math.floor(durationSec * 0.1));
       const mid = durationSec - introDur - outroDur;
@@ -396,7 +474,7 @@ Describe kick, snare, hi-hat patterns and percussion layers. Use musical termino
       style: musicIntent.vocalStyle,
       phonemeMapping: "",
       melodicContour: "",
-      voiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah - default female voice
+      historyPrompt: "v2/en_speaker_6", // Bark default voice
     };
 
     if (hasVocals) {
@@ -411,49 +489,39 @@ Vocal style requested: ${musicIntent.vocalStyle}
 Languages: ${frozenInput.vocalLanguages.join(", ") || "English"}
 
 Map the lyrics to phoneme timing, describe the melodic contour, and recommend a vocal performance approach.
-Choose one of these voice styles: female-warm, female-dark, male-deep, male-bright, robotic, ethereal`,
+Choose one of these Bark voice presets: v2/en_speaker_0, v2/en_speaker_1, v2/en_speaker_2, v2/en_speaker_3, v2/en_speaker_4, v2/en_speaker_5, v2/en_speaker_6, v2/en_speaker_7, v2/en_speaker_8, v2/en_speaker_9
+For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speaker_0, v2/ko_speaker_0, v2/zh_speaker_0`,
         "plan_vocals",
         "Plan vocal synthesis parameters",
         {
           phonemeMapping: { type: "string", description: "Lyrics broken into syllable timing groups with beat alignment" },
           melodicContour: { type: "string", description: "Description of the melody the vocals follow" },
           performanceStyle: { type: "string", description: "How the vocals should be delivered" },
-          voiceType: { type: "string", description: "One of: female-warm, female-dark, male-deep, male-bright, robotic, ethereal" },
+          historyPrompt: { type: "string", description: "Bark voice preset identifier e.g. v2/en_speaker_6" },
         },
-        ["phonemeMapping", "melodicContour", "performanceStyle", "voiceType"]
+        ["phonemeMapping", "melodicContour", "performanceStyle", "historyPrompt"]
       );
 
       if (vocalResult) {
         vocalPlan.phonemeMapping = vocalResult.phonemeMapping;
         vocalPlan.melodicContour = vocalResult.melodicContour;
         vocalPlan.style = vocalResult.performanceStyle || musicIntent.vocalStyle;
-
-        // Map voice type to ElevenLabs voice ID
-        const voiceMap: Record<string, string> = {
-          "female-warm": "EXAVITQu4vr4xnSDxMaL",   // Sarah
-          "female-dark": "FGY2WhTYpPnrIDTdsKH5",    // Laura
-          "male-deep": "JBFqnCBsd6RMkjVDRZzb",      // George
-          "male-bright": "TX3LPaxmHKxFdv7VOQHJ",    // Liam
-          "robotic": "cjVigY5qzO86Huf0OWal",         // Eric
-          "ethereal": "pFZP5JQG7iQjIQuC4Bku",        // Lily
-        };
-        vocalPlan.voiceId = voiceMap[vocalResult.voiceType] || "EXAVITQu4vr4xnSDxMaL";
+        vocalPlan.historyPrompt = vocalResult.historyPrompt || "v2/en_speaker_6";
       }
     }
 
-    console.log(`[${trackId}] Vocals: hasVocals=${hasVocals}, style=${vocalPlan.style}`);
+    console.log(`[${trackId}] Vocals: hasVocals=${hasVocals}, style=${vocalPlan.style}, barkVoice=${vocalPlan.historyPrompt}`);
 
     // ================================================================
-    // STAGE 8 — INSTRUMENT SYNTHESIS (descriptive layer for generation prompt)
+    // STAGE 8 — INSTRUMENT SYNTHESIS DESCRIPTIONS
     // ================================================================
     await updateProgress(supabase, trackId, creationId, "instrument-synthesis", 0.23);
 
-    // Build comprehensive instrument descriptions for each section
     const instrumentDescriptions = sections.map(section => {
-      const activeInstruments = section.instruments.length > 0 
-        ? section.instruments 
+      const activeInstruments = section.instruments.length > 0
+        ? section.instruments
         : musicIntent.instrumentPalette.filter(() => Math.random() < section.density);
-      
+
       return {
         section: section.name,
         instruments: activeInstruments,
@@ -462,9 +530,9 @@ Choose one of these voice styles: female-warm, female-dark, male-deep, male-brig
     });
 
     // ================================================================
-    // STAGE 9 + 10 — SEGMENT GENERATION WITH CONDITIONING
+    // STAGE 9 + 10 — INSTRUMENTAL SEGMENT GENERATION (MusicGen via Replicate)
     // ================================================================
-    const SEGMENT_DURATION = 30;
+    const SEGMENT_DURATION = 30; // MusicGen max ~30s
     const totalSegments = Math.ceil(durationSec / SEGMENT_DURATION);
 
     await supabase.from("tracks").update({ total_segments: totalSegments }).eq("id", trackId);
@@ -480,41 +548,29 @@ Choose one of these voice styles: female-warm, female-dark, male-deep, male-brig
     }
 
     const segmentBuffers: ArrayBuffer[] = [];
-    // Progress: stages 1-8 used 0-0.25, segment generation uses 0.25-0.85
     const segProgressStart = 0.25;
-    const segProgressEnd = 0.85;
+    const segProgressEnd = hasVocals ? 0.65 : 0.85; // Leave room for vocal generation if needed
 
     for (let segIdx = 0; segIdx < totalSegments; segIdx++) {
       const segDuration = Math.min(SEGMENT_DURATION, durationSec - segIdx * SEGMENT_DURATION);
       const segStartSec = segIdx * SEGMENT_DURATION;
       const segMidpoint = segStartSec + segDuration / 2;
 
-      // Find which section this segment belongs to
       const currentSection = sections.find(s => segMidpoint >= s.startSec && segMidpoint < s.endSec) || sections[sections.length - 1];
       const sectionInstruments = instrumentDescriptions.find(d => d.section === currentSection.name);
 
-      // Build rich generation prompt incorporating all analysis stages
+      // Build rich MusicGen prompt
       const segPrompt = [
-        // Core musical identity
         `${musicIntent.genreIdentity} music in ${musicIntent.key} ${musicIntent.scale} at ${musicIntent.tempo} BPM.`,
-        // User's original vision
         frozenInput.musicPrompt,
-        // Current section context
         `Section: ${currentSection.name} — ${currentSection.description}.`,
-        // Instrument and arrangement
         `Active instruments: ${(sectionInstruments?.instruments || musicIntent.instrumentPalette).join(", ")}.`,
         `Energy level: ${Math.round(currentSection.energy * 100)}%. Density: ${Math.round(currentSection.density * 100)}%.`,
-        // Harmonic context
         `Chord progression: ${harmonyResult.chordProgression.join(" → ")}. Bassline: ${harmonyResult.basslinePattern}.`,
-        // Rhythm context
         `${rhythmResult.timeSignature} time. Kick: ${rhythmResult.kickPattern}. Hi-hats: ${rhythmResult.hihatPattern}.`,
-        // Melody
         `Melody: ${harmonyResult.melodyMotifs[0] || musicIntent.melodyCharacter}.`,
-        // Emotional context
         `Mood: ${sentiment.emotionPolarity}. Aggression: ${sentiment.aggressionLevel}/10.`,
-        // Conditioning for continuity
-        segIdx > 0 ? "Continue seamlessly from the previous section, maintaining musical continuity in rhythm, key, and energy." : "Begin the track with a clear opening.",
-        // Artist influence
+        segIdx > 0 ? "Continue seamlessly from the previous section, maintaining musical continuity." : "Begin the track with a clear opening.",
         frozenInput.artistInspiration ? `Influenced by: ${frozenInput.artistInspiration}.` : "",
       ].filter(Boolean).join(" ");
 
@@ -524,56 +580,66 @@ Choose one of these voice styles: female-warm, female-dark, male-deep, male-brig
         segProgressStart + (segIdx / totalSegments) * (segProgressEnd - segProgressStart)
       );
 
-      // Generate with ElevenLabs (with retry)
+      // Generate with MusicGen via Replicate (with retry)
       let audioBuffer: ArrayBuffer | null = null;
       let retries = 0;
       const MAX_RETRIES = 3;
 
       while (retries < MAX_RETRIES && !audioBuffer) {
         try {
-          const musicResponse = await fetch("https://api.elevenlabs.io/v1/music", {
-            method: "POST",
-            headers: {
-              "xi-api-key": ELEVENLABS_API_KEY,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              prompt: segPrompt,
-              duration_seconds: segDuration,
-            }),
-          });
+          console.log(`[${trackId}] MusicGen segment ${segIdx + 1}/${totalSegments} (attempt ${retries + 1})`);
 
-          if (!musicResponse.ok) {
-            const errText = await musicResponse.text();
-            console.error(`ElevenLabs error (segment ${segIdx}, attempt ${retries + 1}):`, musicResponse.status, errText);
-            retries++;
-            if (retries < MAX_RETRIES) await new Promise(r => setTimeout(r, 2000 * retries));
-            continue;
+          const musicGenInput: Record<string, any> = {
+            prompt: segPrompt,
+            duration: segDuration,
+            model_version: "stereo-melody-large",
+            output_format: "wav",
+            normalization_strategy: "peak",
+          };
+
+          // Use previous segment as continuation input for conditioning
+          if (segIdx > 0 && segmentBuffers.length > 0) {
+            // Upload previous segment temporarily to get a URL for conditioning
+            const prevSegPath = `tracks/${trackId}/segment_${segIdx - 1}.wav`;
+            const { data: prevUrl } = supabase.storage.from("music-files").getPublicUrl(prevSegPath);
+            if (prevUrl?.publicUrl) {
+              musicGenInput.continuation = true;
+              musicGenInput.continuation_start = Math.max(0, SEGMENT_DURATION - 10); // Last 10s for context
+              musicGenInput.input_audio = prevUrl.publicUrl;
+            }
           }
 
-          audioBuffer = await musicResponse.arrayBuffer();
+          const outputUrl = await runReplicate(REPLICATE_API_TOKEN, MUSICGEN_VERSION, musicGenInput, 300000);
+
+          if (outputUrl) {
+            audioBuffer = await downloadAudio(outputUrl);
+          }
+
+          if (!audioBuffer) {
+            retries++;
+            if (retries < MAX_RETRIES) await new Promise(r => setTimeout(r, 3000 * retries));
+          }
         } catch (e) {
-          console.error(`Segment ${segIdx} error:`, e);
+          console.error(`MusicGen segment ${segIdx} error:`, e);
           retries++;
-          if (retries < MAX_RETRIES) await new Promise(r => setTimeout(r, 2000 * retries));
+          if (retries < MAX_RETRIES) await new Promise(r => setTimeout(r, 3000 * retries));
         }
       }
 
       if (!audioBuffer) {
-        await supabase.from("tracks").update({
-          status: "failed",
-          error_message: `Failed to generate segment ${segIdx + 1}/${totalSegments} after ${MAX_RETRIES} retries`,
-        }).eq("id", trackId);
+        const errorMsg = `Failed to generate instrumental segment ${segIdx + 1}/${totalSegments} after ${MAX_RETRIES} retries (MusicGen)`;
+        console.error(`[${trackId}] ${errorMsg}`);
+        await supabase.from("tracks").update({ status: "failed", error_message: errorMsg }).eq("id", trackId);
         await supabase.from("music_creations").update({ status: "failed" }).eq("id", creationId);
-        return new Response(JSON.stringify({ error: `Generation failed at segment ${segIdx + 1}` }), {
+        return new Response(JSON.stringify({ error: errorMsg }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       // Save segment to storage
-      const segPath = `tracks/${trackId}/segment_${segIdx}.mp3`;
+      const segPath = `tracks/${trackId}/segment_${segIdx}.wav`;
       await supabase.storage.from("music-files").upload(segPath, new Uint8Array(audioBuffer), {
-        contentType: "audio/mpeg", upsert: true,
+        contentType: "audio/wav", upsert: true,
       });
 
       await supabase.from("segments").update({
@@ -586,46 +652,124 @@ Choose one of these voice styles: female-warm, female-dark, male-deep, male-brig
         completed_segments: segIdx + 1,
         progress: segProgressStart + ((segIdx + 1) / totalSegments) * (segProgressEnd - segProgressStart),
       }).eq("id", trackId);
+
+      console.log(`[${trackId}] ✅ Segment ${segIdx + 1}/${totalSegments} complete (${audioBuffer.byteLength} bytes)`);
     }
 
     // ================================================================
-    // STAGE 11 + 12 — AUDIO TRACK LAYERING & VOCAL SYNC
-    // (Handled implicitly: ElevenLabs generates mixed audio per segment)
+    // STAGE 7b — VOCAL GENERATION (Bark via Replicate)
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "layering", 0.86);
+    let vocalBuffer: ArrayBuffer | null = null;
+
+    if (hasVocals) {
+      await updateProgress(supabase, trackId, creationId, "vocal-generation", 0.70);
+      console.log(`[${trackId}] Generating vocals with Bark...`);
+
+      // Split lyrics into chunks for Bark (it handles ~15s per generation)
+      const lyricsLines = frozenInput.lyrics.split(/[.\n]+/).filter((l: string) => l.trim().length > 0);
+      const vocalChunks: ArrayBuffer[] = [];
+
+      for (let i = 0; i < lyricsLines.length; i++) {
+        const line = lyricsLines[i].trim();
+        if (!line) continue;
+
+        console.log(`[${trackId}] Bark vocal chunk ${i + 1}/${lyricsLines.length}: "${line.substring(0, 50)}..."`);
+
+        const barkInput: Record<string, any> = {
+          prompt: line,
+          text_temp: 0.7,
+          waveform_temp: 0.7,
+          history_prompt: vocalPlan.historyPrompt,
+        };
+
+        let retries = 0;
+        let chunkUrl: string | null = null;
+
+        while (retries < 3 && !chunkUrl) {
+          chunkUrl = await runReplicate(REPLICATE_API_TOKEN, BARK_VERSION, barkInput, 180000);
+          if (!chunkUrl) {
+            retries++;
+            if (retries < 3) await new Promise(r => setTimeout(r, 2000 * retries));
+          }
+        }
+
+        if (chunkUrl) {
+          const chunkBuffer = await downloadAudio(chunkUrl);
+          if (chunkBuffer) {
+            vocalChunks.push(chunkBuffer);
+          }
+        }
+
+        await updateProgress(
+          supabase, trackId, creationId,
+          `vocal-chunk-${i + 1}/${lyricsLines.length}`,
+          0.70 + (i / lyricsLines.length) * 0.10
+        );
+      }
+
+      // Concatenate vocal chunks
+      if (vocalChunks.length > 0) {
+        let totalVocalSize = 0;
+        for (const buf of vocalChunks) totalVocalSize += buf.byteLength;
+        const vocalFull = new Uint8Array(totalVocalSize);
+        let vOffset = 0;
+        for (const buf of vocalChunks) {
+          vocalFull.set(new Uint8Array(buf), vOffset);
+          vOffset += buf.byteLength;
+        }
+        vocalBuffer = vocalFull.buffer;
+
+        // Save vocals
+        const vocalPath = `tracks/${trackId}/vocals.wav`;
+        await supabase.storage.from("music-files").upload(vocalPath, vocalFull, {
+          contentType: "audio/wav", upsert: true,
+        });
+        console.log(`[${trackId}] ✅ Vocals generated (${totalVocalSize} bytes, ${vocalChunks.length} chunks)`);
+      }
+    }
 
     // ================================================================
-    // STAGE 13 — SONG STITCHING (concatenate MP3 segments)
+    // STAGE 9 — SONG STITCHING (concatenate instrumental segments)
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "stitching", 0.88);
+    await updateProgress(supabase, trackId, creationId, "stitching", 0.82);
 
     let totalSize = 0;
     for (const buf of segmentBuffers) totalSize += buf.byteLength;
 
-    const finalBuffer = new Uint8Array(totalSize);
+    const instrumentalBuffer = new Uint8Array(totalSize);
     let offset = 0;
     for (const buf of segmentBuffers) {
-      finalBuffer.set(new Uint8Array(buf), offset);
+      instrumentalBuffer.set(new Uint8Array(buf), offset);
       offset += buf.byteLength;
     }
 
-    // ================================================================
-    // STAGE 14 + 15 — MIXING & MASTERING
-    // (Applied at generation time via prompt engineering;
-    //  MP3 concatenation preserves per-segment mastering)
-    // ================================================================
-    await updateProgress(supabase, trackId, creationId, "mastering", 0.92);
+    // Save stitched instrumental
+    const instrumentalPath = `tracks/${trackId}/instrumental.wav`;
+    await supabase.storage.from("music-files").upload(instrumentalPath, instrumentalBuffer, {
+      contentType: "audio/wav", upsert: true,
+    });
 
     // ================================================================
-    // STAGE 16 — FINAL OUTPUT
+    // STAGE 10-12 — MIXING & DURATION ENFORCEMENT
+    // The final track is the instrumental (mixing vocals requires FFmpeg
+    // which isn't available in edge functions; vocal track stored separately)
+    // ================================================================
+    await updateProgress(supabase, trackId, creationId, "mastering", 0.90);
+
+    // Use instrumental as final output
+    // (Vocal mixing would require a dedicated audio processing service)
+    const finalBuffer = instrumentalBuffer;
+
+    // ================================================================
+    // STAGE 13 — FINAL OUTPUT
     // ================================================================
     await updateProgress(supabase, trackId, creationId, "encoding", 0.95);
 
-    const finalPath = `tracks/${trackId}/final.mp3`;
+    const finalPath = `tracks/${trackId}/final.wav`;
     const { error: uploadError } = await supabase.storage
       .from("music-files")
       .upload(finalPath, finalBuffer, {
-        contentType: "audio/mpeg", upsert: true,
+        contentType: "audio/wav", upsert: true,
       });
 
     if (uploadError) {
@@ -641,25 +785,35 @@ Choose one of these voice styles: female-warm, female-dark, male-deep, male-brig
     const { data: urlData } = supabase.storage.from("music-files").getPublicUrl(finalPath);
     const audioUrl = urlData.publicUrl;
 
-    // ================================================================
-    // STAGE 17 — VIDEO GENERATION (if enabled, handled by separate function)
-    // ================================================================
+    // Also store vocal URL if vocals were generated
+    let vocalUrl: string | null = null;
+    if (vocalBuffer) {
+      const { data: vocalUrlData } = supabase.storage.from("music-files").getPublicUrl(`tracks/${trackId}/vocals.wav`);
+      vocalUrl = vocalUrlData.publicUrl;
+    }
 
-    // Mark complete
+    // ================================================================
+    // STAGE 14 — DASHBOARD STORAGE
+    // ================================================================
     await supabase.from("tracks").update({
-      status: "completed", audio_url: audioUrl, progress: 1, duration_seconds: durationSec,
+      status: "completed",
+      audio_url: audioUrl,
+      progress: 1,
+      duration_seconds: durationSec,
     }).eq("id", trackId);
 
     await supabase.from("music_creations").update({
-      status: "completed", progress: 1,
+      status: "completed",
+      progress: 1,
     }).eq("id", creationId);
 
-    console.log(`[${trackId}] ✅ Complete. Audio: ${audioUrl}`);
+    console.log(`[${trackId}] ✅ Complete. Audio: ${audioUrl}${vocalUrl ? `, Vocals: ${vocalUrl}` : ""}`);
 
     return new Response(JSON.stringify({
       success: true,
       trackId,
       audioUrl,
+      vocalUrl,
       duration: durationSec,
       segments: totalSegments,
       pipeline: {
@@ -669,6 +823,8 @@ Choose one of these voice styles: female-warm, female-dark, male-deep, male-brig
         harmony: harmonyResult.chordProgression,
         rhythm: rhythmResult.timeSignature,
         hasVocals,
+        vocalVoice: vocalPlan.historyPrompt,
+        engine: "musicgen+bark",
       },
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
