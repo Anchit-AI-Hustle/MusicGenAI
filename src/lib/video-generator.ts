@@ -356,7 +356,7 @@ export async function generateVideoFromAudio(
     stream.addTrack(track);
   }
 
-  // Pick the best supported MIME type — prefer MP4 for mobile compatibility
+  // Pick best available capture format, then normalize to universal MP4 after recording
   const mimeOptions = [
     'video/mp4;codecs=avc1,mp4a.40.2',
     'video/mp4',
@@ -371,7 +371,6 @@ export async function generateVideoFromAudio(
       break;
     }
   }
-  const isMP4 = selectedMime.startsWith('video/mp4');
 
   const mediaRecorder = new MediaRecorder(stream, {
     mimeType: selectedMime,
@@ -386,12 +385,18 @@ export async function generateVideoFromAudio(
   onProgress?.({ stage: 'encoding_video', progress: 0.25 });
 
   return new Promise<Blob>((resolve, reject) => {
-    mediaRecorder.onstop = () => {
-      audioContext.close();
-      const recordedMime = mediaRecorder.mimeType || selectedMime;
-      const recordedType = recordedMime.includes('mp4') ? 'video/mp4' : 'video/webm';
-      const blob = new Blob(chunks, { type: recordedType });
-      resolve(blob);
+    mediaRecorder.onstop = async () => {
+      try {
+        const recordedMime = mediaRecorder.mimeType || selectedMime;
+        const recordedType = recordedMime.includes('mp4') ? 'video/mp4' : 'video/webm';
+        const rawBlob = new Blob(chunks, { type: recordedType });
+        const universalMp4Blob = await ensureUniversalMp4Blob(rawBlob, onProgress);
+        resolve(universalMp4Blob);
+      } catch (error) {
+        reject(error);
+      } finally {
+        audioContext.close().catch(() => undefined);
+      }
     };
     mediaRecorder.onerror = (e) => reject(e);
 
