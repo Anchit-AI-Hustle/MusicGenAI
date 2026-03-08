@@ -436,7 +436,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   </button>
                   <AnimatePresence>
                     {showLangDropdown && (
-                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-20 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
+                       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
                         {LANGUAGES.map(l => (
                           <button key={l} onClick={() => update({ vocalLanguages: config.vocalLanguages.includes(l) ? config.vocalLanguages.filter(x => x !== l) : [...config.vocalLanguages, l] })} className={`w-full text-left px-3 py-1.5 text-sm hover:bg-secondary ${config.vocalLanguages.includes(l) ? 'bg-accent/10 text-accent' : 'text-foreground'}`}>{l}</button>
                         ))}
