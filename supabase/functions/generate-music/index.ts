@@ -769,7 +769,6 @@ Durations MUST sum to exactly ${durationSec}.`,
           segProgressStart + (completedSegments / totalSegments) * (segProgressEnd - segProgressStart),
           Math.max(0, segmentsRemaining * estSegmentTime + 10)
         );
-        );
 
         const { buffer } = await generateSegmentWithRetry(REPLICATE_API_TOKEN!, prompt, seg.duration);
 
