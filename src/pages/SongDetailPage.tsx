@@ -93,7 +93,6 @@ const SongDownloadMenu: React.FC<{ track: Track; triggerDownload: (url: string, 
     );
   }
 
-  const triggerBtnRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className="relative" ref={triggerBtnRef}>
