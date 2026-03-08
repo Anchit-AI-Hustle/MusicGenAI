@@ -22,17 +22,15 @@ const STATUS_LABELS: Record<string, string> = {
   pending: 'Waiting to start',
   analyzing: 'Analyzing inputs',
   planning_structure: 'Planning song structure',
-  generating_segments: 'Generating music',
-  downloading_segments: 'Downloading audio',
-  stitching_audio: 'Stitching track',
-  finalizing_audio: 'Finalizing audio',
-  rendering_video: 'Generating video',
-  preparing_download: 'Preparing download',
+  generating_midi: 'Composing patterns',
+  rendering_audio: 'Rendering audio',
+  mixing_mastering: 'Mixing & mastering',
+  finalizing: 'Finalizing',
   completed: 'Ready',
   failed: 'Failed',
 };
 
-const ACTIVE_STATUSES = ['analyzing', 'planning_structure', 'generating_segments', 'downloading_segments', 'stitching_audio', 'finalizing_audio', 'rendering_video', 'preparing_download'];
+const ACTIVE_STATUSES = ['analyzing', 'planning_structure', 'generating_midi', 'rendering_audio', 'mixing_mastering', 'finalizing'];
 
 interface CreateMusicPageProps {
   onAuthClick: () => void;
