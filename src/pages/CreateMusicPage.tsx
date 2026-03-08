@@ -5,6 +5,7 @@ import {
   Video, Palette, Sparkles, Loader2, Play, Pause, Download, ChevronDown, X,
   RefreshCw, Zap, Trash2, Activity, AudioWaveform, Share2, Check, Circle
 } from 'lucide-react';
+import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
