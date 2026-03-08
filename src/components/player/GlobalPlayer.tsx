@@ -361,11 +361,20 @@ export const GlobalPlayer: React.FC = () => {
               </button>
             )}
 
-            {/* Download */}
+            {/* Download Audio */}
             {currentTrack.audioUrl && (
-              <a href={currentTrack.audioUrl} download={`${currentTrack.title || 'track'}.wav`}>
+              <a href={currentTrack.audioUrl} download={`${currentTrack.title || 'track'}.mp3`} title="Download Audio (MP3)">
                 <button className="p-1.5 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
                   <Download className="w-4 h-4" />
+                </button>
+              </a>
+            )}
+
+            {/* Download Video */}
+            {currentTrack.videoUrl && (
+              <a href={currentTrack.videoUrl} download={`${currentTrack.title || 'track'}.mp4`} title="Download Video (MP4)">
+                <button className="p-1.5 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
+                  <MonitorPlay className="w-4 h-4" />
                 </button>
               </a>
             )}
