@@ -663,22 +663,17 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                     ))}
                   </div>
                 )}
-                <div className="relative">
+                <div className="relative" ref={vocalEffectsRef}>
                   <button onClick={() => setShowVocalEffectsDropdown(!showVocalEffectsDropdown)} className="w-full flex items-center justify-between px-4 py-3 bg-input border border-border rounded-lg text-left">
                     <span className="text-muted-foreground">{selectedVocalEffects.length === 0 ? 'Select effects...' : 'Add more effects'}</span>
                     <ChevronDown className="w-4 h-4 text-muted-foreground" />
                   </button>
-                  <AnimatePresence>
-                    {showVocalEffectsDropdown && (
-                       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute z-50 w-full mt-2 max-h-48 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
-                        {VOCAL_EFFECTS_OPTIONS.map(effect => (
-                          <button key={effect} onClick={() => toggleVocalEffect(effect)} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${selectedVocalEffects.includes(effect) ? 'bg-accent/10 text-accent' : 'text-foreground'}`}>{effect}</button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  <PortalDropdown open={showVocalEffectsDropdown} onClose={() => setShowVocalEffectsDropdown(false)} triggerRef={vocalEffectsRef as React.RefObject<HTMLElement>} matchTriggerWidth>
+                    {VOCAL_EFFECTS_OPTIONS.map(effect => (
+                      <button key={effect} onClick={() => toggleVocalEffect(effect)} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${selectedVocalEffects.includes(effect) ? 'bg-accent/10 text-accent' : 'text-foreground'}`}>{effect}</button>
+                    ))}
+                  </PortalDropdown>
                 </div>
-                {showVocalEffectsDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowVocalEffectsDropdown(false)} />}
               </motion.div>
 
               {/* Vocal Language */}
