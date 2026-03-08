@@ -1,12 +1,28 @@
 # Music Generation Worker
 
-Standalone Python service for AI music synthesis using MusicGen and Bark.
+Modular Python service for AI music synthesis using MusicGen and Bark.
 
 ## Endpoints
 
 - `GET /health` — Returns model load status
-- `POST /generate` — Generate instrumental audio (MusicGen)
+- `POST /generate-segment` — Generate a single instrumental segment (MusicGen)
+- `POST /generate` — Legacy: generate a single audio chunk
 - `POST /generate-vocals` — Generate vocal audio (Bark)
+- `POST /align-vocals` — Align and mix vocals with instrumental
+- `POST /stitch` — Crossfade-stitch multiple segments into one track
+- `POST /master` — Lightweight mastering (EQ, compression, limiter, stereo widening)
+
+## Architecture
+
+```
+Edge Function (orchestrator)
+  → /generate-segment (×N parallel, max 3)
+  → /generate-vocals (optional)
+  → /stitch (crossfade + trim)
+  → /align-vocals (optional)
+  → /master (EQ, compression, limiter, LUFS)
+  → Final WAV uploaded to storage
+```
 
 ## Local Development
 
