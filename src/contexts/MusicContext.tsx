@@ -364,8 +364,13 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setCurrentCreation(newCreation);
       toast.success('Music creation started! Generating your track...');
 
-      // Trigger generation for each track (fire-and-forget)
+      // Trigger generation for each track with jobId and subscribe to broadcast
       for (const track of newCreation.tracks) {
+        const jobId = `${track.id}-${Date.now()}`;
+        
+        // Subscribe to broadcast channel for real-time updates
+        subscribeToBroadcast(jobId, track.id, newCreation.id);
+
         fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-music`, {
           method: 'POST',
           headers: {
@@ -376,6 +381,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           body: JSON.stringify({
             trackId: track.id,
             creationId: newCreation.id,
+            jobId,
             input: {
               musicPrompt: input.musicPrompt,
               genres: input.genres,
