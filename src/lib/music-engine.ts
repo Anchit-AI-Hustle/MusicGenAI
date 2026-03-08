@@ -354,7 +354,7 @@ async function renderSegment(
   rng: () => number,
 ): Promise<AudioBuffer> {
   const segDuration = endTime - startTime;
-  const sampleRate = 44100;
+  const sampleRate = INTERNAL_SAMPLE_RATE;
   const numChannels = 2;
   const ctx = new OfflineAudioContext(numChannels, Math.ceil(sampleRate * segDuration), sampleRate);
 
