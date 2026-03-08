@@ -85,10 +85,33 @@ async function callAI(
   return null;
 }
 
-// ===== HELPER: Update progress =====
+// ===== HELPER: Broadcast progress via Realtime =====
+async function broadcastProgress(
+  supabase: any, jobId: string, stepNumber: number, stepName: string,
+  progressPercent: number, segmentsCompleted: number, totalSegments: number,
+  estimatedTimeRemaining: string
+) {
+  try {
+    const channel = supabase.channel(`generation:${jobId}`);
+    await channel.send({
+      type: "broadcast",
+      event: "progress",
+      payload: {
+        jobId, stepNumber, stepName, progressPercent,
+        segmentsCompleted, totalSegments, estimatedTimeRemaining,
+      },
+    });
+    supabase.removeChannel(channel);
+  } catch (e) {
+    console.warn(`Broadcast failed for ${jobId}:`, e);
+  }
+}
+
+// ===== HELPER: Update progress (DB + broadcast) =====
 async function updateProgress(
   supabase: any, trackId: string, creationId: string,
-  stage: string, progress: number, estimatedTimeLeft?: number
+  stage: string, progress: number, estimatedTimeLeft?: number,
+  jobId?: string, stepNumber?: number, segmentsCompleted?: number, totalSegments?: number
 ) {
   await supabase.from("tracks").update({
     progress, status: "processing", current_stage: stage,
@@ -96,6 +119,12 @@ async function updateProgress(
   }).eq("id", trackId);
   await supabase.from("music_creations").update({ progress, status: "processing" }).eq("id", creationId);
   console.log(`[${trackId}] Stage: ${stage} | Progress: ${Math.round(progress * 100)}% | ETA: ${estimatedTimeLeft ?? 0}s`);
+
+  if (jobId && stepNumber !== undefined) {
+    const eta = estimatedTimeLeft ?? 0;
+    const etaStr = eta >= 60 ? `${Math.floor(eta / 60)} minute${Math.floor(eta / 60) > 1 ? 's' : ''}` : `${eta} seconds`;
+    await broadcastProgress(supabase, jobId, stepNumber, stage, Math.round(progress * 100), segmentsCompleted ?? 0, totalSegments ?? 0, etaStr);
+  }
 }
 
 // ===== REPLICATE: Create prediction with rate-limit awareness =====
