@@ -262,8 +262,7 @@ const DASH_PIPELINE_STEPS = [
 
 const DashboardTrackProgress: React.FC<{
   currentStage: string; progress: number; estimatedTimeLeft: number;
-  completedSegments: number; totalSegments: number;
-}> = ({ currentStage, progress, estimatedTimeLeft, completedSegments, totalSegments }) => {
+}> = ({ currentStage, progress, estimatedTimeLeft }) => {
   const currentStepIdx = DASH_PIPELINE_STEPS.findIndex(s => s.match.test(currentStage));
   const activeIdx = currentStepIdx >= 0 ? currentStepIdx : 0;
 
