@@ -328,21 +328,22 @@ Define musical key, scale, instruments, vocal style, chord progression, bassline
     );
 
     const musicIntent: MusicIntent = intentResult ? {
-      tempo: intentResult.tempo,
+      tempo: frozenInput.tempoBpm, // Always use user-specified BPM
       scale: intentResult.scale,
       key: intentResult.key,
       energyCurve: [],
       instrumentPalette: intentResult.instrumentPalette,
-      vocalStyle: intentResult.vocalStyle,
+      vocalStyle: frozenInput.vocalStyle || intentResult.vocalStyle || "instrumental",
       genreIdentity: intentResult.genreIdentity,
       rhythmStyle: intentResult.rhythmStyle,
       chordProgression: intentResult.chordProgression,
       basslineStyle: intentResult.basslineStyle,
       melodyCharacter: intentResult.melodyCharacter,
     } : {
-      tempo: 120, scale: "minor", key: "Am", energyCurve: [],
+      tempo: frozenInput.tempoBpm, scale: "minor", key: "Am", energyCurve: [],
       instrumentPalette: ["synth", "drums", "bass", "pad"],
-      vocalStyle: "instrumental", genreIdentity: frozenInput.genres[0] || "electronic",
+      vocalStyle: frozenInput.vocalStyle || "instrumental",
+      genreIdentity: frozenInput.genres[0] || "electronic",
       rhythmStyle: "four-on-the-floor", chordProgression: ["Am", "F", "C", "G"],
       basslineStyle: "sub-bass", melodyCharacter: "arpeggiated",
     };
