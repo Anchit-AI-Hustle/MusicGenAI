@@ -155,7 +155,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
                 </div>
               )}
 
-              {/* Action buttons */}
+              {/* Action buttons — single download icon with dropdown */}
               <div className="flex items-center gap-3 mt-6 justify-center sm:justify-start">
                 {track?.audioUrl && (
                   <Button variant="glow" size="lg" onClick={handlePlay}>
@@ -163,23 +163,8 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
                     {isPlaying ? 'Pause' : 'Play'}
                   </Button>
                 )}
-                {track?.audioUrl && (
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={() => triggerDownload(track.audioUrl!, `${track.title}.mp3`)}
-                  >
-                    <Download className="w-4 h-4" /> Download MP3
-                  </Button>
-                )}
-                {track?.videoUrl && (
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={() => triggerDownload(track.videoUrl!, `${track.title}.mp4`)}
-                  >
-                    <MonitorPlay className="w-4 h-4" /> Download MP4
-                  </Button>
+                {(track?.audioUrl || track?.videoUrl) && (
+                  <SongDownloadMenu track={track} triggerDownload={triggerDownload} />
                 )}
               </div>
             </div>

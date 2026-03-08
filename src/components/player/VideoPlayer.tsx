@@ -15,10 +15,9 @@
 import React, { useRef, useState, useEffect, useCallback, memo } from 'react';
 import {
   Play, Pause, Maximize, Minimize, RectangleHorizontal,
-  Volume2, VolumeX, Volume1, Monitor, Download
+  Volume2, VolumeX, Volume1, Monitor
 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
-import { getVideoExtension } from '@/lib/video-generator';
 
 export type ViewMode = 'embedded' | 'theatre' | 'fullscreen';
 
