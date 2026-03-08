@@ -2,13 +2,24 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies for audio processing
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    git \
+    build-essential \
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
+# Upgrade pip
+RUN pip install --upgrade pip
+
+# Install torch first (prebuilt wheel)
+RUN pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Copy requirements
 COPY requirements.txt .
+
+# Install remaining packages
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
