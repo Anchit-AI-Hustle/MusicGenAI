@@ -1,4 +1,7 @@
 fastapi
 uvicorn
+audiocraft
 numpy
 soundfile
+scipy
+python-multipart
