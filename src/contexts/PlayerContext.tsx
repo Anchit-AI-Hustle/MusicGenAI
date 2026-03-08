@@ -1,4 +1,14 @@
-import React, { createContext, useContext, useState, useRef, useCallback, useEffect, ReactNode } from 'react';
+/**
+ * PlayerContext — Isolated playback state manager.
+ * 
+ * CRITICAL: This context stores ONLY playback-related values.
+ * Generation progress (MusicContext) must never trigger player re-renders.
+ * 
+ * Time updates are stored in a ref and flushed at lower frequency
+ * to avoid excessive React re-renders from high-frequency timeupdate events.
+ */
+
+import React, { createContext, useContext, useState, useRef, useCallback, useEffect, useMemo, ReactNode } from 'react';
 
 export type PlaybackMode = 'audio' | 'video' | 'visualizer';
 
@@ -15,22 +25,15 @@ export interface PlayerTrack {
   genres?: string[];
 }
 
-interface PlayerState {
-  currentTrack: PlayerTrack | null;
-  queue: PlayerTrack[];
-  queueIndex: number;
-  isPlaying: boolean;
-  volume: number;
-  playbackMode: PlaybackMode;
-  playbackSpeed: number;
-  currentTime: number;
-  duration: number;
-  isMuted: boolean;
-  isExpanded: boolean; // mobile expand
+// Stable refs for high-frequency values (currentTime) to avoid re-render storms
+interface PlayerRefs {
+  audioRef: React.RefObject<HTMLAudioElement | null>;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  currentTimeRef: React.MutableRefObject<number>;
+  durationRef: React.MutableRefObject<number>;
 }
 
-interface PlayerContextType extends PlayerState {
-  audioRef: React.RefObject<HTMLAudioElement | null>;
+interface PlayerActions {
   play: (track?: PlayerTrack) => void;
   pause: () => void;
   togglePlay: () => void;
@@ -47,10 +50,34 @@ interface PlayerContextType extends PlayerState {
   setIsExpanded: (expanded: boolean) => void;
 }
 
-const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
+interface PlayerState {
+  currentTrack: PlayerTrack | null;
+  queue: PlayerTrack[];
+  queueIndex: number;
+  isPlaying: boolean;
+  volume: number;
+  playbackMode: PlaybackMode;
+  playbackSpeed: number;
+  isMuted: boolean;
+  isExpanded: boolean;
+}
+
+// Separate context for time (high-frequency updates) to isolate renders
+interface PlayerTimeState {
+  currentTime: number;
+  duration: number;
+}
+
+const PlayerStateContext = createContext<(PlayerState & PlayerActions & PlayerRefs) | undefined>(undefined);
+const PlayerTimeContext = createContext<PlayerTimeState | undefined>(undefined);
 
 export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const currentTimeRef = useRef(0);
+  const durationRef = useRef(0);
+  const queueRef = useRef<PlayerTrack[]>([]);
+
   const [currentTrack, setCurrentTrack] = useState<PlayerTrack | null>(null);
   const [queue, setQueueState] = useState<PlayerTrack[]>([]);
   const [queueIndex, setQueueIndex] = useState(0);
@@ -58,67 +85,83 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [volume, setVolumeState] = useState(0.8);
   const [playbackMode, setPlaybackModeState] = useState<PlaybackMode>('audio');
   const [playbackSpeed, setPlaybackSpeedState] = useState(1);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Create audio element once
+  // Time state — updated at throttled rate (4Hz instead of 60Hz)
+  const [timeState, setTimeState] = useState<PlayerTimeState>({ currentTime: 0, duration: 0 });
+  const timeRafRef = useRef<number>(0);
+  const lastTimeFlushRef = useRef(0);
+
+  // Keep queue ref in sync
+  useEffect(() => { queueRef.current = queue; }, [queue]);
+
+  // Create audio element once — no dependency on queue to avoid re-attaching listeners
   useEffect(() => {
     if (!audioRef.current) {
-      audioRef.current = new Audio();
-      audioRef.current.preload = 'metadata';
+      const audio = new Audio();
+      audio.preload = 'metadata';
+      audioRef.current = audio;
     }
     const audio = audioRef.current;
 
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const onDurationChange = () => setDuration(audio.duration || 0);
+    const flushTime = () => {
+      const now = performance.now();
+      if (now - lastTimeFlushRef.current > 250) { // 4Hz
+        lastTimeFlushRef.current = now;
+        const ct = audio.currentTime;
+        const dur = audio.duration || 0;
+        currentTimeRef.current = ct;
+        durationRef.current = dur;
+        setTimeState({ currentTime: ct, duration: dur });
+      }
+      timeRafRef.current = requestAnimationFrame(flushTime);
+    };
+
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
     const onEnded = () => {
       setIsPlaying(false);
-      // Auto-advance queue
+      // Auto-advance using ref to avoid stale closure
       setQueueIndex(prev => {
         const nextIdx = prev + 1;
-        if (nextIdx < queue.length) {
-          const nextTrack = queue[nextIdx];
+        const q = queueRef.current;
+        if (nextIdx < q.length) {
+          const nextTrack = q[nextIdx];
           setCurrentTrack(nextTrack);
           if (nextTrack.videoUrl) setPlaybackModeState('video');
+          else setPlaybackModeState('audio');
           setTimeout(() => {
             if (audioRef.current) {
               audioRef.current.src = nextTrack.audioUrl;
               audioRef.current.play().then(() => setIsPlaying(true)).catch(console.warn);
             }
-          }, 100);
+          }, 50);
           return nextIdx;
         }
         return prev;
       });
     };
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
 
-    audio.addEventListener('timeupdate', onTimeUpdate);
-    audio.addEventListener('durationchange', onDurationChange);
-    audio.addEventListener('ended', onEnded);
     audio.addEventListener('play', onPlay);
     audio.addEventListener('pause', onPause);
+    audio.addEventListener('ended', onEnded);
+    timeRafRef.current = requestAnimationFrame(flushTime);
 
     return () => {
-      audio.removeEventListener('timeupdate', onTimeUpdate);
-      audio.removeEventListener('durationchange', onDurationChange);
-      audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('play', onPlay);
       audio.removeEventListener('pause', onPause);
+      audio.removeEventListener('ended', onEnded);
+      cancelAnimationFrame(timeRafRef.current);
     };
-  }, [queue]);
+  }, []); // Empty deps — never re-attach
 
-  // Sync volume
+  // Sync volume imperatively
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = isMuted ? 0 : volume;
-    }
+    if (audioRef.current) audioRef.current.volume = isMuted ? 0 : volume;
   }, [volume, isMuted]);
 
-  // Sync playback speed
+  // Sync playback speed imperatively
   useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = playbackSpeed;
   }, [playbackSpeed]);
@@ -127,8 +170,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const audio = audioRef.current;
     if (!audio) return;
     setCurrentTrack(track);
-    if (track.videoUrl) setPlaybackModeState('video');
-    else setPlaybackModeState('audio');
+    setPlaybackModeState(track.videoUrl ? 'video' : 'audio');
     audio.src = track.audioUrl;
     audio.load();
     audio.play().then(() => setIsPlaying(true)).catch(console.warn);
@@ -136,79 +178,73 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const play = useCallback((track?: PlayerTrack) => {
     if (track) {
-      // Find in queue or add
-      const idx = queue.findIndex(t => t.id === track.id);
+      const q = queueRef.current;
+      const idx = q.findIndex(t => t.id === track.id);
       if (idx >= 0) {
         setQueueIndex(idx);
       } else {
         setQueueState(prev => [...prev, track]);
-        setQueueIndex(queue.length);
+        setQueueIndex(q.length);
       }
       loadAndPlay(track);
-    } else if (currentTrack && audioRef.current) {
+    } else if (audioRef.current) {
       audioRef.current.play().then(() => setIsPlaying(true)).catch(console.warn);
     }
-  }, [currentTrack, queue, loadAndPlay]);
+  }, [loadAndPlay]);
 
-  const pause = useCallback(() => {
-    audioRef.current?.pause();
-    setIsPlaying(false);
-  }, []);
+  const pause = useCallback(() => { audioRef.current?.pause(); }, []);
 
   const togglePlay = useCallback(() => {
-    if (isPlaying) pause();
-    else if (currentTrack) play();
-  }, [isPlaying, currentTrack, play, pause]);
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) audio.play().catch(console.warn);
+    else audio.pause();
+  }, []);
 
   const next = useCallback(() => {
+    const q = queueRef.current;
     const nextIdx = queueIndex + 1;
-    if (nextIdx < queue.length) {
+    if (nextIdx < q.length) {
       setQueueIndex(nextIdx);
-      loadAndPlay(queue[nextIdx]);
+      loadAndPlay(q[nextIdx]);
     }
-  }, [queueIndex, queue, loadAndPlay]);
+  }, [queueIndex, loadAndPlay]);
 
   const previous = useCallback(() => {
     if (audioRef.current && audioRef.current.currentTime > 3) {
       audioRef.current.currentTime = 0;
       return;
     }
+    const q = queueRef.current;
     const prevIdx = queueIndex - 1;
     if (prevIdx >= 0) {
       setQueueIndex(prevIdx);
-      loadAndPlay(queue[prevIdx]);
+      loadAndPlay(q[prevIdx]);
     }
-  }, [queueIndex, queue, loadAndPlay]);
+  }, [queueIndex, loadAndPlay]);
 
   const seek = useCallback((time: number) => {
     if (audioRef.current) {
       audioRef.current.currentTime = time;
-      setCurrentTime(time);
+      currentTimeRef.current = time;
+      // Sync video ref directly — no state update
+      if (videoRef.current) videoRef.current.currentTime = time;
     }
   }, []);
 
-  const setVolume = useCallback((v: number) => {
-    setVolumeState(v);
-    setIsMuted(false);
-  }, []);
-
+  const setVolume = useCallback((v: number) => { setVolumeState(v); setIsMuted(false); }, []);
   const setPlaybackMode = useCallback((mode: PlaybackMode) => setPlaybackModeState(mode), []);
   const setPlaybackSpeed = useCallback((speed: number) => setPlaybackSpeedState(speed), []);
   const toggleMute = useCallback(() => setIsMuted(prev => !prev), []);
 
   const addToQueue = useCallback((track: PlayerTrack) => {
-    setQueueState(prev => {
-      if (prev.find(t => t.id === track.id)) return prev;
-      return [...prev, track];
-    });
+    setQueueState(prev => prev.find(t => t.id === track.id) ? prev : [...prev, track]);
   }, []);
 
   const setQueue = useCallback((tracks: PlayerTrack[], startIndex = 0) => {
     setQueueState(tracks);
     setQueueIndex(startIndex);
-    if (tracks.length > startIndex) {
-      loadAndPlay(tracks[startIndex]);
-    }
+    if (tracks.length > startIndex) loadAndPlay(tracks[startIndex]);
   }, [loadAndPlay]);
 
   const clearQueue = useCallback(() => {
@@ -217,24 +253,43 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setQueueIndex(0);
     setCurrentTrack(null);
     setIsPlaying(false);
-    setCurrentTime(0);
+    setTimeState({ currentTime: 0, duration: 0 });
   }, []);
 
+  const stateValue = useMemo(() => ({
+    currentTrack, queue, queueIndex, isPlaying, volume, playbackMode,
+    playbackSpeed, isMuted, isExpanded,
+    audioRef, videoRef, currentTimeRef, durationRef,
+    play, pause, togglePlay, next, previous, seek,
+    setVolume, setPlaybackMode, setPlaybackSpeed, toggleMute,
+    addToQueue, setQueue, clearQueue, setIsExpanded,
+  }), [
+    currentTrack, queue, queueIndex, isPlaying, volume, playbackMode,
+    playbackSpeed, isMuted, isExpanded,
+    play, pause, togglePlay, next, previous, seek,
+    setVolume, setPlaybackMode, setPlaybackSpeed, toggleMute,
+    addToQueue, setQueue, clearQueue,
+  ]);
+
   return (
-    <PlayerContext.Provider value={{
-      currentTrack, queue, queueIndex, isPlaying, volume, playbackMode,
-      playbackSpeed, currentTime, duration, isMuted, isExpanded,
-      audioRef, play, pause, togglePlay, next, previous, seek,
-      setVolume, setPlaybackMode, setPlaybackSpeed, toggleMute,
-      addToQueue, setQueue, clearQueue, setIsExpanded,
-    }}>
-      {children}
-    </PlayerContext.Provider>
+    <PlayerStateContext.Provider value={stateValue}>
+      <PlayerTimeContext.Provider value={timeState}>
+        {children}
+      </PlayerTimeContext.Provider>
+    </PlayerStateContext.Provider>
   );
 };
 
+/** Use for controls, track info, queue — does NOT re-render on time ticks */
 export const usePlayer = () => {
-  const ctx = useContext(PlayerContext);
+  const ctx = useContext(PlayerStateContext);
   if (!ctx) throw new Error('usePlayer must be used within PlayerProvider');
+  return ctx;
+};
+
+/** Use ONLY in components that display currentTime/duration (seek bar, time labels) */
+export const usePlayerTime = () => {
+  const ctx = useContext(PlayerTimeContext);
+  if (!ctx) throw new Error('usePlayerTime must be used within PlayerProvider');
   return ctx;
 };
