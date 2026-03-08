@@ -814,8 +814,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                     <div key={track.id} className="p-3 sm:p-4 bg-secondary/50 rounded-lg">
                       <div className="flex items-center gap-3 sm:gap-4">
                         {track.status === 'completed' && track.audioUrl ? (
-                          <button onClick={() => togglePlay(track.id, track.audioUrl!)} className="w-10 h-10 rounded-full bg-primary flex items-center justify-center hover:opacity-90 transition-smooth flex-shrink-0">
-                            {playingTrackId === track.id ? <Pause className="w-5 h-5 text-primary-foreground" /> : <Play className="w-5 h-5 text-primary-foreground ml-0.5" />}
+                          <button onClick={() => handleTrackPlay(track)} className={`w-10 h-10 rounded-full flex items-center justify-center hover:opacity-90 transition-smooth flex-shrink-0 ${player.currentTrack?.id === track.id ? 'bg-primary' : 'bg-primary/80'}`}>
+                            {player.currentTrack?.id === track.id && player.isPlaying ? <Pause className="w-5 h-5 text-primary-foreground" /> : <Play className="w-5 h-5 text-primary-foreground ml-0.5" />}
                           </button>
                         ) : (
                           <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
@@ -825,7 +825,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-foreground truncate">
+                          <p className={`font-medium truncate ${player.currentTrack?.id === track.id ? 'text-primary' : 'text-foreground'}`}>
                             {currentCreation.type === 'album' && `${index + 1}. `}{track.title}
                           </p>
                           {track.status === 'pending' && (
@@ -858,9 +858,6 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                           )}
                         </div>
                       </div>
-                      {track.status === 'completed' && track.audioUrl && (
-                        <audio controls className="w-full mt-3" src={track.audioUrl} />
-                      )}
                     </div>
                   ))}
                 </div>
