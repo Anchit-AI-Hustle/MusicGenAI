@@ -187,7 +187,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onAuthClick, onNav
           <div className="space-y-3 sm:space-y-4">
             <AnimatePresence>
               {filteredCreations.map((creation, index) => (
-                <CreationCard key={creation.id} creation={creation} index={index} formatDuration={formatDuration} formatDate={formatDate} />
+                <CreationCard key={creation.id} creation={creation} index={index} formatDuration={formatDuration} formatDate={formatDate} onNavigate={onNavigate} />
               ))}
             </AnimatePresence>
           </div>
