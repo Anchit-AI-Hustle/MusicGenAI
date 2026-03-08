@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
+import { generateTrack, MusicIntent } from '@/lib/music-engine';
 
 export interface Track {
   id: string;
@@ -56,6 +57,8 @@ interface CreateMusicInput {
   vocalStyle?: string;
   vocalIntensity?: number;
   vocalEffects?: string[];
+  mood?: string;
+  musicalKey?: string;
 }
 
 type AiAction = 'suggest' | 'enhance';
@@ -74,6 +77,12 @@ interface MusicContextType {
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
 
+// Pipeline status labels
+const STATUS_FLOW = [
+  'pending', 'analyzing', 'planning_structure', 'generating_midi',
+  'rendering_audio', 'mixing_mastering', 'finalizing', 'completed', 'failed',
+];
+
 export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
   const [creations, setCreations] = useState<MusicCreation[]>([]);
@@ -81,74 +90,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const realtimeChannelRef = useRef<any>(null);
-  const broadcastChannelsRef = useRef<Map<string, any>>(new Map());
-
-  // Subscribe to broadcast channel for a track's generation progress
-  const subscribeToBroadcast = useCallback((jobId: string, trackId: string, creationId: string) => {
-    // Don't double-subscribe
-    if (broadcastChannelsRef.current.has(jobId)) return;
-
-    const channel = supabase
-      .channel(`generation:${jobId}`)
-      .on('broadcast', { event: 'progress' }, ({ payload }) => {
-        if (!payload) return;
-        const { stepName, progressPercent, segmentsCompleted, totalSegments, estimatedTimeRemaining } = payload;
-
-        // Parse ETA string to seconds
-        let etaSec = 0;
-        if (estimatedTimeRemaining) {
-          const minMatch = estimatedTimeRemaining.match(/(\d+)\s*minute/);
-          const secMatch = estimatedTimeRemaining.match(/(\d+)\s*second/);
-          if (minMatch) etaSec += parseInt(minMatch[1]) * 60;
-          if (secMatch) etaSec += parseInt(secMatch[1]);
-        }
-
-        const isComplete = stepName === 'Completed';
-        const isFailed = stepName === 'Failed';
-
-        // Update track in creations state (DB remains source-of-truth for status)
-        const mapTrack = (t: Track): Track =>
-          t.id === trackId
-            ? {
-                ...t,
-                status: isComplete ? 'completed' : isFailed ? 'failed' : t.status,
-                progress: (progressPercent ?? 0) / 100,
-                currentStage: stepName,
-                completedSegments: segmentsCompleted ?? t.completedSegments,
-                totalSegments: totalSegments ?? t.totalSegments,
-                estimatedTimeLeft: etaSec,
-              }
-            : t;
-
-        setCreations(prev => prev.map(c =>
-          c.id === creationId
-            ? { ...c, tracks: c.tracks.map(mapTrack), progress: (progressPercent ?? 0) / 100 }
-            : c
-        ));
-        setCurrentCreation(prev => {
-          if (!prev || prev.id !== creationId) return prev;
-          return { ...prev, tracks: prev.tracks.map(mapTrack), progress: (progressPercent ?? 0) / 100 };
-        });
-
-        // Unsubscribe on completion or failure
-        if (isComplete || isFailed) {
-          const ch = broadcastChannelsRef.current.get(jobId);
-          if (ch) {
-            supabase.removeChannel(ch);
-            broadcastChannelsRef.current.delete(jobId);
-          }
-        }
-      })
-      .subscribe();
-
-    broadcastChannelsRef.current.set(jobId, channel);
-  }, []);
 
   const fetchCreations = useCallback(async () => {
-    if (!user?.id) {
-      setCreations([]);
-      return;
-    }
+    if (!user?.id) { setCreations([]); return; }
     setIsLoading(true);
     try {
       const { data: creationsData, error: creationsError } = await supabase
@@ -214,7 +158,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   }, [user?.id]);
 
-  // Setup realtime subscriptions
+  // Setup realtime subscriptions for external updates
   useEffect(() => {
     if (!isAuthenticated || !user?.id) return;
 
@@ -239,69 +183,161 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
               }
             : t;
 
-        const deriveCreationStatus = (tracks: Track[]) => {
-          const statuses = tracks.map(t => t.status);
-          if (statuses.some(s => s === 'failed')) return 'failed';
-          if (statuses.every(s => s === 'completed')) return 'completed';
-          if (statuses.some(s => s !== 'pending' && s !== 'completed')) return statuses.find(s => s !== 'pending' && s !== 'completed') || 'analyzing';
-          return 'pending';
-        };
-
-        const deriveCreationProgress = (tracks: Track[]) => {
-          if (!tracks.length) return 0;
-          return tracks.reduce((acc, t) => acc + (t.progress ?? 0), 0) / tracks.length;
-        };
-
         setCreations(prev => prev.map(c => {
           const tracks = c.tracks.map(mapTrack);
-          return { ...c, tracks, status: deriveCreationStatus(tracks), progress: deriveCreationProgress(tracks) };
+          const statuses = tracks.map(t => t.status);
+          const derivedStatus = statuses.some(s => s === 'failed') ? 'failed'
+            : statuses.every(s => s === 'completed') ? 'completed'
+            : statuses.find(s => !['pending', 'completed'].includes(s)) || 'pending';
+          const derivedProgress = tracks.reduce((a, t) => a + (t.progress ?? 0), 0) / (tracks.length || 1);
+          return { ...c, tracks, status: derivedStatus, progress: derivedProgress };
         }));
-
-        setCurrentCreation(prev => {
-          if (!prev) return prev;
-          const tracks = prev.tracks.map(mapTrack);
-          return { ...prev, tracks, status: deriveCreationStatus(tracks), progress: deriveCreationProgress(tracks) };
-        });
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'music_creations' }, (payload) => {
-        const updated = payload.new as any;
-        setCreations(prev => prev.map(c =>
-          c.id === updated.id
-            ? { ...c, status: updated.status, progress: updated.progress ?? 0 }
-            : c
-        ));
-        setCurrentCreation(prev =>
-          prev?.id === updated.id
-            ? { ...prev, status: updated.status, progress: updated.progress ?? 0 }
-            : prev
-        );
       })
       .subscribe();
 
     realtimeChannelRef.current = channel;
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [isAuthenticated, user?.id]);
 
   useEffect(() => {
-    if (isAuthenticated && user?.id) {
-      fetchCreations();
-    } else {
-      setCreations([]);
-      setCurrentCreation(null);
-    }
+    if (isAuthenticated && user?.id) fetchCreations();
+    else { setCreations([]); setCurrentCreation(null); }
   }, [isAuthenticated, user?.id, fetchCreations]);
 
-  const createMusic = async (input: CreateMusicInput): Promise<MusicCreation | null> => {
-    if (!user?.id) {
-      toast.error('Please sign in to create music');
-      return null;
+  // Helper to update track state locally
+  const updateTrackLocal = (creationId: string, trackId: string, updates: Partial<Track>) => {
+    const mapTrack = (t: Track): Track => t.id === trackId ? { ...t, ...updates } : t;
+    setCreations(prev => prev.map(c => c.id === creationId ? { ...c, tracks: c.tracks.map(mapTrack), progress: updates.progress ?? c.progress, status: updates.status ?? c.status } : c));
+    setCurrentCreation(prev => prev?.id === creationId ? { ...prev, tracks: prev.tracks.map(mapTrack), progress: updates.progress ?? prev.progress, status: updates.status ?? prev.status } : prev);
+  };
+
+  // Helper to update track in DB
+  const updateTrackDB = async (trackId: string, creationId: string, stage: string, progress: number, status: string) => {
+    await supabase.from('tracks').update({
+      current_stage: stage, progress, status,
+    }).eq('id', trackId);
+    await supabase.from('music_creations').update({
+      progress, status,
+    }).eq('id', creationId);
+  };
+
+  // ===== BROWSER-BASED MUSIC GENERATION =====
+  const generateTrackInBrowser = async (
+    trackId: string, creationId: string, input: CreateMusicInput, trackTitle: string
+  ): Promise<void> => {
+    try {
+      // Step 1: Analyze with AI (edge function)
+      updateTrackLocal(creationId, trackId, { status: 'analyzing', currentStage: 'Analyzing your musical vision', progress: 0.05 });
+      await updateTrackDB(trackId, creationId, 'Analyzing your musical vision', 0.05, 'analyzing');
+
+      const analyzeResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-music`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          input: {
+            musicPrompt: input.musicPrompt,
+            genres: input.genres,
+            durationSeconds: input.durationSeconds,
+            lyrics: input.lyrics,
+            artistInspiration: input.artistInspiration,
+            tempoBpm: input.tempoBpm || 120,
+            vocalStructure: input.vocalStructure,
+            vocalStyle: input.vocalStyle,
+            mood: input.mood || '',
+            musicalKey: input.musicalKey || 'D minor',
+          },
+        }),
+      });
+
+      if (!analyzeResponse.ok) {
+        const err = await analyzeResponse.json().catch(() => ({ error: 'Analysis failed' }));
+        throw new Error(err.error || 'AI analysis failed');
+      }
+
+      const { musicIntent } = await analyzeResponse.json() as { musicIntent: MusicIntent };
+
+      // Step 2: Planning structure
+      updateTrackLocal(creationId, trackId, { status: 'planning_structure', currentStage: 'Planning song structure', progress: 0.10 });
+      await updateTrackDB(trackId, creationId, 'Planning song structure', 0.10, 'planning_structure');
+
+      console.log(`[${trackId}] MusicIntent:`, musicIntent);
+
+      // Step 3-5: Generate audio in browser with Tone.js
+      const onProgress = (stage: string, progress: number) => {
+        const stageLabels: Record<string, string> = {
+          generating_midi: 'Composing MIDI patterns',
+          rendering_audio: 'Rendering audio synthesis',
+          mixing_mastering: 'Mixing and mastering',
+          finalizing: 'Finalizing track',
+        };
+        const label = stageLabels[stage] || stage;
+        updateTrackLocal(creationId, trackId, {
+          status: stage, currentStage: label, progress,
+        });
+        // Don't await DB update during rapid progress - fire and forget
+        updateTrackDB(trackId, creationId, label, progress, stage).catch(console.warn);
+      };
+
+      const wavBlob = await generateTrack(musicIntent, onProgress);
+
+      // Step 6: Upload to storage
+      updateTrackLocal(creationId, trackId, { status: 'finalizing', currentStage: 'Uploading final track', progress: 0.94 });
+      await updateTrackDB(trackId, creationId, 'Uploading final track', 0.94, 'finalizing');
+
+      const filePath = `tracks/${trackId}/final.wav`;
+      const { error: uploadError } = await supabase.storage
+        .from('music-files')
+        .upload(filePath, wavBlob, { contentType: 'audio/wav', upsert: true });
+
+      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+
+      const { data: urlData } = supabase.storage.from('music-files').getPublicUrl(filePath);
+      const audioUrl = urlData.publicUrl;
+
+      // Step 7: Complete
+      await supabase.from('tracks').update({
+        status: 'completed', audio_url: audioUrl, progress: 1,
+        duration_seconds: input.durationSeconds,
+        current_stage: 'Completed', estimated_time_left: 0,
+      }).eq('id', trackId);
+
+      await supabase.from('music_creations').update({
+        status: 'completed', progress: 1,
+      }).eq('id', creationId);
+
+      updateTrackLocal(creationId, trackId, {
+        status: 'completed', currentStage: 'Completed', progress: 1, audioUrl,
+      });
+
+      toast.success(`"${trackTitle}" is ready! 🎵`);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[${trackId}] Generation failed:`, errorMsg);
+
+      await supabase.from('tracks').update({
+        status: 'failed', current_stage: 'Failed', error_message: errorMsg,
+        estimated_time_left: 0,
+      }).eq('id', trackId);
+      await supabase.from('music_creations').update({ status: 'failed' }).eq('id', creationId);
+
+      updateTrackLocal(creationId, trackId, {
+        status: 'failed', currentStage: 'Failed', errorMessage: errorMsg, progress: 0,
+      });
+
+      toast.error(`Generation failed: ${errorMsg}`);
     }
+  };
+
+  const createMusic = async (input: CreateMusicInput): Promise<MusicCreation | null> => {
+    if (!user?.id) { toast.error('Please sign in to create music'); return null; }
 
     setIsCreating(true);
     try {
+      // Insert creation record
       const { data: creationData, error: creationError } = await supabase
         .from('music_creations')
         .insert({
@@ -321,18 +357,13 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         .select()
         .single();
 
-      if (creationError) {
-        console.error('Error creating music:', creationError);
-        toast.error('Failed to create music. Please try again.');
-        return null;
-      }
+      if (creationError) { toast.error('Failed to create music.'); return null; }
 
+      // Create track records
       const numberOfTracks = input.type === 'song' ? 1 : (input.numberOfTracks || 5);
       const tracksToCreate = Array.from({ length: numberOfTracks }, (_, i) => ({
         creation_id: creationData.id,
-        title: input.type === 'song'
-          ? (input.title || 'Untitled Track')
-          : `Track ${i + 1}`,
+        title: input.type === 'song' ? (input.title || 'Untitled Track') : `Track ${i + 1}`,
         track_number: i + 1,
         duration_seconds: input.durationSeconds,
         status: 'pending',
@@ -343,11 +374,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         .insert(tracksToCreate)
         .select();
 
-      if (tracksError) {
-        console.error('Error creating tracks:', tracksError);
-        toast.error('Failed to create tracks.');
-        return null;
-      }
+      if (tracksError) { toast.error('Failed to create tracks.'); return null; }
 
       const newCreation: MusicCreation = {
         id: creationData.id,
@@ -369,8 +396,6 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           id: track.id,
           title: track.title,
           duration: track.duration_seconds,
-          audioUrl: track.audio_url || undefined,
-          videoUrl: track.video_url || undefined,
           status: track.status,
           trackNumber: track.track_number,
           createdAt: new Date(track.created_at),
@@ -384,43 +409,12 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setCurrentCreation(newCreation);
       toast.success('Music creation started! Generating your track...');
 
-      // Trigger generation for each track with jobId and subscribe to broadcast
-      for (const track of newCreation.tracks) {
-        const jobId = `${track.id}-${Date.now()}`;
-        
-        // Subscribe to broadcast channel for real-time updates
-        subscribeToBroadcast(jobId, track.id, newCreation.id);
-
-        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-music`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({
-            trackId: track.id,
-            creationId: newCreation.id,
-            jobId,
-            input: {
-              musicPrompt: input.musicPrompt,
-              genres: input.genres,
-              durationSeconds: input.durationSeconds,
-              vocalLanguages: input.vocalLanguages,
-              lyrics: input.lyrics,
-              artistInspiration: input.artistInspiration,
-              tempoBpm: input.tempoBpm,
-              vocalStructure: input.vocalStructure,
-              vocalStyle: input.vocalStyle,
-              vocalIntensity: input.vocalIntensity,
-              vocalEffects: input.vocalEffects,
-            },
-          }),
-        }).catch(err => {
-          console.error('Generation trigger error:', err);
-          toast.error('Failed to start music generation.');
-        });
-      }
+      // Start browser-based generation for each track sequentially
+      (async () => {
+        for (const track of newCreation.tracks) {
+          await generateTrackInBrowser(track.id, newCreation.id, input, track.title);
+        }
+      })();
 
       return newCreation;
     } catch (error) {
@@ -447,9 +441,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         });
 
         if (response.status === 429 && attempt < maxRetries) {
-          const wait = (attempt + 1) * 2000 + Math.random() * 1000;
-          console.warn(`AI suggest rate limited, retrying in ${Math.round(wait)}ms (attempt ${attempt + 1}/${maxRetries})`);
-          await new Promise(r => setTimeout(r, wait));
+          await new Promise(r => setTimeout(r, (attempt + 1) * 2000 + Math.random() * 1000));
           continue;
         }
 
@@ -462,11 +454,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const data = await response.json();
         return data.suggestion || null;
       } catch (e) {
-        console.error('AI suggest error:', e);
-        if (attempt === maxRetries) {
-          toast.error('Failed to get AI suggestion');
-          return null;
-        }
+        if (attempt === maxRetries) { toast.error('Failed to get AI suggestion'); return null; }
         await new Promise(r => setTimeout(r, (attempt + 1) * 1500));
       }
     }
@@ -476,74 +464,43 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const refreshCreations = async () => { await fetchCreations(); };
 
   const retryTrack = async (trackId: string, creationId: string) => {
-    // Find the creation to get input params
     const creation = creations.find(c => c.id === creationId);
-    if (!creation) {
-      toast.error('Creation not found');
-      return;
-    }
+    if (!creation) { toast.error('Creation not found'); return; }
 
-    // Reset track status in DB
+    // Reset track status
     await supabase.from('tracks').update({
       status: 'pending', progress: 0, error_message: null,
       completed_segments: 0, current_stage: 'pending', estimated_time_left: 0,
     }).eq('id', trackId);
-    await supabase.from('music_creations').update({
-      status: 'pending', progress: 0,
-    }).eq('id', creationId);
+    await supabase.from('music_creations').update({ status: 'pending', progress: 0 }).eq('id', creationId);
 
-    // Delete old segments for this track
-    await supabase.from('segments').delete().eq('track_id', trackId);
-
-    // Update local state immediately
     const updateTrack = (t: Track): Track =>
       t.id === trackId ? { ...t, status: 'pending', progress: 0, errorMessage: undefined, completedSegments: 0, currentStage: 'pending', estimatedTimeLeft: 0 } : t;
     setCreations(prev => prev.map(c => c.id === creationId ? { ...c, status: 'pending', progress: 0, tracks: c.tracks.map(updateTrack) } : c));
-    setCurrentCreation(prev => prev?.id === creationId ? { ...prev, status: 'pending', progress: 0, tracks: prev.tracks.map(updateTrack) } : prev);
 
     toast.success('Retrying track generation...');
 
-    const jobId = `${trackId}-${Date.now()}`;
-    subscribeToBroadcast(jobId, trackId, creationId);
+    // Rebuild input from creation data
+    const input: CreateMusicInput = {
+      type: creation.type,
+      title: creation.title,
+      musicPrompt: creation.musicPrompt,
+      genres: creation.genres,
+      durationSeconds: creation.durationSeconds,
+      generateVideo: creation.generateVideo,
+      vocalLanguages: creation.vocalLanguages,
+      lyrics: creation.lyrics,
+      artistInspiration: creation.artistInspiration,
+    };
 
-    // Re-trigger generation
-    fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-music`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-      },
-      body: JSON.stringify({
-        trackId,
-        creationId,
-        jobId,
-        input: {
-          musicPrompt: creation.musicPrompt,
-          genres: creation.genres,
-          durationSeconds: creation.durationSeconds,
-          vocalLanguages: creation.vocalLanguages,
-          lyrics: creation.lyrics,
-          artistInspiration: creation.artistInspiration,
-        },
-      }),
-    }).catch(err => {
-      console.error('Retry trigger error:', err);
-      toast.error('Failed to retry track generation.');
-    });
+    const track = creation.tracks.find(t => t.id === trackId);
+    generateTrackInBrowser(trackId, creationId, input, track?.title || 'Track');
   };
 
   return (
     <MusicContext.Provider value={{
-      creations,
-      currentCreation,
-      isLoading,
-      isCreating,
-      createMusic,
-      setCurrentCreation,
-      refreshCreations,
-      retryTrack,
-      aiSuggest,
+      creations, currentCreation, isLoading, isCreating,
+      createMusic, setCurrentCreation, refreshCreations, retryTrack, aiSuggest,
     }}>
       {children}
     </MusicContext.Provider>
@@ -552,8 +509,6 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
 export const useMusic = () => {
   const context = useContext(MusicContext);
-  if (context === undefined) {
-    throw new Error('useMusic must be used within a MusicProvider');
-  }
+  if (context === undefined) throw new Error('useMusic must be used within a MusicProvider');
   return context;
 };
