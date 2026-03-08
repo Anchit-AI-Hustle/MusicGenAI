@@ -465,7 +465,7 @@ const TrackRow: React.FC<{ track: Track; index: number; formatDuration: (s: numb
         )}
         <span className="text-sm text-muted-foreground">{formatDuration(track.duration)}</span>
         {track.status === 'completed' && track.audioUrl && (
-          <Button variant="ghost" size="icon" className="h-8 w-8 hidden sm:flex" onClick={async (e) => {
+          <Button variant="ghost" size="icon" className="h-8 w-8 flex" onClick={async (e) => {
             e.stopPropagation();
             try {
               const res = await fetch(track.audioUrl!);
