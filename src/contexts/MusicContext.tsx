@@ -433,30 +433,44 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const aiSuggest = async (field: string, value: string, context: Record<string, any>, action: AiAction = 'suggest'): Promise<string | null> => {
-    try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-suggest`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ field, value, context, action }),
-      });
+    const maxRetries = 3;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-suggest`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ field, value, context, action }),
+        });
 
-      if (!response.ok) {
-        const err = await response.json();
-        toast.error(err.error || 'AI suggestion failed');
-        return null;
+        if (response.status === 429 && attempt < maxRetries) {
+          const wait = (attempt + 1) * 2000 + Math.random() * 1000;
+          console.warn(`AI suggest rate limited, retrying in ${Math.round(wait)}ms (attempt ${attempt + 1}/${maxRetries})`);
+          await new Promise(r => setTimeout(r, wait));
+          continue;
+        }
+
+        if (!response.ok) {
+          const err = await response.json();
+          toast.error(err.error || 'AI suggestion failed');
+          return null;
+        }
+
+        const data = await response.json();
+        return data.suggestion || null;
+      } catch (e) {
+        console.error('AI suggest error:', e);
+        if (attempt === maxRetries) {
+          toast.error('Failed to get AI suggestion');
+          return null;
+        }
+        await new Promise(r => setTimeout(r, (attempt + 1) * 1500));
       }
-
-      const data = await response.json();
-      return data.suggestion || null;
-    } catch (e) {
-      console.error('AI suggest error:', e);
-      toast.error('Failed to get AI suggestion');
-      return null;
     }
+    return null;
   };
 
   const refreshCreations = async () => { await fetchCreations(); };
