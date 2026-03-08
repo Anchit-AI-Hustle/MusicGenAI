@@ -106,7 +106,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const getFormContext = () => ({
     title, musicPrompt, genres: selectedGenres, durationSeconds,
     vocalLanguages: selectedLanguages, lyrics, artistInspiration, videoStyle,
-    tempoBpm, vocalStructure, vocalStyle, vocalIntensity, vocalEffects: selectedVocalEffects,
+    tempoBpm, mood, musicalKey, vocalStructure, vocalStyle, vocalIntensity, vocalEffects: selectedVocalEffects,
   });
 
   // Apply value directly to a field
