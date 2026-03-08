@@ -752,15 +752,11 @@ Durations MUST sum to exactly ${durationSec}.`,
 
     const segmentTasks = songPlan.segments.map((seg, idx) => {
       return async (): Promise<ArrayBuffer> => {
-        const sectionMod = SECTION_MODIFIERS[seg.name.replace(/_\d+$/, "")] || seg.description;
-        const prompt = [
-          frozenInput.musicPrompt,
-          `${frozenInput.genres.join(", ") || "electronic"} music at ${frozenInput.tempoBpm} BPM.`,
-          `Section: ${seg.name} — ${sectionMod}.`,
-          `Mood: ${sentiment.emotionPolarity}. Energy: ${sentiment.energyIntensity}/10.`,
-          frozenInput.artistInspiration ? `Influenced by: ${frozenInput.artistInspiration}.` : "",
-          idx > 0 ? "Continue seamlessly from the previous section." : "Begin the track with a clear opening.",
-        ].filter(Boolean).join(" ");
+        const prompt = buildSegmentPrompt(
+          productionBrief, seg, idx, totalSegments,
+          frozenInput.musicPrompt, frozenInput.artistInspiration
+        );
+        console.log(`[${trackId}] Segment ${idx + 1} prompt: ${prompt.substring(0, 120)}...`);
 
         const segmentsRemaining = totalSegments - completedSegments;
         await updateProgress(
