@@ -834,7 +834,7 @@ Durations MUST sum to exactly ${durationSec}.`,
     // ================================================================
     // STEP 4 — DOWNLOADING GENERATED AUDIO (already done inline above)
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Downloading generated audio segments", 0.75, 15, jobId, 5, totalSegments, totalSegments, "generating_segments");
+    await updateProgress(supabase, trackId, creationId, "Downloading generated audio segments", 0.75, 15, jobId, 5, totalSegments, totalSegments, "downloading_segments");
     console.log(`[${trackId}] All ${totalSegments} segments downloaded`);
 
     // ================================================================
@@ -861,16 +861,26 @@ Durations MUST sum to exactly ${durationSec}.`,
       }
     }
 
+    // ================================================================
+    // STEP 6 — FINALIZING AUDIO
+    // ================================================================
+    await updateProgress(supabase, trackId, creationId, "Finalizing audio output", 0.90, 8, jobId, 7, totalSegments, totalSegments, "finalizing_audio");
+
     // Save stitched track
     const instrumentalPath = `tracks/${trackId}/instrumental.wav`;
     await supabase.storage.from("music-files").upload(instrumentalPath, new Uint8Array(stitchedBuffer), {
       contentType: "audio/wav", upsert: true,
     });
 
+    if (frozenInput.generateVideo) {
+      await updateProgress(supabase, trackId, creationId, "Rendering video", 0.94, 6, jobId, 8, totalSegments, totalSegments, "rendering_video");
+      // Video generation not implemented in this function yet.
+    }
+
     // ================================================================
-    // STEP 6 — FINALIZING TRACK
+    // STEP 7 — PREPARING DOWNLOAD
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Finalizing and saving audio output", 0.92, 5, jobId, 8, 0, 0, "uploading");
+    await updateProgress(supabase, trackId, creationId, "Preparing download", 0.97, 4, jobId, 8, totalSegments, totalSegments, "preparing_download");
 
     const finalPath = `tracks/${trackId}/final.wav`;
     const { error: uploadError } = await supabase.storage
@@ -879,7 +889,8 @@ Durations MUST sum to exactly ${durationSec}.`,
 
     if (uploadError) {
       console.error("Final upload error:", uploadError);
-      await supabase.from("tracks").update({ status: "failed", error_message: "Failed to upload final audio" }).eq("id", trackId);
+      await supabase.from("tracks").update({ status: "failed", current_stage: "Failed", error_message: "Failed to upload final audio" }).eq("id", trackId);
+      await supabase.from("music_creations").update({ status: "failed" }).eq("id", creationId);
       return new Response(JSON.stringify({ error: "Upload failed" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -893,7 +904,7 @@ Durations MUST sum to exactly ${durationSec}.`,
     // Update DB
     await supabase.from("tracks").update({
       status: "completed", audio_url: audioUrl, progress: 1, duration_seconds: durationSec,
-      current_stage: "Complete",
+      current_stage: "Completed", estimated_time_left: 0,
     }).eq("id", trackId);
 
     await supabase.from("music_creations").update({
