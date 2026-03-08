@@ -359,11 +359,15 @@ Define musical key, scale, instruments, vocal style, chord progression, bassline
       LOVABLE_API_KEY,
       `You are a professional song arranger. Plan song structure for a ${durationSec}-second track.
 Musical context: ${musicIntent.genreIdentity}, ${musicIntent.tempo} BPM, ${musicIntent.key} ${musicIntent.scale}.
-Total duration: ${durationSec} seconds. Sections must cover the entire duration with no gaps or overlaps.`,
-      `Plan the structure for a ${durationSec}-second ${musicIntent.genreIdentity} track.
+Total duration: ${durationSec} seconds. Sections must cover the entire duration with no gaps or overlaps.
+Beat grid: secondsPerBeat = ${(60 / musicIntent.tempo).toFixed(4)}. All section boundaries should align to beat positions.
+Vocal structure requested by user: "${frozenInput.vocalStructure}". You MUST follow this structure. Map vocal sections (Verse, Chorus, Bridge, Drop, etc.) to time ranges.`,
+      `Plan the structure for a ${durationSec}-second ${musicIntent.genreIdentity} track at ${musicIntent.tempo} BPM.
+The user has requested this vocal structure: "${frozenInput.vocalStructure}".
+You MUST map these sections to time ranges. If the structure says "Verse – Chorus – Verse – Chorus", create those exact sections in order.
 The song should feel like a real composition with proper arrangement.
 Return sections with names, time boundaries (in seconds), energy levels (0-1), density (0-1), instruments active, and a brief description of each section's musical role.
-Make sure sections perfectly tile from 0 to ${durationSec} seconds.`,
+Make sure sections perfectly tile from 0 to ${durationSec} seconds. Section boundaries should align with beat positions (beat duration = ${(60 / musicIntent.tempo).toFixed(4)}s).`,
       "plan_structure",
       "Plan song sections with timing and parameters",
       {
