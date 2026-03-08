@@ -147,8 +147,10 @@ export type Database = {
           completed_segments: number | null
           created_at: string
           creation_id: string
+          current_stage: string | null
           duration_seconds: number
           error_message: string | null
+          estimated_time_left: number | null
           id: string
           progress: number | null
           status: string
@@ -162,8 +164,10 @@ export type Database = {
           completed_segments?: number | null
           created_at?: string
           creation_id: string
+          current_stage?: string | null
           duration_seconds?: number
           error_message?: string | null
+          estimated_time_left?: number | null
           id?: string
           progress?: number | null
           status?: string
@@ -177,8 +181,10 @@ export type Database = {
           completed_segments?: number | null
           created_at?: string
           creation_id?: string
+          current_stage?: string | null
           duration_seconds?: number
           error_message?: string | null
+          estimated_time_left?: number | null
           id?: string
           progress?: number | null
           status?: string
