@@ -129,7 +129,13 @@ async function updateProgress(
   }
 }
 
-// ===== REPLICATE: Create prediction with rate-limit awareness =====
+// ===== REPLICATE: Model fallback list =====
+const REPLICATE_MODELS = [
+  "meta/musicgen",
+  "riffusion/riffusion",
+];
+
+// ===== REPLICATE: Create prediction with model fallback + rate-limit awareness =====
 async function replicateCreatePrediction(
   apiToken: string,
   prompt: string,
@@ -140,55 +146,96 @@ async function replicateCreatePrediction(
   const maxCreateAttempts = 10;
 
   let predictionId = "";
+  let lastError = "";
 
-  for (let attempt = 1; attempt <= maxCreateAttempts; attempt++) {
-    const createRes = await fetch("https://api.replicate.com/v1/predictions", {
-      method: "POST",
-      headers: {
-        Authorization: `Token ${apiToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "replicate/musicgen",
-        input: {
-          prompt,
-          duration,
-          seed: actualSeed,
+  for (const model of REPLICATE_MODELS) {
+    console.log(`[Replicate] Trying model: ${model}`);
+    predictionId = "";
+
+    for (let attempt = 1; attempt <= maxCreateAttempts; attempt++) {
+      const createRes = await fetch("https://api.replicate.com/v1/predictions", {
+        method: "POST",
+        headers: {
+          Authorization: `Token ${apiToken}`,
+          "Content-Type": "application/json",
         },
-      }),
+        body: JSON.stringify({
+          model,
+          input: {
+            prompt,
+            duration,
+            seed: actualSeed,
+          },
+        }),
+      });
+
+      if (createRes.ok) {
+        const prediction = await createRes.json();
+        predictionId = prediction.id;
+        console.log(`[Replicate] Prediction ${predictionId} created with model=${model} (seed=${actualSeed}, attempt=${attempt})`);
+        break;
+      }
+
+      const errBody = await createRes.text();
+
+      if (createRes.status === 404 || createRes.status === 422) {
+        console.warn(`[Replicate] Model ${model} returned ${createRes.status}: ${errBody}. Switching to next model.`);
+        lastError = `${model} returned ${createRes.status}: ${errBody}`;
+        break; // try next model
+      }
+
+      if (createRes.status === 429) {
+        let waitSec = 10 * attempt;
+        try {
+          const parsed = JSON.parse(errBody);
+          if (parsed.retry_after) waitSec = Math.max(parsed.retry_after + 1, 2);
+        } catch { /* use default */ }
+        console.warn(`[Replicate] Rate limited (attempt ${attempt}/${maxCreateAttempts}). Waiting ${waitSec}s...`);
+        await new Promise(r => setTimeout(r, waitSec * 1000));
+        continue;
+      }
+
+      throw new Error(`Replicate create failed [${createRes.status}]: ${errBody}`);
+    }
+
+    if (predictionId) break; // success
+  }
+
+  if (!predictionId) {
+    throw new Error(`All Replicate models failed. Last error: ${lastError}`);
+  }
+
+  // Poll for completion (max 5 minutes)
+  const maxPolls = 60;
+  const pollInterval = 5000;
+
+  for (let i = 0; i < maxPolls; i++) {
+    await new Promise(r => setTimeout(r, pollInterval));
+
+    const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
+      headers: { Authorization: `Token ${apiToken}` },
     });
 
-    if (createRes.ok) {
-      const prediction = await createRes.json();
-      predictionId = prediction.id;
-      console.log(`[Replicate] Prediction ${predictionId} created (seed=${actualSeed}, attempt=${attempt}) for "${prompt.substring(0, 60)}..."`);
-      break;
-    }
-
-    const errBody = await createRes.text();
-
-    if (createRes.status === 404) {
-      throw new Error(`Replicate model not found: ${errBody}`);
-    }
-
-    if (createRes.status === 429) {
-      let waitSec = 10 * attempt;
-      try {
-        const parsed = JSON.parse(errBody);
-        if (parsed.retry_after) waitSec = Math.max(parsed.retry_after + 1, 2);
-      } catch { /* use default */ }
-      console.warn(`[Replicate] Rate limited (attempt ${attempt}/${maxCreateAttempts}). Waiting ${waitSec}s...`);
-      await new Promise(r => setTimeout(r, waitSec * 1000));
+    if (!pollRes.ok) {
+      const errBody = await pollRes.text();
+      console.error(`[Replicate] Poll error: ${pollRes.status} ${errBody}`);
+      if (pollRes.status === 429) {
+        await new Promise(r => setTimeout(r, 10000));
+      }
       continue;
     }
 
-    if (createRes.status === 422) {
-      console.warn(`[Replicate] 422 error (attempt ${attempt}/${maxCreateAttempts}): ${errBody}. Retrying...`);
-      await new Promise(r => setTimeout(r, 3000));
-      continue;
+    const status = await pollRes.json();
+
+    if (status.status === "succeeded") {
+      const outputUrl = status.output;
+      console.log(`[Replicate] ✅ Prediction ${predictionId} complete`);
+      return outputUrl;
     }
 
-    throw new Error(`Replicate create failed [${createRes.status}]: ${errBody}`);
+    if (status.status === "failed" || status.status === "canceled") {
+      throw new Error(`Replicate prediction ${status.status}: ${status.error || "Unknown"}`);
+    }
   }
 
   throw new Error(`Replicate prediction timed out after ${maxPolls * pollInterval / 1000}s`);
