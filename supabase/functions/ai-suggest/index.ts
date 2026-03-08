@@ -46,7 +46,16 @@ serve(async (req) => {
       ? `\n\nThe user has already entered: "${value}". Improve, clarify, or expand on it while preserving the user's intent. Do NOT replace their meaning.`
       : "\n\nThe field is empty. Suggest a creative starting point.";
 
-    const systemPrompt = `You are a music production AI assistant. You help users craft their musical vision. Be creative, specific, and inspiring. Keep suggestions concise (1-3 sentences max for text fields, or a short list for selection fields).`;
+    const systemPrompt = `You are a music production AI assistant. You help users craft their musical vision.
+CRITICAL RULES:
+- Generate ALL suggestions dynamically based on the user's context. NEVER return example text, template phrases, or placeholder content.
+- Every response must be unique and creative. Vary your vocabulary, phrasing, and ideas across calls.
+- Analyze the user's filled fields deeply: genre influences mood, mood influences lyrics, BPM influences energy descriptions.
+- Be specific, vivid, and inspiring. Avoid generic or cliché descriptions.
+- Keep suggestions concise (1-3 sentences max for text fields, or a short list for selection fields).`;
+
+    // Use varying temperature (0.9-1.1) for creative diversity across identical inputs
+    const temperature = 0.9 + Math.random() * 0.2;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -56,6 +65,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
+        temperature,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `${fieldPrompt}${contextStr}${currentValueNote}` },
