@@ -611,16 +611,13 @@ Durations MUST sum to exactly ${durationSec}.`,
       });
     }
 
-    // Sequential generation to respect Replicate rate limits (free tier: 6/min, burst 1)
-    // Upgrade to paid Replicate for parallel generation
-    const MAX_PARALLEL = 1;
+    // Sequential generation with rate-limit delay (free tier safe)
     const segProgressStart = 0.10;
     const segProgressEnd = 0.70;
     let completedSegments = 0;
 
     const segmentTasks = songPlan.segments.map((seg, idx) => {
       return async (): Promise<ArrayBuffer> => {
-        // Build unique prompt per segment with section-specific modifiers
         const sectionMod = SECTION_MODIFIERS[seg.name.replace(/_\d+$/, "")] || seg.description;
         const prompt = [
           frozenInput.musicPrompt,
@@ -631,16 +628,16 @@ Durations MUST sum to exactly ${durationSec}.`,
           idx > 0 ? "Continue seamlessly from the previous section." : "Begin the track with a clear opening.",
         ].filter(Boolean).join(" ");
 
+        const segmentsRemaining = totalSegments - completedSegments;
         await updateProgress(
           supabase, trackId, creationId,
-          `Generating segments`,
+          `Generating segment ${idx + 1} of ${totalSegments}`,
           segProgressStart + (completedSegments / totalSegments) * (segProgressEnd - segProgressStart),
-          Math.max(0, (totalSegments - completedSegments) * estSegmentTime + 10)
+          Math.max(0, segmentsRemaining * estSegmentTime + 10)
         );
 
         const { buffer } = await generateSegmentWithRetry(REPLICATE_API_TOKEN!, prompt, seg.duration);
 
-        // Save segment to storage
         const segPath = `tracks/${trackId}/segment_${idx}.wav`;
         await supabase.storage.from("music-files").upload(segPath, new Uint8Array(buffer), {
           contentType: "audio/wav", upsert: true,
@@ -663,7 +660,7 @@ Durations MUST sum to exactly ${durationSec}.`,
 
     let segmentBuffers: ArrayBuffer[];
     try {
-      segmentBuffers = await runParallel(segmentTasks, MAX_PARALLEL);
+      segmentBuffers = await runSequentialWithDelay(segmentTasks);
     } catch (e) {
       const errorMsg = `Segment generation failed: ${e instanceof Error ? e.message : String(e)}`;
       console.error(`[${trackId}] ${errorMsg}`);
