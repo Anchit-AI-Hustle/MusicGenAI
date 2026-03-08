@@ -75,6 +75,7 @@ const triggerDownload = async (url: string, filename: string) => {
 const SongDownloadMenu: React.FC<{ track: Track; triggerDownload: (url: string, filename: string) => Promise<void> }> = ({ track, triggerDownload }) => {
   const [open, setOpen] = useState(false);
   const triggerBtnRef = useRef<HTMLDivElement>(null);
+  const hasAudio = !!track.audioUrl;
   const hasVideo = !!track.videoUrl;
 
   // If only one type, download directly
