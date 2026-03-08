@@ -207,6 +207,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const handleClear = (field: string) => {
     switch (field) {
       case 'trackName': setTitle(''); break;
+      case 'albumName': setAlbumName(''); break;
+      case 'albumVibe': setAlbumVibe(''); break;
       case 'prompt': setMusicPrompt(''); break;
       case 'genres': setSelectedGenres([]); break;
       case 'lyrics': setLyrics(''); break;
