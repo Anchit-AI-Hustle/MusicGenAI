@@ -134,6 +134,7 @@ export const GlobalPlayer: React.FC = () => {
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const playerRef = useRef<HTMLDivElement>(null);
+  const downloadBtnRef = useRef<HTMLDivElement>(null);
 
   const triggerDownload = useCallback(async (url: string, filename: string) => {
     try {
