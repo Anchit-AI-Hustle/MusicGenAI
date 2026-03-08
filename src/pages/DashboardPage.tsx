@@ -274,9 +274,19 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <button onClick={(e) => { e.stopPropagation(); onNavigate('song-detail', { creationId: creation.id }); }} className="font-display font-semibold text-foreground truncate hover:underline">{creation.title}</button>
-              <Badge variant="secondary" className={`text-xs flex-shrink-0 ${creation.status === 'completed' ? 'bg-green-500/20 text-green-400' : creation.status === 'failed' ? 'bg-destructive/20 text-destructive' : isActiveStatus(creation.status) ? 'bg-primary/20 text-primary' : ''}`}>
-                {STATUS_LABELS[creation.status] || creation.status}
-              </Badge>
+              {(() => {
+                // Derive display status from the most active track's stage for real-time accuracy
+                const activeTrack = creation.tracks.find(t => isActiveStatus(t.status));
+                const displayStatus = activeTrack
+                  ? (activeTrack.currentStage ? STATUS_LABELS[activeTrack.status] || activeTrack.currentStage : STATUS_LABELS[activeTrack.status] || activeTrack.status)
+                  : (STATUS_LABELS[creation.status] || creation.status);
+                const statusClass = creation.status === 'completed' ? 'bg-green-500/20 text-green-400' : creation.status === 'failed' ? 'bg-destructive/20 text-destructive' : isActiveStatus(creation.status) || creation.tracks.some(t => isActiveStatus(t.status)) ? 'bg-primary/20 text-primary' : '';
+                return (
+                  <Badge variant="secondary" className={`text-xs flex-shrink-0 ${statusClass}`}>
+                    {displayStatus}
+                  </Badge>
+                );
+              })()}
             </div>
             <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-muted-foreground flex-wrap">
               <span className="capitalize">{creation.type}</span>
