@@ -8,60 +8,19 @@ const corsHeaders = {
 
 // ===== TYPE DEFINITIONS =====
 
-interface SentimentAnalysis {
-  emotionPolarity: string;
-  energyIntensity: number;
-  darknessBrightness: number;
-  aggressionLevel: number;
-  melodicComplexity: number;
-  rhythmicDensity: number;
-}
-
-interface MusicIntent {
-  tempo: number;
-  scale: string;
-  key: string;
-  energyCurve: number[];
-  instrumentPalette: string[];
-  vocalStyle: string;
-  genreIdentity: string;
-  rhythmStyle: string;
-  chordProgression: string[];
-  basslineStyle: string;
-  melodyCharacter: string;
-}
-
-interface SongSection {
+interface SegmentPlan {
   name: string;
-  startSec: number;
-  endSec: number;
-  energy: number;
-  density: number;
-  instruments: string[];
+  duration: number;
   description: string;
 }
 
-interface HarmonyData {
-  chordProgression: string[];
-  basslinePattern: string;
-  melodyMotifs: string[];
-  counterMelodies: string[];
+interface SongPlan {
+  segments: SegmentPlan[];
 }
 
-interface RhythmData {
-  kickPattern: string;
-  snarePattern: string;
-  hihatPattern: string;
-  percussionLayers: string[];
-  timeSignature: string;
-}
-
-interface VocalPlan {
-  hasVocals: boolean;
-  style: string;
-  phonemeMapping: string;
-  melodicContour: string;
-  historyPrompt: string;
+interface GeneratedLyrics {
+  text: string;
+  segmentTimings: { segment: string; lyrics: string }[];
 }
 
 // ===== HELPER: Call Lovable AI with tool calling =====
@@ -82,7 +41,7 @@ async function callAI(
     },
     body: JSON.stringify({
       model: "google/gemini-3-flash-preview",
-      temperature: 0.7,
+      temperature: 0.7 + Math.random() * 0.2,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -119,91 +78,16 @@ async function callAI(
 }
 
 // ===== HELPER: Update progress =====
-async function updateProgress(supabase: any, trackId: string, creationId: string, stage: string, progress: number, estimatedTimeLeft?: number) {
-  await supabase.from("tracks").update({ progress, status: "processing", current_stage: stage, estimated_time_left: estimatedTimeLeft ?? 0 }).eq("id", trackId);
+async function updateProgress(
+  supabase: any, trackId: string, creationId: string,
+  stage: string, progress: number, estimatedTimeLeft?: number
+) {
+  await supabase.from("tracks").update({
+    progress, status: "processing", current_stage: stage,
+    estimated_time_left: estimatedTimeLeft ?? 0,
+  }).eq("id", trackId);
   await supabase.from("music_creations").update({ progress, status: "processing" }).eq("id", creationId);
   console.log(`[${trackId}] Stage: ${stage} | Progress: ${Math.round(progress * 100)}% | ETA: ${estimatedTimeLeft ?? 0}s`);
-}
-
-// ===== HELPER: Call Music Worker for instrumental generation =====
-async function callMusicWorker(
-  workerUrl: string,
-  prompt: string,
-  duration: number,
-  continuationAudioUrl?: string,
-  continuationStart?: number,
-  tempoBpm?: number,
-  timeoutMs: number = 300000
-): Promise<ArrayBuffer | null> {
-  try {
-    const body: Record<string, any> = { prompt, duration };
-    if (continuationAudioUrl) body.continuation_audio_url = continuationAudioUrl;
-    if (continuationStart != null) body.continuation_start = continuationStart;
-    if (tempoBpm) body.tempo_bpm = tempoBpm;
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-    const res = await fetch(`${workerUrl}/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error(`Music worker /generate failed (${res.status}):`, errText);
-      return null;
-    }
-
-    return await res.arrayBuffer();
-  } catch (e) {
-    console.error("Music worker call error:", e);
-    return null;
-  }
-}
-
-// ===== HELPER: Call Music Worker for vocal generation =====
-async function callVocalWorker(
-  workerUrl: string,
-  text: string,
-  voicePreset: string,
-  textTemp: number,
-  waveformTemp: number,
-  timeoutMs: number = 180000
-): Promise<ArrayBuffer | null> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-    const res = await fetch(`${workerUrl}/generate-vocals`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text,
-        voice_preset: voicePreset,
-        text_temp: textTemp,
-        waveform_temp: waveformTemp,
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error(`Music worker /generate-vocals failed (${res.status}):`, errText);
-      return null;
-    }
-
-    return await res.arrayBuffer();
-  } catch (e) {
-    console.error("Vocal worker call error:", e);
-    return null;
-  }
 }
 
 // ===== HELPER: Check worker health =====
@@ -218,6 +102,173 @@ async function checkWorkerHealth(workerUrl: string): Promise<boolean> {
   }
 }
 
+// ===== HELPER: Generate a single segment via worker with retry =====
+async function generateSegmentWithRetry(
+  workerUrl: string,
+  payload: {
+    prompt: string; segment_name: string; duration: number;
+    tempo: number; genre: string; mood: string; seed: number;
+  },
+  maxRetries: number = 3,
+  timeoutMs: number = 300000,
+): Promise<ArrayBuffer> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+      const res = await fetch(`${workerUrl}/generate-segment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error(`Segment worker error (${res.status}):`, errText);
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 3000 * attempt));
+          continue;
+        }
+        throw new Error(`Segment generation failed after ${maxRetries} retries: ${errText}`);
+      }
+
+      return await res.arrayBuffer();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`Segment gen attempt ${attempt}/${maxRetries} error:`, msg);
+      if (attempt < maxRetries) {
+        // Retry with new seed on final retry
+        if (attempt === maxRetries - 1) {
+          payload.seed = Math.floor(Math.random() * 2 ** 31);
+        }
+        await new Promise(r => setTimeout(r, 3000 * attempt));
+        continue;
+      }
+      throw new Error(`Segment '${payload.segment_name}' failed after ${maxRetries} retries: ${msg}`);
+    }
+  }
+  throw new Error("Unreachable");
+}
+
+// ===== HELPER: Call worker for stitching =====
+async function callStitchWorker(
+  workerUrl: string,
+  segmentBuffers: ArrayBuffer[],
+  crossfadeSeconds: number,
+  targetDuration: number,
+): Promise<ArrayBuffer> {
+  const formData = new FormData();
+  for (let i = 0; i < segmentBuffers.length; i++) {
+    formData.append("segments", new Blob([segmentBuffers[i]], { type: "audio/wav" }), `segment_${i}.wav`);
+  }
+  formData.append("crossfade_seconds", String(crossfadeSeconds));
+  formData.append("target_duration", String(targetDuration));
+
+  const res = await fetch(`${workerUrl}/stitch`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Stitch failed: ${err}`);
+  }
+  return await res.arrayBuffer();
+}
+
+// ===== HELPER: Call worker for mastering =====
+async function callMasterWorker(
+  workerUrl: string,
+  audioBuffer: ArrayBuffer,
+): Promise<ArrayBuffer> {
+  const formData = new FormData();
+  formData.append("audio", new Blob([audioBuffer], { type: "audio/wav" }), "track.wav");
+  formData.append("target_lufs", "-14.0");
+  formData.append("stereo_width", "1.2");
+  formData.append("compression_ratio", "3.0");
+  formData.append("compression_threshold_db", "-18.0");
+
+  const res = await fetch(`${workerUrl}/master`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Mastering failed: ${err}`);
+  }
+  return await res.arrayBuffer();
+}
+
+// ===== HELPER: Call worker for vocal alignment =====
+async function callAlignVocalsWorker(
+  workerUrl: string,
+  instrumentalBuffer: ArrayBuffer,
+  vocalBuffer: ArrayBuffer,
+  tempo: number,
+): Promise<ArrayBuffer> {
+  const formData = new FormData();
+  formData.append("instrumental", new Blob([instrumentalBuffer], { type: "audio/wav" }), "instrumental.wav");
+  formData.append("vocals", new Blob([vocalBuffer], { type: "audio/wav" }), "vocals.wav");
+  formData.append("tempo", String(tempo));
+
+  const res = await fetch(`${workerUrl}/align-vocals`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Vocal alignment failed: ${err}`);
+  }
+  return await res.arrayBuffer();
+}
+
+// ===== HELPER: Generate vocals via Bark worker =====
+async function callVocalWorker(
+  workerUrl: string, text: string, voicePreset: string,
+  textTemp: number, waveformTemp: number, timeoutMs: number = 180000,
+): Promise<ArrayBuffer | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(`${workerUrl}/generate-vocals`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice_preset: voicePreset, text_temp: textTemp, waveform_temp: waveformTemp }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) { const e = await res.text(); console.error("Vocal worker error:", e); return null; }
+    return await res.arrayBuffer();
+  } catch (e) { console.error("Vocal call error:", e); return null; }
+}
+
+// ===== PARALLEL BATCH HELPER =====
+async function runParallel<T>(
+  tasks: (() => Promise<T>)[],
+  maxConcurrency: number,
+): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let nextIdx = 0;
+
+  async function worker() {
+    while (nextIdx < tasks.length) {
+      const idx = nextIdx++;
+      results[idx] = await tasks[idx]();
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(maxConcurrency, tasks.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
+// ===== MAIN PIPELINE =====
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -229,7 +280,7 @@ serve(async (req) => {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
   if (!MUSIC_WORKER_URL) {
-    return new Response(JSON.stringify({ error: "MUSIC_WORKER_URL not configured. Deploy the Python music worker and set the URL." }), {
+    return new Response(JSON.stringify({ error: "MUSIC_WORKER_URL not configured" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -239,7 +290,6 @@ serve(async (req) => {
     });
   }
 
-  // Verify worker is healthy before starting pipeline
   const workerHealthy = await checkWorkerHealth(MUSIC_WORKER_URL);
   if (!workerHealthy) {
     return new Response(JSON.stringify({ error: "Music generation worker unavailable. Check that the worker service is running." }), {
@@ -253,7 +303,7 @@ serve(async (req) => {
     const { trackId, creationId, input } = await req.json();
 
     // ================================================================
-    // STAGE 1 — INPUT FREEZE
+    // INPUT FREEZE
     // ================================================================
     const frozenInput = {
       musicPrompt: input.musicPrompt || "",
@@ -267,592 +317,357 @@ serve(async (req) => {
       vocalStyle: input.vocalStyle || "",
       vocalIntensity: input.vocalIntensity || 5,
       vocalEffects: input.vocalEffects || [],
-      frozenAt: new Date().toISOString(),
     };
 
     await supabase.from("tracks").update({ status: "processing", progress: 0 }).eq("id", trackId);
     await supabase.from("music_creations").update({ status: "processing", progress: 0 }).eq("id", creationId);
 
     const durationSec = frozenInput.durationSeconds;
+    const hasVocals = !!(frozenInput.lyrics && frozenInput.lyrics.trim().length > 0 && frozenInput.vocalStructure !== "Instrumental");
+    const estTotalSec = 60 + Math.ceil(durationSec / 30) * 40 + (hasVocals ? 50 : 0) + 30;
+    let etaRemaining = estTotalSec;
 
     // ================================================================
-    // STAGE 2 — SEMANTIC SENTIMENT ANALYSIS
+    // STEP 1 — ANALYZING PROMPT
     // ================================================================
-    // Estimate total time: ~10s per AI call (7 calls) + ~60s per segment + ~30s vocals + ~15s post
-    const totalSegments_est = Math.ceil(durationSec / 30);
-    const hasVocals_est = !!(frozenInput.lyrics && frozenInput.lyrics.trim().length > 0);
-    const totalEstSec = 70 + (totalSegments_est * 60) + (hasVocals_est ? 40 : 0) + 15;
-    let etaRemaining = totalEstSec;
+    await updateProgress(supabase, trackId, creationId, "Analyzing prompt", 0.02, etaRemaining);
 
-    await updateProgress(supabase, trackId, creationId, "Analyzing sentiment", 0.02, etaRemaining);
-
-    const sentiment: SentimentAnalysis = await callAI(
+    const sentiment = await callAI(
       LOVABLE_API_KEY,
-      "You are a music psychology and sentiment analysis expert. Analyze text for emotional and stylistic signals relevant to music production. Be precise with numeric ratings (1-10 scale).",
-      `Analyze the following music request for emotional and stylistic signals:
-
-Prompt: "${frozenInput.musicPrompt}"
-Genres: ${frozenInput.genres.join(", ") || "Not specified"}
-Lyrics: "${frozenInput.lyrics || "No lyrics"}"
-Artist Inspiration: "${frozenInput.artistInspiration || "None"}"
-Tempo: ${frozenInput.tempoBpm} BPM
-Vocal Structure: ${frozenInput.vocalStructure}
-Vocal Style: ${frozenInput.vocalStyle || "Not specified"}
-Vocal Intensity: ${frozenInput.vocalIntensity}/10
-
-Extract emotional polarity, energy intensity, darkness/brightness, aggression level, melodic complexity, and rhythmic density.`,
+      "You are a music psychology expert. Analyze text for emotional and stylistic signals relevant to music production.",
+      `Analyze this music request:\nPrompt: "${frozenInput.musicPrompt}"\nGenres: ${frozenInput.genres.join(", ") || "Not specified"}\nLyrics: "${frozenInput.lyrics || "None"}"\nArtist Inspiration: "${frozenInput.artistInspiration || "None"}"\nTempo: ${frozenInput.tempoBpm} BPM\nVocal Style: ${frozenInput.vocalStyle || "Instrumental"}\nMood analysis: extract emotion, energy, darkness, aggression, melodic complexity, rhythmic density.`,
       "extract_sentiment",
-      "Extract emotional and stylistic signals from the music description",
+      "Extract emotional and stylistic signals",
       {
-        emotionPolarity: { type: "string", description: "Primary emotion: e.g. dark, euphoric, melancholic, aggressive, ethereal, nostalgic" },
-        energyIntensity: { type: "number", description: "Energy level 1-10" },
-        darknessBrightness: { type: "number", description: "Darkness(-10) to brightness(10) spectrum" },
+        emotionPolarity: { type: "string", description: "Primary emotion e.g. dark, euphoric, melancholic" },
+        energyIntensity: { type: "number", description: "Energy 1-10" },
+        darknessBrightness: { type: "number", description: "Darkness(-10) to brightness(10)" },
         aggressionLevel: { type: "number", description: "Aggression 1-10" },
         melodicComplexity: { type: "number", description: "Melodic complexity 1-10" },
         rhythmicDensity: { type: "number", description: "Rhythmic density 1-10" },
       },
       ["emotionPolarity", "energyIntensity", "darknessBrightness", "aggressionLevel", "melodicComplexity", "rhythmicDensity"]
-    ) || {
-      emotionPolarity: "neutral", energyIntensity: 5, darknessBrightness: 0,
-      aggressionLevel: 3, melodicComplexity: 5, rhythmicDensity: 5,
-    };
+    ) || { emotionPolarity: "neutral", energyIntensity: 5, darknessBrightness: 0, aggressionLevel: 3, melodicComplexity: 5, rhythmicDensity: 5 };
 
     console.log(`[${trackId}] Sentiment:`, JSON.stringify(sentiment));
-
-    // ================================================================
-    // STAGE 3 — MUSICAL INTENT OBJECT
-    // ================================================================
     etaRemaining -= 10;
-    await updateProgress(supabase, trackId, creationId, "Building music intent", 0.06, etaRemaining);
-
-    const intentResult = await callAI(
-      LOVABLE_API_KEY,
-      `You are a music theory expert and producer. Convert sentiment analysis into precise musical parameters.
-The user has specified a FIXED tempo of ${frozenInput.tempoBpm} BPM — you MUST use this exact value.
-Vocal structure: ${frozenInput.vocalStructure}. Vocal style: ${frozenInput.vocalStyle || "instrumental"}. Vocal intensity: ${frozenInput.vocalIntensity}/10. Vocal effects: ${frozenInput.vocalEffects.join(", ") || "none"}.
-Sentiment context: emotion=${sentiment.emotionPolarity}, energy=${sentiment.energyIntensity}/10, darkness=${sentiment.darknessBrightness}, aggression=${sentiment.aggressionLevel}/10, melodicComplexity=${sentiment.melodicComplexity}/10, rhythmicDensity=${sentiment.rhythmicDensity}/10.`,
-      `Based on this music request, create a complete musical intent object:
-
-Prompt: "${frozenInput.musicPrompt}"
-Genres: ${frozenInput.genres.join(", ") || "General"}
-Artist Inspiration: "${frozenInput.artistInspiration || "None"}"
-FIXED Tempo: ${frozenInput.tempoBpm} BPM (use this exact value)
-
-Define musical key, scale, instruments, vocal style, chord progression, bassline style, melody character, rhythm style, and genre identity. The tempo MUST be ${frozenInput.tempoBpm}.`,
-      "create_music_intent",
-      "Create structured musical intent from analysis",
-      {
-        tempo: { type: "number", description: "BPM (60-200)" },
-        scale: { type: "string", description: "e.g. minor, major, dorian, phrygian, harmonic minor" },
-        key: { type: "string", description: "Musical key e.g. F#, Cm, Ab" },
-        instrumentPalette: { type: "array", items: { type: "string" }, description: "List of instruments to use" },
-        vocalStyle: { type: "string", description: "Vocal style description e.g. dark female, robotic, rap, choir" },
-        genreIdentity: { type: "string", description: "Core genre identity string" },
-        rhythmStyle: { type: "string", description: "e.g. four-on-the-floor, syncopated, breakbeat, trap" },
-        chordProgression: { type: "array", items: { type: "string" }, description: "Chord symbols e.g. [F#m, D, E, C#]" },
-        basslineStyle: { type: "string", description: "Bassline character e.g. rolling, staccato, sub-bass, acid" },
-        melodyCharacter: { type: "string", description: "Melody description e.g. arpeggiated, soaring, minimal, call-response" },
-      },
-      ["tempo", "scale", "key", "instrumentPalette", "vocalStyle", "genreIdentity", "rhythmStyle", "chordProgression", "basslineStyle", "melodyCharacter"]
-    );
-
-    const musicIntent: MusicIntent = intentResult ? {
-      tempo: frozenInput.tempoBpm, // Always use user-specified BPM
-      scale: intentResult.scale,
-      key: intentResult.key,
-      energyCurve: [],
-      instrumentPalette: intentResult.instrumentPalette,
-      vocalStyle: frozenInput.vocalStyle || intentResult.vocalStyle || "instrumental",
-      genreIdentity: intentResult.genreIdentity,
-      rhythmStyle: intentResult.rhythmStyle,
-      chordProgression: intentResult.chordProgression,
-      basslineStyle: intentResult.basslineStyle,
-      melodyCharacter: intentResult.melodyCharacter,
-    } : {
-      tempo: frozenInput.tempoBpm, scale: "minor", key: "Am", energyCurve: [],
-      instrumentPalette: ["synth", "drums", "bass", "pad"],
-      vocalStyle: frozenInput.vocalStyle || "instrumental",
-      genreIdentity: frozenInput.genres[0] || "electronic",
-      rhythmStyle: "four-on-the-floor", chordProgression: ["Am", "F", "C", "G"],
-      basslineStyle: "sub-bass", melodyCharacter: "arpeggiated",
-    };
-
-    console.log(`[${trackId}] Intent:`, JSON.stringify(musicIntent));
 
     // ================================================================
-    // STAGE 4 — SONG STRUCTURE PLANNING
+    // STEP 2 — PLANNING SONG STRUCTURE (Music Planner)
     // ================================================================
-    etaRemaining -= 10;
-    await updateProgress(supabase, trackId, creationId, "Planning song structure", 0.10, etaRemaining);
+    await updateProgress(supabase, trackId, creationId, "Planning song structure", 0.06, etaRemaining);
 
-    const structureResult = await callAI(
+    const planResult = await callAI(
       LOVABLE_API_KEY,
-      `You are a professional song arranger. Plan song structure for a ${durationSec}-second track.
-Musical context: ${musicIntent.genreIdentity}, ${musicIntent.tempo} BPM, ${musicIntent.key} ${musicIntent.scale}.
-Total duration: ${durationSec} seconds. Sections must cover the entire duration with no gaps or overlaps.
-Beat grid: secondsPerBeat = ${(60 / musicIntent.tempo).toFixed(4)}. All section boundaries should align to beat positions.
-Vocal structure requested by user: "${frozenInput.vocalStructure}". You MUST follow this structure. Map vocal sections (Verse, Chorus, Bridge, Drop, etc.) to time ranges.`,
-      `Plan the structure for a ${durationSec}-second ${musicIntent.genreIdentity} track at ${musicIntent.tempo} BPM.
-The user has requested this vocal structure: "${frozenInput.vocalStructure}".
-You MUST map these sections to time ranges. If the structure says "Verse – Chorus – Verse – Chorus", create those exact sections in order.
-The song should feel like a real composition with proper arrangement.
-Return sections with names, time boundaries (in seconds), energy levels (0-1), density (0-1), instruments active, and a brief description of each section's musical role.
-Make sure sections perfectly tile from 0 to ${durationSec} seconds. Section boundaries should align with beat positions (beat duration = ${(60 / musicIntent.tempo).toFixed(4)}s).`,
-      "plan_structure",
-      "Plan song sections with timing and parameters",
+      `You are a professional song structure planner. Plan a song with segments that sum to EXACTLY ${durationSec} seconds total.
+Each segment should be a distinct musical section. Use varied structures — never produce identical plans.
+Consider: genre=${frozenInput.genres.join(", ") || "electronic"}, tempo=${frozenInput.tempoBpm}BPM, mood=${sentiment.emotionPolarity}, energy=${sentiment.energyIntensity}/10.
+Vocal structure requested: "${frozenInput.vocalStructure}".
+IMPORTANT: segment durations MUST sum to exactly ${durationSec} seconds. Each segment should be between 10-60 seconds.
+Add slight randomness to durations to ensure uniqueness across generations.`,
+      `Plan the structure for a ${durationSec}-second ${frozenInput.genres[0] || "electronic"} track at ${frozenInput.tempoBpm} BPM.
+The user wants vocal structure: "${frozenInput.vocalStructure}".
+Mood: ${sentiment.emotionPolarity}. Energy: ${sentiment.energyIntensity}/10. Aggression: ${sentiment.aggressionLevel}/10.
+Artist inspiration: "${frozenInput.artistInspiration || "None"}".
+
+Return an array of segments with name, duration (seconds), and a vivid description of what happens musically in that section.
+Durations MUST sum to exactly ${durationSec}.`,
+      "plan_song_structure",
+      "Generate structured song plan with named segments",
       {
-        sections: {
+        segments: {
           type: "array",
           items: {
             type: "object",
             properties: {
-              name: { type: "string" },
-              startSec: { type: "number" },
-              endSec: { type: "number" },
-              energy: { type: "number" },
-              density: { type: "number" },
-              instruments: { type: "array", items: { type: "string" } },
-              description: { type: "string" },
+              name: { type: "string", description: "Section name e.g. intro, build, drop, breakdown, outro" },
+              duration: { type: "number", description: "Duration in seconds" },
+              description: { type: "string", description: "What happens musically in this section" },
             },
-            required: ["name", "startSec", "endSec", "energy", "density", "instruments", "description"],
+            required: ["name", "duration", "description"],
           },
         },
       },
-      ["sections"]
+      ["segments"]
     );
 
-    let sections: SongSection[] = [];
-    if (structureResult?.sections?.length > 0) {
-      sections = structureResult.sections;
-    } else {
-      const introDur = Math.min(30, Math.floor(durationSec * 0.1));
-      const outroDur = Math.min(30, Math.floor(durationSec * 0.1));
-      const mid = durationSec - introDur - outroDur;
-      const buildEnd = introDur + Math.floor(mid * 0.35);
-      const peakEnd = introDur + Math.floor(mid * 0.75);
-      sections = [
-        { name: "intro", startSec: 0, endSec: introDur, energy: 0.3, density: 0.3, instruments: ["pad", "atmosphere"], description: "Atmospheric opening" },
-        { name: "build", startSec: introDur, endSec: buildEnd, energy: 0.5, density: 0.5, instruments: musicIntent.instrumentPalette.slice(0, 3), description: "Building tension" },
-        { name: "drop", startSec: buildEnd, endSec: peakEnd, energy: 0.9, density: 0.9, instruments: musicIntent.instrumentPalette, description: "Peak energy" },
-        { name: "breakdown", startSec: peakEnd, endSec: durationSec - outroDur, energy: 0.5, density: 0.4, instruments: ["pad", "vocal", "percussion"], description: "Emotional breakdown" },
-        { name: "outro", startSec: durationSec - outroDur, endSec: durationSec, energy: 0.2, density: 0.2, instruments: ["pad", "atmosphere"], description: "Fading resolution" },
-      ];
-    }
-
-    musicIntent.energyCurve = sections.map(s => s.energy);
-    console.log(`[${trackId}] Structure: ${sections.map(s => `${s.name}(${s.startSec}-${s.endSec}s)`).join(" → ")}`);
-
-    // ================================================================
-    // STAGE 5 — HARMONY AND MELODY GENERATION
-    // ================================================================
-    etaRemaining -= 10;
-    await updateProgress(supabase, trackId, creationId, "Generating harmony & melody", 0.14, etaRemaining);
-
-    const harmonyResult: HarmonyData = await callAI(
-      LOVABLE_API_KEY,
-      `You are a music theory and composition expert. Generate harmonic and melodic material for a ${musicIntent.genreIdentity} track in ${musicIntent.key} ${musicIntent.scale} at ${musicIntent.tempo} BPM.`,
-      `Generate musical material for this track:
-Genre: ${musicIntent.genreIdentity}
-Key: ${musicIntent.key} ${musicIntent.scale}
-Tempo: ${musicIntent.tempo} BPM
-Mood: ${sentiment.emotionPolarity}
-Instruments: ${musicIntent.instrumentPalette.join(", ")}
-
-Create a chord progression, bassline pattern description, main melody motifs, and counter melodies. All must follow the key and scale.`,
-      "generate_harmony",
-      "Generate harmonic and melodic material",
-      {
-        chordProgression: { type: "array", items: { type: "string" }, description: "Chord symbols in order" },
-        basslinePattern: { type: "string", description: "Bassline rhythmic and melodic pattern description" },
-        melodyMotifs: { type: "array", items: { type: "string" }, description: "Description of main melody phrases/motifs" },
-        counterMelodies: { type: "array", items: { type: "string" }, description: "Counter melody descriptions" },
-      },
-      ["chordProgression", "basslinePattern", "melodyMotifs", "counterMelodies"]
-    ) || {
-      chordProgression: musicIntent.chordProgression,
-      basslinePattern: `${musicIntent.basslineStyle} following root notes`,
-      melodyMotifs: [`${musicIntent.melodyCharacter} phrase in ${musicIntent.key}`],
-      counterMelodies: ["Harmonic accompaniment pad"],
-    };
-
-    console.log(`[${trackId}] Harmony: ${harmonyResult.chordProgression.join(" → ")}`);
-
-    // ================================================================
-    // STAGE 6 — RHYTHM GENERATION
-    // ================================================================
-    etaRemaining -= 10;
-    await updateProgress(supabase, trackId, creationId, "Designing rhythm patterns", 0.17, etaRemaining);
-
-    const rhythmResult: RhythmData = await callAI(
-      LOVABLE_API_KEY,
-      `You are a rhythm programmer and drum pattern designer. Create rhythm patterns for ${musicIntent.genreIdentity} at ${musicIntent.tempo} BPM.`,
-      `Design rhythm patterns for:
-Genre: ${musicIntent.genreIdentity}
-Tempo: ${musicIntent.tempo} BPM
-Rhythm style: ${musicIntent.rhythmStyle}
-Rhythmic density: ${sentiment.rhythmicDensity}/10
-Aggression: ${sentiment.aggressionLevel}/10
-
-Describe kick, snare, hi-hat patterns and percussion layers. Use musical terminology.`,
-      "generate_rhythm",
-      "Generate rhythmic patterns for the track",
-      {
-        kickPattern: { type: "string", description: "Kick drum pattern description" },
-        snarePattern: { type: "string", description: "Snare/clap pattern description" },
-        hihatPattern: { type: "string", description: "Hi-hat pattern description" },
-        percussionLayers: { type: "array", items: { type: "string" }, description: "Additional percussion elements" },
-        timeSignature: { type: "string", description: "Time signature e.g. 4/4, 3/4, 6/8" },
-      },
-      ["kickPattern", "snarePattern", "hihatPattern", "percussionLayers", "timeSignature"]
-    ) || {
-      kickPattern: "Four-on-the-floor", snarePattern: "Backbeat on 2 and 4",
-      hihatPattern: "Eighth notes", percussionLayers: ["Ride cymbal", "Shaker"],
-      timeSignature: "4/4",
-    };
-
-    console.log(`[${trackId}] Rhythm: ${rhythmResult.timeSignature}, kick=${rhythmResult.kickPattern}`);
-
-    // ================================================================
-    // STAGE 7 — VOCAL SYNTHESIS PLANNING
-    // ================================================================
-    etaRemaining -= 10;
-    await updateProgress(supabase, trackId, creationId, "Planning vocal synthesis", 0.20, etaRemaining);
-
-    const hasVocals = !!(frozenInput.lyrics && frozenInput.lyrics.trim().length > 0);
-    let vocalPlan: VocalPlan = {
-      hasVocals,
-      style: musicIntent.vocalStyle,
-      phonemeMapping: "",
-      melodicContour: "",
-      historyPrompt: "v2/en_speaker_6", // Bark default voice
-    };
-
-    if (hasVocals) {
-      const vocalResult = await callAI(
-        LOVABLE_API_KEY,
-        `You are a vocal producer and phonetics expert. Plan vocal performance for a ${musicIntent.genreIdentity} track.
-Vocal style: ${frozenInput.vocalStyle || musicIntent.vocalStyle}. Vocal intensity: ${frozenInput.vocalIntensity}/10 (1=whisper, 10=powerful).
-Vocal effects to apply: ${frozenInput.vocalEffects.join(", ") || "none"}.
-Vocal structure: ${frozenInput.vocalStructure}.`,
-        `Plan vocal performance for these lyrics in a ${musicIntent.genreIdentity} track:
-Lyrics: "${frozenInput.lyrics}"
-Key: ${musicIntent.key} ${musicIntent.scale}
-Tempo: ${musicIntent.tempo} BPM (beat duration: ${(60 / musicIntent.tempo).toFixed(4)}s)
-Vocal style requested: ${frozenInput.vocalStyle || musicIntent.vocalStyle}
-Vocal intensity: ${frozenInput.vocalIntensity}/10 (1=soft whisper, 10=powerful performance)
-Vocal effects: ${frozenInput.vocalEffects.join(", ") || "none"}
-Vocal structure: ${frozenInput.vocalStructure}
-Languages: ${frozenInput.vocalLanguages.join(", ") || "English"}
-
-Map the lyrics to phoneme timing aligned with the beat grid (${musicIntent.tempo} BPM). Each syllable must land on a beat or sub-beat position.
-Describe the melodic contour, and recommend a vocal performance approach that matches intensity ${frozenInput.vocalIntensity}/10.
-Choose one of these Bark voice presets: v2/en_speaker_0, v2/en_speaker_1, v2/en_speaker_2, v2/en_speaker_3, v2/en_speaker_4, v2/en_speaker_5, v2/en_speaker_6, v2/en_speaker_7, v2/en_speaker_8, v2/en_speaker_9
-For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speaker_0, v2/ko_speaker_0, v2/zh_speaker_0`,
-        "plan_vocals",
-        "Plan vocal synthesis parameters",
-        {
-          phonemeMapping: { type: "string", description: "Lyrics broken into syllable timing groups with beat alignment" },
-          melodicContour: { type: "string", description: "Description of the melody the vocals follow" },
-          performanceStyle: { type: "string", description: "How the vocals should be delivered" },
-          historyPrompt: { type: "string", description: "Bark voice preset identifier e.g. v2/en_speaker_6" },
-        },
-        ["phonemeMapping", "melodicContour", "performanceStyle", "historyPrompt"]
-      );
-
-      if (vocalResult) {
-        vocalPlan.phonemeMapping = vocalResult.phonemeMapping;
-        vocalPlan.melodicContour = vocalResult.melodicContour;
-        vocalPlan.style = vocalResult.performanceStyle || musicIntent.vocalStyle;
-        vocalPlan.historyPrompt = vocalResult.historyPrompt || "v2/en_speaker_6";
+    let songPlan: SongPlan;
+    if (planResult?.segments?.length > 0) {
+      // Validate and fix total duration
+      const totalPlanned = planResult.segments.reduce((s: number, seg: any) => s + seg.duration, 0);
+      if (totalPlanned !== durationSec) {
+        // Adjust last segment to make total exact
+        const diff = durationSec - totalPlanned;
+        planResult.segments[planResult.segments.length - 1].duration += diff;
       }
+      songPlan = { segments: planResult.segments };
+    } else {
+      // Fallback plan
+      const intro = Math.min(20, Math.floor(durationSec * 0.1));
+      const outro = Math.min(20, Math.floor(durationSec * 0.1));
+      const mid = durationSec - intro - outro;
+      const build = Math.floor(mid * 0.3);
+      const drop = Math.floor(mid * 0.3);
+      const breakdown = mid - build - drop;
+      songPlan = {
+        segments: [
+          { name: "intro", duration: intro, description: "Atmospheric opening, ambient textures building anticipation" },
+          { name: "build", duration: build, description: "Rising energy with layered percussion and synths" },
+          { name: "drop", duration: drop, description: "Full energy peak with all instruments driving hard" },
+          { name: "breakdown", duration: breakdown, description: "Emotional break, stripped back to melodic elements" },
+          { name: "outro", duration: outro, description: "Gradual fade with reverb tails and ambient decay" },
+        ],
+      };
     }
 
-    console.log(`[${trackId}] Vocals: hasVocals=${hasVocals}, style=${vocalPlan.style}, barkVoice=${vocalPlan.historyPrompt}`);
-
-    // ================================================================
-    // STAGE 8 — INSTRUMENT SYNTHESIS DESCRIPTIONS
-    // ================================================================
+    console.log(`[${trackId}] Plan: ${songPlan.segments.map(s => `${s.name}(${s.duration}s)`).join(" → ")}`);
     etaRemaining -= 10;
-    await updateProgress(supabase, trackId, creationId, "Synthesizing instruments", 0.23, etaRemaining);
-
-    const instrumentDescriptions = sections.map(section => {
-      const activeInstruments = section.instruments.length > 0
-        ? section.instruments
-        : musicIntent.instrumentPalette.filter(() => Math.random() < section.density);
-
-      return {
-        section: section.name,
-        instruments: activeInstruments,
-        description: `${section.description}. Instruments: ${activeInstruments.join(", ")}. Energy: ${Math.round(section.energy * 100)}%. Density: ${Math.round(section.density * 100)}%.`,
-      };
-    });
 
     // ================================================================
-    // STAGE 9 + 10 — INSTRUMENTAL SEGMENT GENERATION (MusicGen via Replicate)
+    // STEP 3 — GENERATING SEGMENTS (parallel, max 3 workers)
     // ================================================================
-    const SEGMENT_DURATION = 30; // MusicGen max ~30s
-    const totalSegments = Math.ceil(durationSec / SEGMENT_DURATION);
-
+    const totalSegments = songPlan.segments.length;
     await supabase.from("tracks").update({ total_segments: totalSegments }).eq("id", trackId);
 
-    // Create segment records
+    // Create segment DB records
     for (let i = 0; i < totalSegments; i++) {
       await supabase.from("segments").insert({
         track_id: trackId,
         segment_index: i,
-        duration_seconds: Math.min(SEGMENT_DURATION, durationSec - i * SEGMENT_DURATION),
+        duration_seconds: songPlan.segments[i].duration,
         status: "pending",
       });
     }
 
-    const segmentBuffers: ArrayBuffer[] = [];
-    const segProgressStart = 0.25;
-    const segProgressEnd = hasVocals ? 0.65 : 0.85; // Leave room for vocal generation if needed
+    const MAX_PARALLEL = 3;
+    const segProgressStart = 0.10;
+    const segProgressEnd = hasVocals ? 0.55 : 0.75;
+    let completedSegments = 0;
 
-    for (let segIdx = 0; segIdx < totalSegments; segIdx++) {
-      const segDuration = Math.min(SEGMENT_DURATION, durationSec - segIdx * SEGMENT_DURATION);
-      const segStartSec = segIdx * SEGMENT_DURATION;
-      const segMidpoint = segStartSec + segDuration / 2;
+    // Build generation tasks
+    const segmentTasks = songPlan.segments.map((seg, idx) => {
+      return async (): Promise<ArrayBuffer> => {
+        const seed = Math.floor(Math.random() * 2 ** 31);
+        const prompt = [
+          frozenInput.musicPrompt,
+          `${frozenInput.genres.join(", ") || "electronic"} music at ${frozenInput.tempoBpm} BPM.`,
+          `Section: ${seg.name} — ${seg.description}.`,
+          `Mood: ${sentiment.emotionPolarity}. Energy: ${sentiment.energyIntensity}/10.`,
+          frozenInput.artistInspiration ? `Influenced by: ${frozenInput.artistInspiration}.` : "",
+          idx > 0 ? "Continue seamlessly from the previous section." : "Begin the track with a clear opening.",
+        ].filter(Boolean).join(" ");
 
-      const currentSection = sections.find(s => segMidpoint >= s.startSec && segMidpoint < s.endSec) || sections[sections.length - 1];
-      const sectionInstruments = instrumentDescriptions.find(d => d.section === currentSection.name);
+        await updateProgress(
+          supabase, trackId, creationId,
+          `Generating segment ${idx + 1} of ${totalSegments} (${seg.name})`,
+          segProgressStart + (completedSegments / totalSegments) * (segProgressEnd - segProgressStart),
+          Math.max(0, (totalSegments - completedSegments) * 40 + (hasVocals ? 50 : 0) + 30)
+        );
 
-      // Build rich MusicGen prompt with beat grid
-      const secondsPerBeat = 60 / musicIntent.tempo;
-      const segPrompt = [
-        `${musicIntent.genreIdentity} music in ${musicIntent.key} ${musicIntent.scale} at exactly ${musicIntent.tempo} BPM (beat every ${secondsPerBeat.toFixed(3)}s).`,
-        frozenInput.musicPrompt,
-        `Section: ${currentSection.name} — ${currentSection.description}.`,
-        `Active instruments: ${(sectionInstruments?.instruments || musicIntent.instrumentPalette).join(", ")}.`,
-        `Energy level: ${Math.round(currentSection.energy * 100)}%. Density: ${Math.round(currentSection.density * 100)}%.`,
-        `Chord progression: ${harmonyResult.chordProgression.join(" → ")}. Bassline: ${harmonyResult.basslinePattern}.`,
-        `${rhythmResult.timeSignature} time. Kick: ${rhythmResult.kickPattern}. Hi-hats: ${rhythmResult.hihatPattern}.`,
-        `Melody: ${harmonyResult.melodyMotifs[0] || musicIntent.melodyCharacter}.`,
-        `Mood: ${sentiment.emotionPolarity}. Aggression: ${sentiment.aggressionLevel}/10.`,
-        `All drums, bass, and melodies MUST lock to ${musicIntent.tempo} BPM beat grid.`,
-        segIdx > 0 ? "Continue seamlessly from the previous section, maintaining musical continuity." : "Begin the track with a clear opening.",
-        frozenInput.artistInspiration ? `Influenced by: ${frozenInput.artistInspiration}.` : "",
-      ].filter(Boolean).join(" ");
-
-      const segEta = Math.max(0, (totalSegments - segIdx) * 60 + (hasVocals ? 40 : 0) + 15);
-      await updateProgress(
-        supabase, trackId, creationId,
-        `Generating segment ${segIdx + 1} of ${totalSegments}`,
-        segProgressStart + (segIdx / totalSegments) * (segProgressEnd - segProgressStart),
-        segEta
-      );
-
-      // Generate with MusicGen via Python worker (with retry)
-      let audioBuffer: ArrayBuffer | null = null;
-      let retries = 0;
-      const MAX_RETRIES = 3;
-
-      while (retries < MAX_RETRIES && !audioBuffer) {
-        try {
-          console.log(`[${trackId}] MusicGen worker segment ${segIdx + 1}/${totalSegments} (attempt ${retries + 1})`);
-
-          // Build continuation context from previously stored segment
-          let continuationUrl: string | undefined;
-          let continuationStart: number | undefined;
-
-          if (segIdx > 0 && segmentBuffers.length > 0) {
-            const prevSegPath = `tracks/${trackId}/segment_${segIdx - 1}.wav`;
-            const { data: prevUrl } = supabase.storage.from("music-files").getPublicUrl(prevSegPath);
-            if (prevUrl?.publicUrl) {
-              continuationUrl = prevUrl.publicUrl;
-              continuationStart = Math.max(0, SEGMENT_DURATION - 10); // Last 10s for context
-            }
-          }
-
-          audioBuffer = await callMusicWorker(
-            MUSIC_WORKER_URL,
-            segPrompt,
-            segDuration,
-            continuationUrl,
-            continuationStart,
-            musicIntent.tempo,
-            300000
-          );
-
-          if (!audioBuffer) {
-            retries++;
-            console.error(`[${trackId}] Music worker returned no audio for segment ${segIdx + 1}, retry ${retries}/${MAX_RETRIES}`);
-            if (retries < MAX_RETRIES) await new Promise(r => setTimeout(r, 3000 * retries));
-          }
-        } catch (e) {
-          const errMsg = e instanceof Error ? e.message : String(e);
-          console.error(`[${trackId}] MusicGen worker error (segment ${segIdx + 1}):`, { segmentIndex: segIdx, prompt: segPrompt.substring(0, 100), errorMessage: errMsg });
-          retries++;
-          if (retries < MAX_RETRIES) await new Promise(r => setTimeout(r, 3000 * retries));
-        }
-      }
-
-      if (!audioBuffer) {
-        const errorMsg = `Music generation worker failed for segment ${segIdx + 1}/${totalSegments} after ${MAX_RETRIES} retries. Ensure the worker is running at ${MUSIC_WORKER_URL}`;
-        console.error(`[${trackId}] ${errorMsg}`);
-        await supabase.from("tracks").update({ status: "failed", error_message: errorMsg }).eq("id", trackId);
-        await supabase.from("music_creations").update({ status: "failed" }).eq("id", creationId);
-        return new Response(JSON.stringify({ error: errorMsg }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        const buffer = await generateSegmentWithRetry(MUSIC_WORKER_URL!, {
+          prompt,
+          segment_name: seg.name,
+          duration: seg.duration,
+          tempo: frozenInput.tempoBpm,
+          genre: frozenInput.genres[0] || "electronic",
+          mood: sentiment.emotionPolarity,
+          seed,
         });
-      }
 
-      if (!audioBuffer) {
-        const errorMsg = `Failed to generate instrumental segment ${segIdx + 1}/${totalSegments} after ${MAX_RETRIES} retries (MusicGen)`;
-        console.error(`[${trackId}] ${errorMsg}`);
-        await supabase.from("tracks").update({ status: "failed", error_message: errorMsg }).eq("id", trackId);
-        await supabase.from("music_creations").update({ status: "failed" }).eq("id", creationId);
-        return new Response(JSON.stringify({ error: errorMsg }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        // Save segment to storage
+        const segPath = `tracks/${trackId}/segment_${idx}.wav`;
+        await supabase.storage.from("music-files").upload(segPath, new Uint8Array(buffer), {
+          contentType: "audio/wav", upsert: true,
         });
-      }
 
-      // Save segment to storage
-      const segPath = `tracks/${trackId}/segment_${segIdx}.wav`;
-      await supabase.storage.from("music-files").upload(segPath, new Uint8Array(audioBuffer), {
-        contentType: "audio/wav", upsert: true,
+        await supabase.from("segments").update({
+          storage_path: segPath, status: "completed",
+        }).eq("track_id", trackId).eq("segment_index", idx);
+
+        completedSegments++;
+        await supabase.from("tracks").update({
+          completed_segments: completedSegments,
+          progress: segProgressStart + (completedSegments / totalSegments) * (segProgressEnd - segProgressStart),
+        }).eq("id", trackId);
+
+        console.log(`[${trackId}] ✅ Segment ${idx + 1}/${totalSegments} (${seg.name}) complete (${buffer.byteLength} bytes)`);
+        return buffer;
+      };
+    });
+
+    let segmentBuffers: ArrayBuffer[];
+    try {
+      segmentBuffers = await runParallel(segmentTasks, MAX_PARALLEL);
+    } catch (e) {
+      const errorMsg = `Music generation worker unavailable: ${e instanceof Error ? e.message : String(e)}`;
+      console.error(`[${trackId}] ${errorMsg}`);
+      await supabase.from("tracks").update({ status: "failed", error_message: errorMsg }).eq("id", trackId);
+      await supabase.from("music_creations").update({ status: "failed" }).eq("id", creationId);
+      return new Response(JSON.stringify({ error: errorMsg }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-
-      await supabase.from("segments").update({
-        storage_path: segPath, status: "completed",
-      }).eq("track_id", trackId).eq("segment_index", segIdx);
-
-      segmentBuffers.push(audioBuffer);
-
-      await supabase.from("tracks").update({
-        completed_segments: segIdx + 1,
-        progress: segProgressStart + ((segIdx + 1) / totalSegments) * (segProgressEnd - segProgressStart),
-      }).eq("id", trackId);
-
-      console.log(`[${trackId}] ✅ Segment ${segIdx + 1}/${totalSegments} complete (${audioBuffer.byteLength} bytes)`);
     }
 
     // ================================================================
-    // STAGE 7b — VOCAL GENERATION (Bark via Python Worker)
+    // STEP 4 — SYNTHESIZING VOCALS (optional)
     // ================================================================
     let vocalBuffer: ArrayBuffer | null = null;
+    let generatedLyrics = "";
 
     if (hasVocals) {
-      await updateProgress(supabase, trackId, creationId, "Generating vocals", 0.70, 55);
-      console.log(`[${trackId}] Generating vocals via worker...`);
+      await updateProgress(supabase, trackId, creationId, "Synthesizing vocals", 0.60, 50);
 
-      // Split lyrics into chunks for Bark (it handles ~15s per generation)
+      // Generate lyrics mapping if needed
+      const lyricsResult = await callAI(
+        LOVABLE_API_KEY,
+        `You are a lyricist. Map lyrics to song segments for vocal performance.`,
+        `Map these lyrics to the song segments for a ${frozenInput.genres[0] || "music"} track:
+Lyrics: "${frozenInput.lyrics}"
+Segments: ${songPlan.segments.map(s => `${s.name} (${s.duration}s)`).join(", ")}
+Vocal structure: ${frozenInput.vocalStructure}
+
+Distribute the lyrics across the appropriate vocal sections. Return the full text and per-segment breakdown.`,
+        "map_lyrics",
+        "Map lyrics to song segments",
+        {
+          fullText: { type: "string", description: "Complete lyrics text" },
+          segmentLyrics: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                segment: { type: "string" },
+                lyrics: { type: "string" },
+              },
+              required: ["segment", "lyrics"],
+            },
+          },
+        },
+        ["fullText", "segmentLyrics"]
+      );
+
+      generatedLyrics = lyricsResult?.fullText || frozenInput.lyrics;
+
+      // Generate vocals from lyrics chunks
       const lyricsLines = frozenInput.lyrics.split(/[.\n]+/).filter((l: string) => l.trim().length > 0);
       const vocalChunks: ArrayBuffer[] = [];
+      const textTemp = 0.4 + (frozenInput.vocalIntensity / 10) * 0.6;
+      const waveformTemp = 0.4 + (frozenInput.vocalIntensity / 10) * 0.5;
+
+      // Determine bark voice preset
+      let voicePreset = "v2/en_speaker_6";
+      if (frozenInput.vocalLanguages.includes("Japanese")) voicePreset = "v2/ja_speaker_0";
+      else if (frozenInput.vocalLanguages.includes("French")) voicePreset = "v2/fr_speaker_0";
+      else if (frozenInput.vocalLanguages.includes("German")) voicePreset = "v2/de_speaker_0";
+      else if (frozenInput.vocalLanguages.includes("Korean")) voicePreset = "v2/ko_speaker_0";
 
       for (let i = 0; i < lyricsLines.length; i++) {
         const line = lyricsLines[i].trim();
         if (!line) continue;
 
-        console.log(`[${trackId}] Vocal chunk ${i + 1}/${lyricsLines.length}: "${line.substring(0, 50)}..."`);
-
-        // Map vocal intensity (1-10) to Bark temperature params
-        const textTemp = 0.4 + (frozenInput.vocalIntensity / 10) * 0.6;
-        const waveformTemp = 0.4 + (frozenInput.vocalIntensity / 10) * 0.5;
-
-        const vocalText = `[${frozenInput.vocalStyle || vocalPlan.style}] ${line}`;
-
-        let retries = 0;
-        let chunkBuffer: ArrayBuffer | null = null;
-
-        while (retries < 3 && !chunkBuffer) {
-          chunkBuffer = await callVocalWorker(
-            MUSIC_WORKER_URL,
-            vocalText,
-            vocalPlan.historyPrompt,
-            textTemp,
-            waveformTemp,
-            180000
-          );
-          if (!chunkBuffer) {
-            retries++;
-            console.error(`[${trackId}] Vocal worker failed for chunk ${i + 1}, retry ${retries}/3`);
-            if (retries < 3) await new Promise(r => setTimeout(r, 2000 * retries));
-          }
-        }
-
-        if (chunkBuffer) {
-          vocalChunks.push(chunkBuffer);
-        }
-
         await updateProgress(
           supabase, trackId, creationId,
-          `Generating vocal ${i + 1} of ${lyricsLines.length}`,
-          0.70 + ((i + 1) / lyricsLines.length) * 0.10,
-          Math.max(0, 15 + (lyricsLines.length - i - 1) * 8)
+          `Synthesizing vocals (${i + 1}/${lyricsLines.length})`,
+          0.60 + ((i + 1) / lyricsLines.length) * 0.10,
+          Math.max(0, 20 + (lyricsLines.length - i - 1) * 8)
         );
+
+        const vocalText = `[${frozenInput.vocalStyle || "singing"}] ${line}`;
+        let chunkBuffer: ArrayBuffer | null = null;
+        for (let retry = 0; retry < 3 && !chunkBuffer; retry++) {
+          chunkBuffer = await callVocalWorker(MUSIC_WORKER_URL, vocalText, voicePreset, textTemp, waveformTemp);
+          if (!chunkBuffer && retry < 2) await new Promise(r => setTimeout(r, 2000 * (retry + 1)));
+        }
+        if (chunkBuffer) vocalChunks.push(chunkBuffer);
       }
 
-      // Concatenate vocal chunks
       if (vocalChunks.length > 0) {
-        let totalVocalSize = 0;
-        for (const buf of vocalChunks) totalVocalSize += buf.byteLength;
-        const vocalFull = new Uint8Array(totalVocalSize);
-        let vOffset = 0;
+        let totalSize = 0;
+        for (const buf of vocalChunks) totalSize += buf.byteLength;
+        const combined = new Uint8Array(totalSize);
+        let off = 0;
         for (const buf of vocalChunks) {
-          vocalFull.set(new Uint8Array(buf), vOffset);
-          vOffset += buf.byteLength;
+          combined.set(new Uint8Array(buf), off);
+          off += buf.byteLength;
         }
-        vocalBuffer = vocalFull.buffer;
+        vocalBuffer = combined.buffer;
 
-        // Save vocals
         const vocalPath = `tracks/${trackId}/vocals.wav`;
-        await supabase.storage.from("music-files").upload(vocalPath, vocalFull, {
+        await supabase.storage.from("music-files").upload(vocalPath, combined, {
           contentType: "audio/wav", upsert: true,
         });
-        console.log(`[${trackId}] ✅ Vocals generated (${totalVocalSize} bytes, ${vocalChunks.length} chunks)`);
+        console.log(`[${trackId}] ✅ Vocals generated (${totalSize} bytes)`);
       }
     }
 
     // ================================================================
-    // STAGE 9 — SONG STITCHING (concatenate instrumental segments)
+    // STEP 5 — STITCHING AUDIO
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Stitching segments", 0.82, 15);
+    await updateProgress(supabase, trackId, creationId, "Stitching audio", 0.75, 25);
 
-    let totalSize = 0;
-    for (const buf of segmentBuffers) totalSize += buf.byteLength;
-
-    const instrumentalBuffer = new Uint8Array(totalSize);
-    let offset = 0;
-    for (const buf of segmentBuffers) {
-      instrumentalBuffer.set(new Uint8Array(buf), offset);
-      offset += buf.byteLength;
+    let stitchedBuffer: ArrayBuffer;
+    try {
+      stitchedBuffer = await callStitchWorker(MUSIC_WORKER_URL, segmentBuffers, 0.5, durationSec);
+      console.log(`[${trackId}] ✅ Stitched (${stitchedBuffer.byteLength} bytes)`);
+    } catch (e) {
+      // Fallback: raw concatenation
+      console.error(`[${trackId}] Stitch worker failed, falling back to raw concat:`, e);
+      let totalSize = 0;
+      for (const buf of segmentBuffers) totalSize += buf.byteLength;
+      const raw = new Uint8Array(totalSize);
+      let off = 0;
+      for (const buf of segmentBuffers) { raw.set(new Uint8Array(buf), off); off += buf.byteLength; }
+      stitchedBuffer = raw.buffer;
     }
 
     // Save stitched instrumental
     const instrumentalPath = `tracks/${trackId}/instrumental.wav`;
-    await supabase.storage.from("music-files").upload(instrumentalPath, instrumentalBuffer, {
+    await supabase.storage.from("music-files").upload(instrumentalPath, new Uint8Array(stitchedBuffer), {
       contentType: "audio/wav", upsert: true,
     });
 
     // ================================================================
-    // STAGE 10-12 — MIXING & DURATION ENFORCEMENT
-    // The final track is the instrumental (mixing vocals requires FFmpeg
-    // which isn't available in edge functions; vocal track stored separately)
+    // STEP 5b — VOCAL ALIGNMENT (if vocals exist)
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Mastering audio", 0.90, 8);
-
-    // Use instrumental as final output
-    // (Vocal mixing would require a dedicated audio processing service)
-    const finalBuffer = instrumentalBuffer;
+    let mixedBuffer = stitchedBuffer;
+    if (vocalBuffer) {
+      await updateProgress(supabase, trackId, creationId, "Aligning vocals", 0.80, 18);
+      try {
+        mixedBuffer = await callAlignVocalsWorker(MUSIC_WORKER_URL, stitchedBuffer, vocalBuffer, frozenInput.tempoBpm);
+        console.log(`[${trackId}] ✅ Vocals aligned & mixed`);
+      } catch (e) {
+        console.error(`[${trackId}] Vocal alignment failed, using instrumental only:`, e);
+        mixedBuffer = stitchedBuffer;
+      }
+    }
 
     // ================================================================
-    // STAGE 13 — FINAL OUTPUT
+    // STEP 6 — MASTERING
+    // ================================================================
+    await updateProgress(supabase, trackId, creationId, "Mastering final track", 0.88, 12);
+
+    let masteredBuffer: ArrayBuffer;
+    try {
+      masteredBuffer = await callMasterWorker(MUSIC_WORKER_URL, mixedBuffer);
+      console.log(`[${trackId}] ✅ Mastered (${masteredBuffer.byteLength} bytes)`);
+    } catch (e) {
+      console.error(`[${trackId}] Mastering failed, using unmastered:`, e);
+      masteredBuffer = mixedBuffer;
+    }
+
+    // ================================================================
+    // STEP 7 — FINAL OUTPUT
     // ================================================================
     await updateProgress(supabase, trackId, creationId, "Encoding final track", 0.95, 3);
 
     const finalPath = `tracks/${trackId}/final.wav`;
     const { error: uploadError } = await supabase.storage
       .from("music-files")
-      .upload(finalPath, finalBuffer, {
-        contentType: "audio/wav", upsert: true,
-      });
+      .upload(finalPath, new Uint8Array(masteredBuffer), { contentType: "audio/wav", upsert: true });
 
     if (uploadError) {
       console.error("Final upload error:", uploadError);
-      await supabase.from("tracks").update({
-        status: "failed", error_message: "Failed to upload final audio file",
-      }).eq("id", trackId);
+      await supabase.from("tracks").update({ status: "failed", error_message: "Failed to upload final audio" }).eq("id", trackId);
       return new Response(JSON.stringify({ error: "Upload failed" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -861,46 +676,37 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
     const { data: urlData } = supabase.storage.from("music-files").getPublicUrl(finalPath);
     const audioUrl = urlData.publicUrl;
 
-    // Also store vocal URL if vocals were generated
     let vocalUrl: string | null = null;
     if (vocalBuffer) {
-      const { data: vocalUrlData } = supabase.storage.from("music-files").getPublicUrl(`tracks/${trackId}/vocals.wav`);
-      vocalUrl = vocalUrlData.publicUrl;
+      const { data: vu } = supabase.storage.from("music-files").getPublicUrl(`tracks/${trackId}/vocals.wav`);
+      vocalUrl = vu.publicUrl;
     }
 
-    // ================================================================
-    // STAGE 14 — DASHBOARD STORAGE
-    // ================================================================
+    // Update DB
     await supabase.from("tracks").update({
-      status: "completed",
-      audio_url: audioUrl,
-      progress: 1,
-      duration_seconds: durationSec,
+      status: "completed", audio_url: audioUrl, progress: 1, duration_seconds: durationSec,
     }).eq("id", trackId);
 
     await supabase.from("music_creations").update({
-      status: "completed",
-      progress: 1,
+      status: "completed", progress: 1,
     }).eq("id", creationId);
 
-    console.log(`[${trackId}] ✅ Complete. Audio: ${audioUrl}${vocalUrl ? `, Vocals: ${vocalUrl}` : ""}`);
+    console.log(`[${trackId}] ✅ Complete. Audio: ${audioUrl}`);
 
     return new Response(JSON.stringify({
       success: true,
       trackId,
-      audioUrl,
-      vocalUrl,
+      final_audio_url: audioUrl,
+      vocal_url: vocalUrl,
       duration: durationSec,
-      segments: totalSegments,
+      segments_used: songPlan.segments.map(s => ({ name: s.name, duration: s.duration, description: s.description })),
+      tempo: frozenInput.tempoBpm,
+      generated_lyrics: generatedLyrics || null,
       pipeline: {
         sentiment,
-        musicIntent,
-        sections: sections.map(s => s.name),
-        harmony: harmonyResult.chordProgression,
-        rhythm: rhythmResult.timeSignature,
+        plan: songPlan,
         hasVocals,
-        vocalVoice: vocalPlan.historyPrompt,
-        engine: "musicgen+bark (worker)",
+        engine: "musicgen+bark (modular worker)",
       },
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
