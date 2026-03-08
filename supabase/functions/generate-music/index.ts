@@ -129,113 +129,46 @@ async function updateProgress(
   }
 }
 
-// ===== REPLICATE: Riffusion version hash =====
-const RIFFUSION_VERSION = "8cf61ea6c56afd61d8f5b9ffd14d7c216c0a93844ce2d82ac1c9ecc9c7f24e05";
-
-// ===== REPLICATE: Create prediction with polling =====
-async function replicateCreatePrediction(
-  apiToken: string,
+// ===== MUSIC WORKER: Generate segment via external worker =====
+async function workerGenerateSegment(
+  workerUrl: string,
   prompt: string,
   duration: number,
   seed?: number,
 ): Promise<string> {
   const actualSeed = seed ?? Math.floor(Math.random() * 2147483647);
-  const maxCreateAttempts = 10;
 
-  let predictionId = "";
+  console.log(`[Worker] Requesting segment: prompt="${prompt.substring(0, 80)}...", duration=${duration}s, seed=${actualSeed}`);
 
-  for (let attempt = 1; attempt <= maxCreateAttempts; attempt++) {
-    const createRes = await fetch("https://api.replicate.com/v1/predictions", {
-      method: "POST",
-      headers: {
-        Authorization: `Token ${apiToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        version: RIFFUSION_VERSION,
-        input: {
-          prompt_a: prompt,
-          denoising: 0.75,
-          num_inference_steps: 50,
-        },
-      }),
-    });
+  const response = await fetch(`${workerUrl}/generate-segment`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      prompt,
+      duration,
+      seed: actualSeed,
+    }),
+  });
 
-    if (createRes.ok) {
-      const prediction = await createRes.json();
-      predictionId = prediction.id;
-      console.log(`[Replicate] Prediction ${predictionId} created (attempt=${attempt})`);
-      break;
-    }
-
-    const errBody = await createRes.text();
-
-    if (createRes.status === 429) {
-      let waitSec = 10 * attempt;
-      try {
-        const parsed = JSON.parse(errBody);
-        if (parsed.retry_after) waitSec = Math.max(parsed.retry_after + 1, 2);
-      } catch { /* use default */ }
-      console.warn(`[Replicate] Rate limited (attempt ${attempt}/${maxCreateAttempts}). Waiting ${waitSec}s...`);
-      await new Promise(r => setTimeout(r, waitSec * 1000));
-      continue;
-    }
-
-    throw new Error(`Replicate create failed [${createRes.status}]: ${errBody}`);
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Worker returned ${response.status}: ${errText}`);
   }
 
-  if (!predictionId) {
-    throw new Error("Failed to create Replicate prediction after all attempts");
+  const result = await response.json();
+  let audioUrl = result.audio_url;
+
+  if (!audioUrl) {
+    throw new Error(`Worker returned no audio_url: ${JSON.stringify(result)}`);
   }
 
-  // Poll for completion every 2s (max 120s per segment attempt)
-  const pollInterval = 2000;
-  const maxPollDurationMs = 120_000;
-  const maxPolls = Math.floor(maxPollDurationMs / pollInterval);
-
-  for (let i = 0; i < maxPolls; i++) {
-    await new Promise(r => setTimeout(r, pollInterval));
-
-    const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
-      headers: { Authorization: `Token ${apiToken}` },
-    });
-
-    if (!pollRes.ok) {
-      const errBody = await pollRes.text();
-      console.error(`[Replicate] Poll error: ${pollRes.status} ${errBody}`);
-      if (pollRes.status === 429) {
-        await new Promise(r => setTimeout(r, 10000));
-      }
-      continue;
-    }
-
-    const result = await pollRes.json();
-    console.log(`[Replicate] Poll ${i + 1}/${maxPolls}: status=${result.status}`);
-
-    if (result.status === "succeeded") {
-      // Riffusion returns { audio: url, spectrogram: url }
-      let outputUrl: string | null = null;
-      if (result.output && typeof result.output === "object" && !Array.isArray(result.output)) {
-        outputUrl = result.output.audio || null;
-      } else if (Array.isArray(result.output)) {
-        outputUrl = result.output[0];
-      } else if (typeof result.output === "string") {
-        outputUrl = result.output;
-      }
-
-      if (!outputUrl) {
-        throw new Error(`Replicate prediction succeeded but no audio URL in output: ${JSON.stringify(result.output)}`);
-      }
-      console.log(`[Replicate] ✅ Prediction ${predictionId} complete: ${outputUrl}`);
-      return outputUrl;
-    }
-
-    if (result.status === "failed" || result.status === "canceled") {
-      throw new Error(`Replicate prediction ${result.status}: ${result.error || "Unknown"}`);
-    }
+  // If the worker returns a relative URL, prepend the worker base URL
+  if (audioUrl.startsWith("/")) {
+    audioUrl = `${workerUrl}${audioUrl}`;
   }
 
-  throw new Error(`Replicate prediction timed out after ${maxPollDurationMs / 1000}s`);
+  console.log(`[Worker] ✅ Segment generated: ${audioUrl}`);
+  return audioUrl;
 }
 
 // ===== HELPER: Download audio from URL =====
@@ -245,24 +178,24 @@ async function downloadAudio(url: string): Promise<ArrayBuffer> {
   return await res.arrayBuffer();
 }
 
-// ===== HELPER: Generate segment with retry (unique seed each attempt) =====
+// ===== HELPER: Generate segment with retry =====
 async function generateSegmentWithRetry(
-  apiToken: string,
+  workerUrl: string,
   prompt: string,
   duration: number,
-  maxRetries: number = 5,
+  maxRetries: number = 3,
 ): Promise<{ audioUrl: string; buffer: ArrayBuffer }> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      // Pass duration as-is; replicateCreatePrediction caps per model
-      const audioUrl = await replicateCreatePrediction(apiToken, prompt, duration);
+      const seed = Math.floor(Math.random() * 2147483647);
+      const audioUrl = await workerGenerateSegment(workerUrl, prompt, duration, seed);
       const buffer = await downloadAudio(audioUrl);
       return { audioUrl, buffer };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`Segment gen attempt ${attempt}/${maxRetries}: ${msg}`);
       if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, 3000 * attempt));
+        await new Promise(r => setTimeout(r, 2000 * attempt));
         continue;
       }
       throw new Error(`Segment failed after ${maxRetries} retries: ${msg}`);
@@ -306,7 +239,7 @@ function parseWav(buf: ArrayBuffer): WavInfo {
     }
 
     offset += 8 + chunkLen;
-    if (chunkLen % 2 !== 0) offset++; // WAV chunks are word-aligned
+    if (chunkLen % 2 !== 0) offset++;
   }
 
   return { sampleRate, numChannels, bitsPerSample, pcmData };
@@ -317,26 +250,21 @@ function concatenateWavBuffers(buffers: ArrayBuffer[], targetDurationSec?: numbe
   if (buffers.length === 0) throw new Error("No buffers to concatenate");
   if (buffers.length === 1) {
     if (!targetDurationSec) return buffers[0];
-    // Trim single buffer if needed
     const info = parseWav(buffers[0]);
     return trimAndBuildWav(info, targetDurationSec);
   }
 
   const parsedSegments = buffers.map(buf => parseWav(buf));
-
-  // Use first segment's format for output
   const { sampleRate, numChannels, bitsPerSample } = parsedSegments[0];
   const bytesPerSample = bitsPerSample / 8;
   const blockAlign = numChannels * bytesPerSample;
   const crossfadeSamples = Math.floor(crossfadeSec * sampleRate);
   const crossfadeBytes = crossfadeSamples * blockAlign;
 
-  // Calculate total PCM size with crossfade overlap
   let totalPcmSize = 0;
   for (let i = 0; i < parsedSegments.length; i++) {
     totalPcmSize += parsedSegments[i].pcmData.byteLength;
     if (i > 0) {
-      // Subtract crossfade overlap (only if both segments are long enough)
       const prevLen = parsedSegments[i - 1].pcmData.byteLength;
       const currLen = parsedSegments[i].pcmData.byteLength;
       const actualCrossfade = Math.min(crossfadeBytes, Math.floor(prevLen / 4), Math.floor(currLen / 4));
@@ -344,7 +272,6 @@ function concatenateWavBuffers(buffers: ArrayBuffer[], targetDurationSec?: numbe
     }
   }
 
-  // Allocate output PCM buffer
   const outputPcm = new Uint8Array(totalPcmSize);
   let writePos = 0;
 
@@ -353,7 +280,6 @@ function concatenateWavBuffers(buffers: ArrayBuffer[], targetDurationSec?: numbe
     const segData = seg.pcmData;
 
     if (segIdx === 0) {
-      // First segment: write fully
       outputPcm.set(segData, writePos);
       writePos += segData.byteLength;
     } else {
@@ -363,16 +289,13 @@ function concatenateWavBuffers(buffers: ArrayBuffer[], targetDurationSec?: numbe
       const actualCrossfadeSamples = Math.floor(actualCrossfadeBytes / blockAlign);
 
       if (actualCrossfadeSamples > 0 && bitsPerSample === 16) {
-        // Back up write position for crossfade region
         writePos -= actualCrossfadeBytes;
-
-        // Apply crossfade: blend prev tail with curr head
         const prevView = new DataView(outputPcm.buffer, writePos, actualCrossfadeBytes);
         const currView = new DataView(segData.buffer, segData.byteOffset, actualCrossfadeBytes);
 
         for (let s = 0; s < actualCrossfadeSamples; s++) {
-          const fadeOut = 1.0 - (s / actualCrossfadeSamples); // prev fades out
-          const fadeIn = s / actualCrossfadeSamples; // curr fades in
+          const fadeOut = 1.0 - (s / actualCrossfadeSamples);
+          const fadeIn = s / actualCrossfadeSamples;
           for (let ch = 0; ch < numChannels; ch++) {
             const byteOff = (s * numChannels + ch) * bytesPerSample;
             const prevSample = prevView.getInt16(byteOff, true);
@@ -384,22 +307,17 @@ function concatenateWavBuffers(buffers: ArrayBuffer[], targetDurationSec?: numbe
         }
 
         writePos += actualCrossfadeBytes;
-        // Write rest of current segment (after crossfade region)
         const remaining = new Uint8Array(segData.buffer, segData.byteOffset + actualCrossfadeBytes, segData.byteLength - actualCrossfadeBytes);
         outputPcm.set(remaining, writePos);
         writePos += remaining.byteLength;
       } else {
-        // No crossfade possible, just append
         outputPcm.set(segData, writePos);
         writePos += segData.byteLength;
       }
     }
   }
 
-  // Trim to actual written size
   const finalPcm = outputPcm.slice(0, writePos);
-
-  // Trim to target duration if specified
   let pcmToWrite = finalPcm;
   if (targetDurationSec) {
     const maxBytes = Math.floor(targetDurationSec * sampleRate * blockAlign);
@@ -426,62 +344,34 @@ function buildWavFile(pcm: Uint8Array, sampleRate: number, numChannels: number, 
   const wavView = new DataView(wavBuffer);
   const wavBytes = new Uint8Array(wavBuffer);
 
-  // RIFF header
-  wavBytes.set([0x52, 0x49, 0x46, 0x46], 0); // "RIFF"
+  wavBytes.set([0x52, 0x49, 0x46, 0x46], 0);
   wavView.setUint32(4, 36 + pcm.byteLength, true);
-  wavBytes.set([0x57, 0x41, 0x56, 0x45], 8); // "WAVE"
+  wavBytes.set([0x57, 0x41, 0x56, 0x45], 8);
 
-  // fmt chunk
-  wavBytes.set([0x66, 0x6D, 0x74, 0x20], 12); // "fmt "
+  wavBytes.set([0x66, 0x6D, 0x74, 0x20], 12);
   wavView.setUint32(16, 16, true);
-  wavView.setUint16(20, 1, true); // PCM
+  wavView.setUint16(20, 1, true);
   wavView.setUint16(22, numChannels, true);
   wavView.setUint32(24, sampleRate, true);
   wavView.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true);
   wavView.setUint16(32, numChannels * (bitsPerSample / 8), true);
   wavView.setUint16(34, bitsPerSample, true);
 
-  // data chunk
-  wavBytes.set([0x64, 0x61, 0x74, 0x61], 36); // "data"
+  wavBytes.set([0x64, 0x61, 0x74, 0x61], 36);
   wavView.setUint32(40, pcm.byteLength, true);
 
   wavBytes.set(pcm, headerSize);
   return wavBuffer;
 }
 
-// ===== RATE-LIMITED SEQUENTIAL QUEUE =====
-// Free tier: 6 predictions/min, burst 1. Wait between requests.
-const REQUEST_DELAY_MS = 10_000; // 10s between predictions
-const MAX_PARALLEL = 1; // Sequential only on free tier
-
-async function runSequentialWithDelay<T>(
-  tasks: (() => Promise<T>)[],
-): Promise<T[]> {
+// ===== SEQUENTIAL QUEUE (no rate limit delay needed for self-hosted worker) =====
+async function runSequential<T>(tasks: (() => Promise<T>)[]): Promise<T[]> {
   const results: T[] = [];
   for (let i = 0; i < tasks.length; i++) {
-    if (i > 0) {
-      console.log(`[RateLimit] Waiting ${REQUEST_DELAY_MS / 1000}s before next segment...`);
-      await new Promise(r => setTimeout(r, REQUEST_DELAY_MS));
-    }
     results.push(await tasks[i]());
   }
   return results;
 }
-
-// ===== SECTION MODIFIERS for structural guidance =====
-const SECTION_MODIFIERS: Record<string, string> = {
-  intro: "atmospheric opening, building tension slowly, sparse arrangement",
-  build: "rising energy, adding layers and percussion, increasing intensity",
-  peak: "maximum intensity, full arrangement, all elements firing",
-  drop: "heavy bass drop, distorted elements, powerful rhythm, maximum impact",
-  breakdown: "stripped back, ethereal, breathing space, ambient textures",
-  bridge: "transitional, melodic shift, emotional pivot, textural change",
-  climax: "emotional peak, all elements converging, maximum density",
-  outro: "gradual fade, resolving energy, final atmosphere, gentle release",
-  verse: "narrative section, melodic foundation, rhythmic groove",
-  chorus: "catchy hook, elevated energy, memorable melody, full arrangement",
-  extension: "sustained mood, gentle continuation, evolving textures",
-};
 
 // ===== VARIATION POOLS for prompt uniqueness =====
 const TEXTURE_VARIATIONS = [
@@ -490,13 +380,6 @@ const TEXTURE_VARIATIONS = [
   "detuned oscillators", "FM synthesis bells", "ring-modulated tones",
   "convolution reverb spaces", "spectral processing", "waveshaping distortion",
   "comb-filtered layers", "phase-shifted textures", "harmonic overtones",
-];
-
-const RHYTHM_VARIATIONS = [
-  "syncopated hi-hats", "polyrhythmic percussion", "shuffled groove",
-  "off-beat accents", "triplet patterns", "straight 4/4 drive",
-  "breakbeat influenced", "half-time feel", "double-time energy",
-  "ghost note patterns", "swung rhythms", "militaristic precision",
 ];
 
 function pickRandom<T>(arr: T[], count: number = 1): T[] {
@@ -509,11 +392,8 @@ const MAX_PROMPT_WORDS = 20;
 const MAX_PROMPT_CHARACTERS = 120;
 
 function sanitizePrompt(raw: string): string {
-  // Remove extra punctuation and normalize whitespace
   let cleaned = raw.replace(/[^a-zA-Z0-9\s\-]/g, " ").replace(/\s+/g, " ").trim();
-  // Enforce word limit
   cleaned = cleaned.split(" ").slice(0, MAX_PROMPT_WORDS).join(" ");
-  // Enforce character limit
   if (cleaned.length > MAX_PROMPT_CHARACTERS) {
     cleaned = cleaned.substring(0, MAX_PROMPT_CHARACTERS).replace(/\s\S*$/, "").trim();
   }
@@ -524,12 +404,11 @@ function sanitizePrompt(raw: string): string {
 function buildSegmentPrompt(
   brief: ProductionBrief,
   seg: SegmentPlan,
-  segIdx: number,
-  totalSegments: number,
-  userPrompt: string,
-  artistInspiration: string,
+  _segIdx: number,
+  _totalSegments: number,
+  _userPrompt: string,
+  _artistInspiration: string,
 ): string {
-  // Build a concise prompt: genre + section + mood + key instrument + texture
   const sectionName = seg.name.replace(/_\d+$/, "");
   const textureVar = pickRandom(TEXTURE_VARIATIONS, 1)[0];
 
@@ -541,8 +420,7 @@ function buildSegmentPrompt(
     textureVar,
   ].filter(Boolean);
 
-  const raw = parts.join(" ");
-  return sanitizePrompt(raw);
+  return sanitizePrompt(parts.join(" "));
 }
 
 // ===== MAIN PIPELINE =====
@@ -556,11 +434,11 @@ serve(async (req) => {
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const REPLICATE_API_TOKEN = Deno.env.get("REPLICATE_API_TOKEN");
+  const MUSIC_WORKER_URL = Deno.env.get("MUSIC_WORKER_URL");
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-  if (!REPLICATE_API_TOKEN) {
-    return new Response(JSON.stringify({ error: "REPLICATE_API_TOKEN not configured" }), {
+  if (!MUSIC_WORKER_URL) {
+    return new Response(JSON.stringify({ error: "MUSIC_WORKER_URL not configured" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -574,7 +452,7 @@ serve(async (req) => {
 
   try {
     const { trackId, creationId, input, jobId: reqJobId } = await req.json();
-    const jobId = reqJobId || trackId; // fallback to trackId if no jobId
+    const jobId = reqJobId || trackId;
 
     // ================================================================
     // INPUT FREEZE
@@ -595,7 +473,7 @@ serve(async (req) => {
     };
 
     const durationSec = frozenInput.durationSeconds;
-    const estSegmentTime = 15; // ~15s per segment (gen + poll + 10s delay)
+    const estSegmentTime = 20; // ~20s per segment with external worker
     const estTotalSec = 20 + Math.ceil(durationSec / 8) * estSegmentTime + 10;
     let etaRemaining = estTotalSec;
 
@@ -643,19 +521,19 @@ Generate a production brief with: genre, subgenre, tempo description, mood, atmo
       "create_production_brief",
       "Create a structured production brief for music generation",
       {
-        genre: { type: "string", description: "Primary genre e.g. Industrial Techno" },
-        subgenre: { type: "string", description: "Subgenre or style variation e.g. Dark Warehouse" },
-        tempo: { type: "string", description: "Tempo description e.g. 140 BPM, driving four-on-the-floor" },
-        mood: { type: "string", description: "Mood description e.g. dark, aggressive, relentless" },
-        atmosphere: { type: "string", description: "Atmospheric quality e.g. smoky, claustrophobic, vast" },
-        environment: { type: "string", description: "Sonic environment e.g. underground warehouse, open air festival" },
-        instrumentation: { type: "string", description: "Specific instruments e.g. distorted 909 kick, metallic hi-hats, acid 303 bass" },
-        energyCurve: { type: "string", description: "Energy arc e.g. slow build → explosive drop → breakdown → final peak" },
-        rhythmicStyle: { type: "string", description: "Rhythmic character e.g. driving four-on-the-floor with syncopated hats" },
+        genre: { type: "string", description: "Primary genre" },
+        subgenre: { type: "string", description: "Subgenre" },
+        tempo: { type: "string", description: "Tempo description" },
+        mood: { type: "string", description: "Mood description" },
+        atmosphere: { type: "string", description: "Atmospheric quality" },
+        environment: { type: "string", description: "Sonic environment" },
+        instrumentation: { type: "string", description: "Specific instruments" },
+        energyCurve: { type: "string", description: "Energy arc" },
+        rhythmicStyle: { type: "string", description: "Rhythmic character" },
         textureKeywords: {
           type: "array",
           items: { type: "string" },
-          description: "5-8 texture/sonic keywords for variation e.g. metallic, gritty, cavernous",
+          description: "5-8 texture/sonic keywords",
         },
       },
       ["genre", "subgenre", "tempo", "mood", "atmosphere", "environment", "instrumentation", "energyCurve", "rhythmicStyle", "textureKeywords"]
@@ -699,11 +577,10 @@ Generate a production brief with: genre, subgenre, tempo description, mood, atmo
 Each segment should be a distinct musical section. Use varied structures — never produce identical plans.
 Consider: genre=${frozenInput.genres.join(", ") || "electronic"}, tempo=${frozenInput.tempoBpm}BPM, mood=${sentiment.emotionPolarity}, energy=${sentiment.energyIntensity}/10.
 Vocal structure requested: "${frozenInput.vocalStructure}".
-IMPORTANT: segment durations MUST sum to exactly ${durationSec} seconds. Each segment MUST be between 4 and 8 seconds (MusicGen model limit).
-Add slight randomness to durations to ensure uniqueness across generations.`,
+IMPORTANT: segment durations MUST sum to exactly ${durationSec} seconds. Each segment MUST be between 4 and 8 seconds (MusicGen model limit).`,
       `Plan the structure for a ${durationSec}-second ${frozenInput.genres[0] || "electronic"} track at ${frozenInput.tempoBpm} BPM.
 The user wants vocal structure: "${frozenInput.vocalStructure}".
-Mood: ${sentiment.emotionPolarity}. Energy: ${sentiment.energyIntensity}/10. Aggression: ${sentiment.aggressionLevel}/10.
+Mood: ${sentiment.emotionPolarity}. Energy: ${sentiment.energyIntensity}/10.
 Artist inspiration: "${frozenInput.artistInspiration || "None"}".
 
 Return an array of segments with name, duration (seconds, max 8 each), and a vivid description.
@@ -751,7 +628,7 @@ Durations MUST sum to exactly ${durationSec}.`,
     etaRemaining -= 8;
 
     // ================================================================
-    // STEP 3 — GENERATING SEGMENTS via Replicate (parallel, max 3)
+    // STEP 3 — GENERATING SEGMENTS via Music Worker
     // ================================================================
     const totalSegments = songPlan.segments.length;
     await supabase.from("tracks").update({ total_segments: totalSegments }).eq("id", trackId);
@@ -766,7 +643,7 @@ Durations MUST sum to exactly ${durationSec}.`,
       });
     }
 
-    // Sequential generation with rate-limit delay (free tier safe)
+    // Sequential generation (no rate limit needed for self-hosted worker)
     const segProgressStart = 0.10;
     const segProgressEnd = 0.70;
     let completedSegments = 0;
@@ -777,7 +654,7 @@ Durations MUST sum to exactly ${durationSec}.`,
           productionBrief, seg, idx, totalSegments,
           frozenInput.musicPrompt, frozenInput.artistInspiration
         );
-        console.log(`[${trackId}] Segment ${idx + 1} prompt: ${prompt.substring(0, 120)}...`);
+        console.log(`[${trackId}] Segment ${idx + 1} prompt: ${prompt}`);
 
         const segmentsRemaining = totalSegments - completedSegments;
         const segLabel = `Generating ${seg.name} segment (${idx + 1} of ${totalSegments})`;
@@ -789,7 +666,7 @@ Durations MUST sum to exactly ${durationSec}.`,
           jobId, 4, completedSegments, totalSegments, "generating_segments"
         );
 
-        const { buffer } = await generateSegmentWithRetry(REPLICATE_API_TOKEN!, prompt, seg.duration);
+        const { buffer } = await generateSegmentWithRetry(MUSIC_WORKER_URL!, prompt, seg.duration);
 
         const segPath = `tracks/${trackId}/segment_${idx}.wav`;
         await supabase.storage.from("music-files").upload(segPath, new Uint8Array(buffer), {
@@ -813,7 +690,7 @@ Durations MUST sum to exactly ${durationSec}.`,
 
     let segmentBuffers: ArrayBuffer[];
     try {
-      segmentBuffers = await runSequentialWithDelay(segmentTasks);
+      segmentBuffers = await runSequential(segmentTasks);
     } catch (e) {
       const errorMsg = `Segment generation failed: ${e instanceof Error ? e.message : String(e)}`;
       console.error(`[${trackId}] ${errorMsg}`);
@@ -842,7 +719,6 @@ Durations MUST sum to exactly ${durationSec}.`,
       console.log(`[${trackId}] ✅ Stitched with crossfade (${stitchedBuffer.byteLength} bytes), trimmed to ${durationSec}s`);
     } catch (e) {
       console.error(`[${trackId}] Stitch error, raw concat fallback:`, e);
-      // Fallback: simple concatenation without crossfade
       try {
         stitchedBuffer = concatenateWavBuffers(segmentBuffers, durationSec, 0);
       } catch {
@@ -860,7 +736,6 @@ Durations MUST sum to exactly ${durationSec}.`,
     // ================================================================
     await updateProgress(supabase, trackId, creationId, "Finalizing audio output", 0.90, 8, jobId, 7, totalSegments, totalSegments, "finalizing_audio");
 
-    // Save stitched track
     const instrumentalPath = `tracks/${trackId}/instrumental.wav`;
     await supabase.storage.from("music-files").upload(instrumentalPath, new Uint8Array(stitchedBuffer), {
       contentType: "audio/wav", upsert: true,
@@ -868,7 +743,7 @@ Durations MUST sum to exactly ${durationSec}.`,
 
     if (frozenInput.generateVideo) {
       await updateProgress(supabase, trackId, creationId, "Rendering video", 0.94, 6, jobId, 8, totalSegments, totalSegments, "rendering_video");
-      // Video generation not implemented in this function yet.
+      // Video generation placeholder
     }
 
     // ================================================================
@@ -895,7 +770,6 @@ Durations MUST sum to exactly ${durationSec}.`,
 
     const generationTime = Math.round((Date.now() - startTime) / 1000);
 
-    // Update DB
     await supabase.from("tracks").update({
       status: "completed", audio_url: audioUrl, progress: 1, duration_seconds: durationSec,
       current_stage: "Completed", estimated_time_left: 0,
@@ -905,7 +779,6 @@ Durations MUST sum to exactly ${durationSec}.`,
       status: "completed", progress: 1,
     }).eq("id", creationId);
 
-    // Broadcast completion
     await broadcastProgress(supabase, jobId, 9, "Completed", 100, totalSegments, totalSegments, "0 seconds");
     console.log(`[${trackId}] ✅ Complete in ${generationTime}s. Audio: ${audioUrl}`);
 
@@ -921,7 +794,7 @@ Durations MUST sum to exactly ${durationSec}.`,
       pipeline: {
         sentiment,
         plan: songPlan,
-        engine: "replicate/musicgen (hosted GPU)",
+        engine: "music-worker (self-hosted MusicGen)",
       },
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -935,17 +808,13 @@ Durations MUST sum to exactly ${durationSec}.`,
 
       if (tid) {
         await supabaseForBroadcast.from("tracks").update({
-          status: "failed",
-          current_stage: "Failed",
-          estimated_time_left: 0,
+          status: "failed", current_stage: "Failed", estimated_time_left: 0,
           error_message: e instanceof Error ? e.message : "Unknown error",
         }).eq("id", tid);
       }
-
       if (cid) {
         await supabaseForBroadcast.from("music_creations").update({ status: "failed" }).eq("id", cid);
       }
-
       if (jid || tid) {
         await broadcastProgress(supabaseForBroadcast, jid || tid, -1, "Failed", 100, 0, 0, "0 seconds");
       }
