@@ -16,6 +16,8 @@ export interface Track {
   totalSegments?: number;
   completedSegments?: number;
   errorMessage?: string;
+  currentStage?: string;
+  estimatedTimeLeft?: number;
 }
 
 export interface MusicCreation {
