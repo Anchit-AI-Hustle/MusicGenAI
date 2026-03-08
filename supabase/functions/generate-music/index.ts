@@ -807,7 +807,7 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
     // ================================================================
     // STAGE 9 — SONG STITCHING (concatenate instrumental segments)
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "stitching", 0.82);
+    await updateProgress(supabase, trackId, creationId, "Stitching segments", 0.82, 15);
 
     let totalSize = 0;
     for (const buf of segmentBuffers) totalSize += buf.byteLength;
