@@ -9,19 +9,26 @@ import { HomePage } from './HomePage';
 import { CreateMusicPage } from './CreateMusicPage';
 import { DashboardPage } from './DashboardPage';
 import { AccountSettingsPage } from './AccountSettingsPage';
+import { SongDetailPage } from './SongDetailPage';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Loader2 } from 'lucide-react';
 
-type Page = 'home' | 'create' | 'dashboard' | 'settings';
+type Page = 'home' | 'create' | 'dashboard' | 'settings' | 'song-detail';
 
 const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [songDetailParams, setSongDetailParams] = useState<{ creationId: string; trackId?: string } | null>(null);
   const { isLoading } = useAuth();
   const isMobile = useIsMobile();
   const { currentTrack } = usePlayer();
 
-  const handleNavigate = (page: string) => setCurrentPage(page as Page);
+  const handleNavigate = (page: string, params?: Record<string, string>) => {
+    if (page === 'song-detail' && params?.creationId) {
+      setSongDetailParams({ creationId: params.creationId, trackId: params.trackId });
+    }
+    setCurrentPage(page as Page);
+  };
 
   const renderPage = () => {
     switch (currentPage) {
@@ -29,6 +36,13 @@ const AppContent: React.FC = () => {
       case 'create': return <CreateMusicPage onAuthClick={() => setShowAuthModal(true)} />;
       case 'dashboard': return <DashboardPage onAuthClick={() => setShowAuthModal(true)} onNavigate={handleNavigate} />;
       case 'settings': return <AccountSettingsPage onAuthClick={() => setShowAuthModal(true)} onNavigate={handleNavigate} />;
+      case 'song-detail': return songDetailParams ? (
+        <SongDetailPage
+          creationId={songDetailParams.creationId}
+          trackId={songDetailParams.trackId}
+          onBack={() => setCurrentPage('dashboard')}
+        />
+      ) : <DashboardPage onAuthClick={() => setShowAuthModal(true)} onNavigate={handleNavigate} />;
       default: return <HomePage onNavigate={handleNavigate} />;
     }
   };
@@ -46,7 +60,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar currentPage={currentPage} onNavigate={handleNavigate} onAuthClick={() => setShowAuthModal(true)} />
+      <Sidebar currentPage={currentPage === 'song-detail' ? 'dashboard' : currentPage} onNavigate={handleNavigate} onAuthClick={() => setShowAuthModal(true)} />
       <main className={`${isMobile ? "pt-16" : "ml-64 transition-all duration-300"} ${currentTrack ? 'pb-24' : ''}`}>
         {renderPage()}
       </main>
