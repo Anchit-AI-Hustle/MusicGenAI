@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { MusicProvider } from '@/contexts/MusicContext';
+import { PlayerProvider, usePlayer } from '@/contexts/PlayerContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { AuthModal } from '@/components/auth/AuthModal';
+import { GlobalPlayer } from '@/components/player/GlobalPlayer';
 import { HomePage } from './HomePage';
 import { CreateMusicPage } from './CreateMusicPage';
 import { DashboardPage } from './DashboardPage';
@@ -17,6 +19,7 @@ const AppContent: React.FC = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const { isLoading } = useAuth();
   const isMobile = useIsMobile();
+  const { currentTrack } = usePlayer();
 
   const handleNavigate = (page: string) => setCurrentPage(page as Page);
 
@@ -44,9 +47,10 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen bg-background">
       <Sidebar currentPage={currentPage} onNavigate={handleNavigate} onAuthClick={() => setShowAuthModal(true)} />
-      <main className={isMobile ? "pt-16" : "ml-64 transition-all duration-300"}>
+      <main className={`${isMobile ? "pt-16" : "ml-64 transition-all duration-300"} ${currentTrack ? 'pb-24' : ''}`}>
         {renderPage()}
       </main>
+      <GlobalPlayer />
       <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </div>
   );
@@ -55,7 +59,9 @@ const AppContent: React.FC = () => {
 const Index: React.FC = () => (
   <AuthProvider>
     <MusicProvider>
-      <AppContent />
+      <PlayerProvider>
+        <AppContent />
+      </PlayerProvider>
     </MusicProvider>
   </AuthProvider>
 );
