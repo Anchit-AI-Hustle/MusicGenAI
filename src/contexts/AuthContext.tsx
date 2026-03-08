@@ -11,9 +11,10 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (mobileNumber: string) => Promise<{ success: boolean; error?: string }>;
-  signup: (name: string, mobileNumber: string) => Promise<{ success: boolean; error?: string }>;
+  login: (name: string, mobileNumber: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
+  updateProfile: (updates: { name?: string; mobileNumber?: string }) => Promise<{ success: boolean; error?: string }>;
+  deleteAccount: () => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,13 +23,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load user from localStorage on mount
   useEffect(() => {
     const loadUser = async () => {
       try {
         const savedUserId = localStorage.getItem('harmonyai_user_id');
         if (savedUserId) {
-          // Fetch fresh user data from Supabase
           const { data, error } = await supabase
             .from('profiles')
             .select('*')
@@ -36,97 +35,58 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             .single();
 
           if (data && !error) {
-            setUser({
-              id: data.id,
-              name: data.name,
-              mobileNumber: data.mobile_number,
-            });
+            setUser({ id: data.id, name: data.name, mobileNumber: data.mobile_number });
           } else {
-            // Invalid stored ID, clear it
             localStorage.removeItem('harmonyai_user_id');
           }
         }
-      } catch (error) {
-        console.error('Error loading user:', error);
+      } catch {
         localStorage.removeItem('harmonyai_user_id');
       } finally {
         setIsLoading(false);
       }
     };
-
     loadUser();
   }, []);
 
-  const login = async (mobileNumber: string): Promise<{ success: boolean; error?: string }> => {
+  const login = async (name: string, mobileNumber: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      // Find user by mobile number in Supabase
-      const { data, error } = await supabase
+      // Check if user exists by phone number
+      const { data: existing } = await supabase
         .from('profiles')
         .select('*')
-        .eq('mobile_number', mobileNumber)
+        .eq('mobile_number', mobileNumber.trim())
         .single();
 
-      if (error || !data) {
-        return { success: false, error: 'Account not found. Please sign up first.' };
+      let profile: any;
+
+      if (existing) {
+        // Existing user — login
+        profile = existing;
+      } else {
+        // New user — auto-create
+        if (!name.trim()) {
+          return { success: false, error: 'Please enter your name to create an account.' };
+        }
+        const { data, error } = await supabase
+          .from('profiles')
+          .insert({ name: name.trim(), mobile_number: mobileNumber.trim() })
+          .select()
+          .single();
+
+        if (error || !data) {
+          return { success: false, error: 'Failed to create account. Please try again.' };
+        }
+        profile = data;
       }
 
-      const loggedInUser: User = {
-        id: data.id,
-        name: data.name,
-        mobileNumber: data.mobile_number,
-      };
-
+      const loggedInUser: User = { id: profile.id, name: profile.name, mobileNumber: profile.mobile_number };
       setUser(loggedInUser);
-      localStorage.setItem('harmonyai_user_id', data.id);
-      
+      localStorage.setItem('harmonyai_user_id', profile.id);
       return { success: true };
     } catch (error) {
       console.error('Login error:', error);
-      return { success: false, error: 'An error occurred during login.' };
-    }
-  };
-
-  const signup = async (name: string, mobileNumber: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      // Check if user already exists
-      const { data: existingUser } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('mobile_number', mobileNumber)
-        .single();
-
-      if (existingUser) {
-        return { success: false, error: 'An account with this mobile number already exists.' };
-      }
-
-      // Create new profile in Supabase
-      const { data, error } = await supabase
-        .from('profiles')
-        .insert({
-          name: name.trim(),
-          mobile_number: mobileNumber.trim(),
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Signup error:', error);
-        return { success: false, error: 'Failed to create account. Please try again.' };
-      }
-
-      const newUser: User = {
-        id: data.id,
-        name: data.name,
-        mobileNumber: data.mobile_number,
-      };
-
-      setUser(newUser);
-      localStorage.setItem('harmonyai_user_id', data.id);
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Signup error:', error);
-      return { success: false, error: 'An error occurred during signup.' };
+      return { success: false, error: 'An error occurred. Please try again.' };
     }
   };
 
@@ -135,15 +95,54 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.removeItem('harmonyai_user_id');
   };
 
+  const updateProfile = async (updates: { name?: string; mobileNumber?: string }): Promise<{ success: boolean; error?: string }> => {
+    if (!user) return { success: false, error: 'Not logged in.' };
+    try {
+      const dbUpdates: Record<string, string> = {};
+      if (updates.name) dbUpdates.name = updates.name.trim();
+      if (updates.mobileNumber) dbUpdates.mobile_number = updates.mobileNumber.trim();
+
+      if (updates.mobileNumber) {
+        const { data: existing } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('mobile_number', updates.mobileNumber.trim())
+          .neq('id', user.id)
+          .single();
+        if (existing) return { success: false, error: 'This phone number is already in use.' };
+      }
+
+      const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', user.id);
+      if (error) return { success: false, error: 'Failed to update profile.' };
+
+      setUser(prev => prev ? {
+        ...prev,
+        name: updates.name?.trim() || prev.name,
+        mobileNumber: updates.mobileNumber?.trim() || prev.mobileNumber,
+      } : null);
+      return { success: true };
+    } catch {
+      return { success: false, error: 'An error occurred.' };
+    }
+  };
+
+  const deleteAccount = async (): Promise<{ success: boolean; error?: string }> => {
+    if (!user) return { success: false, error: 'Not logged in.' };
+    try {
+      // Delete all user's music creations (tracks cascade via FK or manual)
+      await supabase.from('music_creations').delete().eq('user_id', user.id);
+      // Delete profile
+      const { error } = await supabase.from('profiles').delete().eq('id', user.id);
+      if (error) return { success: false, error: 'Failed to delete account.' };
+      logout();
+      return { success: true };
+    } catch {
+      return { success: false, error: 'An error occurred.' };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      isAuthenticated: !!user, 
-      isLoading,
-      login, 
-      signup, 
-      logout 
-    }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout, updateProfile, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );
@@ -151,8 +150,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };

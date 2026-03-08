@@ -6,10 +6,11 @@ import { AuthModal } from '@/components/auth/AuthModal';
 import { HomePage } from './HomePage';
 import { CreateMusicPage } from './CreateMusicPage';
 import { DashboardPage } from './DashboardPage';
+import { AccountSettingsPage } from './AccountSettingsPage';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Loader2 } from 'lucide-react';
 
-type Page = 'home' | 'create' | 'dashboard';
+type Page = 'home' | 'create' | 'dashboard' | 'settings';
 
 const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -17,25 +18,15 @@ const AppContent: React.FC = () => {
   const { isLoading } = useAuth();
   const isMobile = useIsMobile();
 
-  const handleNavigate = (page: string) => {
-    setCurrentPage(page as Page);
-  };
+  const handleNavigate = (page: string) => setCurrentPage(page as Page);
 
   const renderPage = () => {
     switch (currentPage) {
-      case 'home':
-        return <HomePage onNavigate={handleNavigate} />;
-      case 'create':
-        return <CreateMusicPage onAuthClick={() => setShowAuthModal(true)} />;
-      case 'dashboard':
-        return (
-          <DashboardPage 
-            onAuthClick={() => setShowAuthModal(true)} 
-            onNavigate={handleNavigate}
-          />
-        );
-      default:
-        return <HomePage onNavigate={handleNavigate} />;
+      case 'home': return <HomePage onNavigate={handleNavigate} />;
+      case 'create': return <CreateMusicPage onAuthClick={() => setShowAuthModal(true)} />;
+      case 'dashboard': return <DashboardPage onAuthClick={() => setShowAuthModal(true)} onNavigate={handleNavigate} />;
+      case 'settings': return <AccountSettingsPage onAuthClick={() => setShowAuthModal(true)} onNavigate={handleNavigate} />;
+      default: return <HomePage onNavigate={handleNavigate} />;
     }
   };
 
@@ -52,34 +43,21 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar
-        currentPage={currentPage}
-        onNavigate={handleNavigate}
-        onAuthClick={() => setShowAuthModal(true)}
-      />
-      
-      {/* Main content area - responsive margin */}
+      <Sidebar currentPage={currentPage} onNavigate={handleNavigate} onAuthClick={() => setShowAuthModal(true)} />
       <main className={isMobile ? "pt-16" : "ml-64 transition-all duration-300"}>
         {renderPage()}
       </main>
-
-      {/* Auth Modal */}
-      <AuthModal 
-        isOpen={showAuthModal} 
-        onClose={() => setShowAuthModal(false)} 
-      />
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </div>
   );
 };
 
-const Index: React.FC = () => {
-  return (
-    <AuthProvider>
-      <MusicProvider>
-        <AppContent />
-      </MusicProvider>
-    </AuthProvider>
-  );
-};
+const Index: React.FC = () => (
+  <AuthProvider>
+    <MusicProvider>
+      <AppContent />
+    </MusicProvider>
+  </AuthProvider>
+);
 
 export default Index;
