@@ -578,6 +578,33 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
             </div>
           </motion.div>
 
+          {/* Mood */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.31 }} className="glass-card rounded-xl p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
+              <Label className="text-foreground font-medium">Mood</Label>
+              <AiToolbar field="mood" />
+            </div>
+            <Input placeholder="e.g., Dark, euphoric, melancholic, aggressive..." value={mood} onChange={(e) => setMood(e.target.value)} className="bg-input border-border" />
+          </motion.div>
+
+          {/* Musical Key */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32 }} className="glass-card rounded-xl p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
+              <Label className="text-foreground font-medium">Musical Key</Label>
+              <AiToolbar field="musicalKey" />
+            </div>
+            <div className="relative">
+              <select value={musicalKey} onChange={(e) => setMusicalKey(e.target.value)} className="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground appearance-none cursor-pointer">
+                {['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].flatMap(note =>
+                  ['minor', 'major', 'dorian', 'phrygian'].map(scale => (
+                    <option key={`${note} ${scale}`} value={`${note} ${scale}`}>{note} {scale}</option>
+                  ))
+                )}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            </div>
+          </motion.div>
+
           {/* Vocal Structure */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.33 }} className="glass-card rounded-xl p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
