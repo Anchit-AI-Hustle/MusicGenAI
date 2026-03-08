@@ -409,7 +409,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                       </motion.div>
                     )}
                   </AnimatePresence>
-                  {showVocalEffectsDD && <div className="fixed inset-0 z-10" onClick={() => setShowVocalEffectsDD(false)} />}
+                  {showVocalEffectsDD && <div className="fixed inset-0 z-40" onClick={() => setShowVocalEffectsDD(false)} />}
                 </div>
               </div>
 
