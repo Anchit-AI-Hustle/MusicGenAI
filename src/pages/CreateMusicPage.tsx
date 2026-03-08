@@ -18,6 +18,20 @@ import { useMusic } from '@/contexts/MusicContext';
 import { GENRES, LANGUAGES } from '@/data/genres';
 import { toast } from 'sonner';
 
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Waiting to start',
+  analyzing: 'Analyzing prompt',
+  generating_segments: 'Generating music',
+  stitching_audio: 'Stitching track',
+  rendering_video: 'Rendering video',
+  uploading: 'Finalizing assets',
+  completed: 'Ready',
+  failed: 'Failed',
+  processing: 'Processing',
+};
+
+const ACTIVE_STATUSES = ['analyzing', 'generating_segments', 'stitching_audio', 'rendering_video', 'uploading', 'processing'];
+
 interface CreateMusicPageProps {
   onAuthClick: () => void;
 }
