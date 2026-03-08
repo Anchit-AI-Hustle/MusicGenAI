@@ -275,6 +275,17 @@ const VideoPlayerInner: React.FC<VideoPlayerProps> = ({ videoUrl, title, duratio
               {viewMode === 'theatre' ? <Monitor className="w-4 h-4" /> : <RectangleHorizontal className="w-4 h-4" />}
             </button>
 
+            {/* Download */}
+            <a
+              href={videoUrl}
+              download={`${title || 'video'}.mp4`}
+              onClick={(e) => e.stopPropagation()}
+              className="text-white/80 hover:text-white transition-colors p-1"
+              title="Download Video"
+            >
+              <Download className="w-4 h-4" />
+            </a>
+
             {/* Fullscreen */}
             <button
               onClick={toggleFullscreen}

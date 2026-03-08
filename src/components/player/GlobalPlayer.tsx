@@ -208,10 +208,18 @@ export const GlobalPlayer: React.FC = () => {
                 <AudioVisualizer barCount={64} />
               </div>
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-                <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-2xl bg-secondary flex items-center justify-center">
-                  <Music className="w-12 h-12 sm:w-16 sm:h-16 text-primary" />
-                </div>
+              <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-primary/10 via-background to-background">
+                {currentTrack.coverUrl ? (
+                  <img
+                    src={currentTrack.coverUrl}
+                    alt={currentTrack.title}
+                    className="w-28 h-28 sm:w-40 sm:h-40 rounded-2xl object-cover shadow-2xl shadow-primary/20"
+                  />
+                ) : (
+                  <div className="w-28 h-28 sm:w-40 sm:h-40 rounded-2xl bg-secondary/80 flex items-center justify-center shadow-2xl shadow-primary/10">
+                    <Music className="w-14 h-14 sm:w-20 sm:h-20 text-primary/60" />
+                  </div>
+                )}
                 <div className="text-center">
                   <p className="font-display text-lg font-semibold text-foreground">{currentTrack.title}</p>
                   <p className="text-sm text-muted-foreground">{currentTrack.artist || 'HarmonyAI'}</p>
