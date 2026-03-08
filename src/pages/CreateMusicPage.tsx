@@ -692,22 +692,17 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                     ))}
                   </div>
                 )}
-                <div className="relative">
+                <div className="relative" ref={languageRef}>
                   <button onClick={() => setShowLanguageDropdown(!showLanguageDropdown)} className="w-full flex items-center justify-between px-4 py-3 bg-input border border-border rounded-lg text-left">
                     <span className="text-muted-foreground">{selectedLanguages.length === 0 ? 'Select languages...' : 'Add more languages'}</span>
                     <ChevronDown className="w-4 h-4 text-muted-foreground" />
                   </button>
-                  <AnimatePresence>
-                    {showLanguageDropdown && (
-                      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute z-50 w-full mt-2 max-h-48 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
-                        {LANGUAGES.map(lang => (
-                          <button key={lang} onClick={() => toggleLanguage(lang)} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${selectedLanguages.includes(lang) ? 'bg-accent/10 text-accent' : 'text-foreground'}`}>{lang}</button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  <PortalDropdown open={showLanguageDropdown} onClose={() => setShowLanguageDropdown(false)} triggerRef={languageRef as React.RefObject<HTMLElement>} matchTriggerWidth>
+                    {LANGUAGES.map(lang => (
+                      <button key={lang} onClick={() => toggleLanguage(lang)} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${selectedLanguages.includes(lang) ? 'bg-accent/10 text-accent' : 'text-foreground'}`}>{lang}</button>
+                    ))}
+                  </PortalDropdown>
                 </div>
-                {showLanguageDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowLanguageDropdown(false)} />}
               </motion.div>
 
               {/* Lyrics */}
