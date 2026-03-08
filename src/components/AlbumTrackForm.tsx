@@ -19,7 +19,6 @@ export interface TrackConfig {
   genres: string[];
   mood: string;
   tempoBpm: number;
-  musicalKey: string;
   durationSeconds: number;
   vocalLanguages: string[];
   vocalStructure: string;
@@ -39,7 +38,6 @@ export const defaultTrackConfig = (index: number): TrackConfig => ({
   genres: [],
   mood: '',
   tempoBpm: 120,
-  musicalKey: 'D minor',
   durationSeconds: 180,
   vocalLanguages: [],
   vocalStructure: 'Instrumental',
@@ -102,12 +100,17 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
       case 'prompt': return config.musicPrompt;
       case 'genres': return config.genres.join(', ');
       case 'mood': return config.mood;
+      case 'tempoBpm': return String(config.tempoBpm);
+      case 'duration': return String(config.durationSeconds);
       case 'lyrics': return config.lyrics;
       case 'artistInspiration': return config.artistInspiration;
       case 'videoStyle': return config.videoStyle;
-      case 'musicalKey': return config.musicalKey;
       case 'vocalStructure': return config.vocalStructure;
       case 'vocalStyle': return config.vocalStyle;
+      case 'vocalIntensity': return String(config.vocalIntensity);
+      case 'vocalEffects': return config.vocalEffects.join(', ');
+      case 'vocalLanguage': return config.vocalLanguages.join(', ');
+      case 'songStructure': return config.songStructure;
       default: return '';
     }
   };
@@ -121,12 +124,40 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
         if (suggested.length > 0) update({ genres: suggested });
         break;
       case 'mood': update({ mood: value }); break;
+      case 'tempoBpm': { const p = parseInt(value); if (!isNaN(p)) update({ tempoBpm: Math.max(60, Math.min(200, p)) }); break; }
+      case 'duration': { const p = parseInt(value); if (!isNaN(p)) update({ durationSeconds: Math.max(30, Math.min(600, p)) }); break; }
       case 'lyrics': update({ lyrics: value }); break;
       case 'artistInspiration': update({ artistInspiration: value }); break;
       case 'videoStyle': update({ videoStyle: value }); break;
-      case 'musicalKey': update({ musicalKey: value }); break;
       case 'vocalStructure': update({ vocalStructure: value }); break;
       case 'vocalStyle': update({ vocalStyle: value }); break;
+      case 'vocalIntensity': { const p = parseInt(value); if (!isNaN(p)) update({ vocalIntensity: Math.max(1, Math.min(10, p)) }); break; }
+      case 'vocalEffects': update({ vocalEffects: value.split(',').map(e => e.trim()).filter(Boolean) }); break;
+      case 'vocalLanguage':
+        const langs = value.split(',').map(l => l.trim()).filter(l => LANGUAGES.includes(l));
+        if (langs.length > 0) update({ vocalLanguages: langs });
+        break;
+      case 'songStructure': update({ songStructure: value }); break;
+    }
+  };
+
+  const handleClearField = (field: string) => {
+    switch (field) {
+      case 'trackName': update({ trackName: '' }); break;
+      case 'prompt': update({ musicPrompt: '' }); break;
+      case 'genres': update({ genres: [] }); break;
+      case 'mood': update({ mood: '' }); break;
+      case 'tempoBpm': update({ tempoBpm: 120 }); break;
+      case 'duration': update({ durationSeconds: 180 }); break;
+      case 'lyrics': update({ lyrics: '' }); break;
+      case 'artistInspiration': update({ artistInspiration: '' }); break;
+      case 'videoStyle': update({ videoStyle: '' }); break;
+      case 'vocalStructure': update({ vocalStructure: 'Instrumental' }); break;
+      case 'vocalStyle': update({ vocalStyle: '' }); break;
+      case 'vocalIntensity': update({ vocalIntensity: 5 }); break;
+      case 'vocalEffects': update({ vocalEffects: [] }); break;
+      case 'vocalLanguage': update({ vocalLanguages: [] }); break;
+      case 'songStructure': update({ songStructure: '' }); break;
     }
   };
 
@@ -161,6 +192,9 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
         </Button>
         <Button variant="outline" size="sm" onClick={() => handleAiAction(field, 'new')} disabled={currentAction === 'new'} className="text-xs h-7 px-2 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50">
           {currentAction === 'new' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />} New
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => handleClearField(field)} disabled={isFieldLoading(field)} className="text-xs h-7 px-2 text-muted-foreground hover:text-destructive">
+          <Trash2 className="w-3 h-3 mr-1" /> Clear
         </Button>
       </div>
     );
@@ -258,34 +292,43 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                 <Input value={config.mood} onChange={e => update({ mood: e.target.value })} className="bg-input border-border" placeholder="e.g., Dark, euphoric, melancholic..." />
               </div>
 
-              {/* Tempo + Key row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-foreground font-medium text-sm mb-2 block">Tempo: {config.tempoBpm} BPM</Label>
-                  <Slider value={[config.tempoBpm]} onValueChange={v => update({ tempoBpm: v[0] })} min={60} max={200} step={1} />
+              {/* Tempo */}
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-muted-foreground" />
+                    <Label className="text-foreground font-medium text-sm">Tempo: {config.tempoBpm} BPM</Label>
+                  </div>
+                  <AiToolbar field="tempoBpm" />
                 </div>
-                <div>
-                  <Label className="text-foreground font-medium text-sm mb-2 block">Musical Key</Label>
-                  <select value={config.musicalKey} onChange={e => update({ musicalKey: e.target.value })} className="w-full px-3 py-2 bg-input border border-border rounded-lg text-foreground text-sm appearance-none">
-                    {['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].flatMap(note =>
-                      ['minor', 'major'].map(scale => (
-                        <option key={`${note} ${scale}`} value={`${note} ${scale}`}>{note} {scale}</option>
-                      ))
-                    )}
-                  </select>
+                <Slider value={[config.tempoBpm]} onValueChange={v => update({ tempoBpm: v[0] })} min={60} max={200} step={1} />
+                <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
+                  <span>60 BPM</span><span>200 BPM</span>
                 </div>
               </div>
 
               {/* Duration */}
               <div>
-                <Label className="text-foreground font-medium text-sm mb-2 block">Duration: {formatDuration(config.durationSeconds)}</Label>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                    <Label className="text-foreground font-medium text-sm">Duration: {formatDuration(config.durationSeconds)}</Label>
+                  </div>
+                  <AiToolbar field="duration" />
+                </div>
                 <Slider value={[config.durationSeconds]} onValueChange={v => update({ durationSeconds: v[0] })} min={30} max={600} step={1} />
+                <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
+                  <span>0:30</span><span>10:00</span>
+                </div>
               </div>
 
               {/* Vocal Structure + Style row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-foreground font-medium text-sm mb-2 block">Vocal Structure</Label>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <Label className="text-foreground font-medium text-sm">Vocal Structure</Label>
+                    <AiToolbar field="vocalStructure" />
+                  </div>
                   <div className="relative">
                     <Input value={config.vocalStructure} onChange={e => update({ vocalStructure: e.target.value })} onFocus={() => setShowVocalStructDD(true)} className="bg-input border-border" />
                     <AnimatePresence>
@@ -301,7 +344,10 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   </div>
                 </div>
                 <div>
-                  <Label className="text-foreground font-medium text-sm mb-2 block">Vocal Style</Label>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <Label className="text-foreground font-medium text-sm">Vocal Style</Label>
+                    <AiToolbar field="vocalStyle" />
+                  </div>
                   <div className="relative">
                     <Input value={config.vocalStyle} onChange={e => update({ vocalStyle: e.target.value })} onFocus={() => setShowVocalStyleDD(true)} className="bg-input border-border" />
                     <AnimatePresence>
@@ -318,9 +364,64 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                 </div>
               </div>
 
+              {/* Vocal Intensity */}
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-muted-foreground" />
+                    <Label className="text-foreground font-medium text-sm">Vocal Intensity: {config.vocalIntensity}/10</Label>
+                  </div>
+                  <AiToolbar field="vocalIntensity" />
+                </div>
+                <Slider value={[config.vocalIntensity]} onValueChange={v => update({ vocalIntensity: v[0] })} min={1} max={10} step={1} />
+                <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
+                  <span>1 — Soft</span><span>10 — Powerful</span>
+                </div>
+              </div>
+
+              {/* Vocal Effects */}
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <AudioWaveform className="w-4 h-4 text-muted-foreground" />
+                    <Label className="text-foreground font-medium text-sm">Vocal Effects</Label>
+                  </div>
+                  <AiToolbar field="vocalEffects" />
+                </div>
+                {config.vocalEffects.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {config.vocalEffects.map(e => (
+                      <Badge key={e} variant="secondary" className="bg-accent/20 text-accent border-accent/30 cursor-pointer text-xs" onClick={() => update({ vocalEffects: config.vocalEffects.filter(x => x !== e) })}>{e} ×</Badge>
+                    ))}
+                  </div>
+                )}
+                <div className="relative">
+                  <button onClick={() => setShowVocalEffectsDD(!showVocalEffectsDD)} className="w-full flex items-center justify-between px-3 py-2 bg-input border border-border rounded-lg text-left text-sm">
+                    <span className="text-muted-foreground">{config.vocalEffects.length === 0 ? 'Select effects...' : 'Add more'}</span>
+                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                  <AnimatePresence>
+                    {showVocalEffectsDD && (
+                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-20 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
+                        {VOCAL_EFFECTS_OPTIONS.map(ef => (
+                          <button key={ef} onClick={() => update({ vocalEffects: config.vocalEffects.includes(ef) ? config.vocalEffects.filter(x => x !== ef) : [...config.vocalEffects, ef] })} className={`w-full text-left px-3 py-1.5 text-sm hover:bg-secondary ${config.vocalEffects.includes(ef) ? 'bg-accent/10 text-accent' : 'text-foreground'}`}>{ef}</button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  {showVocalEffectsDD && <div className="fixed inset-0 z-10" onClick={() => setShowVocalEffectsDD(false)} />}
+                </div>
+              </div>
+
               {/* Languages */}
               <div>
-                <Label className="text-foreground font-medium text-sm mb-2 block">Vocal Language(s)</Label>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <Languages className="w-4 h-4 text-muted-foreground" />
+                    <Label className="text-foreground font-medium text-sm">Vocal Language(s)</Label>
+                  </div>
+                  <AiToolbar field="vocalLanguage" />
+                </div>
                 {config.vocalLanguages.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mb-2">
                     {config.vocalLanguages.map(l => (
@@ -366,10 +467,11 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
 
               {/* Song Structure */}
               <div>
-                <Label className="text-foreground font-medium text-sm mb-2 block">Song Structure</Label>
-                <div className="relative">
-                  <Input value={config.songStructure} onChange={e => update({ songStructure: e.target.value })} className="bg-input border-border" placeholder="e.g., Intro → Verse → Chorus → Outro" />
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <Label className="text-foreground font-medium text-sm">Song Structure</Label>
+                  <AiToolbar field="songStructure" />
                 </div>
+                <Input value={config.songStructure} onChange={e => update({ songStructure: e.target.value })} className="bg-input border-border" placeholder="e.g., Intro → Verse → Chorus → Outro" />
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {SONG_STRUCTURE_PRESETS.map(p => (
                     <button key={p} onClick={() => update({ songStructure: p })} className={`px-2 py-1 text-xs rounded-md border transition-smooth ${config.songStructure === p ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>{p.length > 40 ? p.slice(0, 40) + '...' : p}</button>
