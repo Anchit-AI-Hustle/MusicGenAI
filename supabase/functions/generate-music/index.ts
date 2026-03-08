@@ -611,7 +611,7 @@ serve(async (req) => {
     // ================================================================
     // STEP 1b — EXPANDING PROMPT INTO PRODUCTION BRIEF
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Expanding into production brief", 0.04, etaRemaining, jobId, 2);
+    await updateProgress(supabase, trackId, creationId, "Expanding into production brief", 0.04, etaRemaining, jobId, 2, 0, 0, "analyzing");
 
     const briefResult = await callAI(
       LOVABLE_API_KEY,
