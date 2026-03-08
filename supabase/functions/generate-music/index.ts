@@ -445,7 +445,8 @@ Make sure sections perfectly tile from 0 to ${durationSec} seconds. Section boun
     // ================================================================
     // STAGE 5 — HARMONY AND MELODY GENERATION
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "harmony-melody", 0.14);
+    etaRemaining -= 10;
+    await updateProgress(supabase, trackId, creationId, "Generating harmony & melody", 0.14, etaRemaining);
 
     const harmonyResult: HarmonyData = await callAI(
       LOVABLE_API_KEY,
