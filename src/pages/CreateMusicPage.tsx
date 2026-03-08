@@ -23,8 +23,10 @@ const STATUS_LABELS: Record<string, string> = {
   pending: 'Waiting to start',
   analyzing: 'Analyzing inputs',
   planning_structure: 'Planning song structure',
-  generating_midi: 'Composing patterns',
-  rendering_audio: 'Rendering audio',
+  composing_music: 'Composing patterns',
+  generating_instrumental: 'Generating instrumental',
+  generating_vocals: 'Generating vocals',
+  vocal_alignment: 'Aligning vocals',
   mixing_mastering: 'Mixing & mastering',
   generating_video: 'Generating video',
   encoding_video: 'Encoding video',
@@ -34,7 +36,7 @@ const STATUS_LABELS: Record<string, string> = {
   audio_complete_video_failed: 'Audio ready (video failed)',
 };
 
-const ACTIVE_STATUSES = ['analyzing', 'planning_structure', 'generating_midi', 'rendering_audio', 'mixing_mastering', 'generating_video', 'encoding_video', 'finalizing'];
+const ACTIVE_STATUSES = ['analyzing', 'planning_structure', 'composing_music', 'generating_instrumental', 'generating_vocals', 'vocal_alignment', 'mixing_mastering', 'generating_video', 'encoding_video', 'finalizing'];
 
 interface CreateMusicPageProps {
   onAuthClick: () => void;
