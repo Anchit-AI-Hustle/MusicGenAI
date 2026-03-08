@@ -732,7 +732,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const aiSuggest = async (field: string, value: string, context: Record<string, any>, action: AiAction = 'suggest'): Promise<string | null> => {
     // Serialize requests to avoid flooding the API
     const result = aiSuggestQueueRef.current.then(async () => {
-      const maxRetries = 4;
+      const maxRetries = 2;
       const history = suggestionHistoryRef.current[field] || [];
       const randomSeed = Math.floor(Math.random() * 100000);
 
