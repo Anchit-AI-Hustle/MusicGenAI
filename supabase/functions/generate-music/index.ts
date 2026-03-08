@@ -504,7 +504,23 @@ function pickRandom<T>(arr: T[], count: number = 1): T[] {
   return shuffled.slice(0, count);
 }
 
-// ===== BUILD RICH SEGMENT PROMPT from production brief =====
+// ===== PROMPT LENGTH LIMITS (MusicGen token safety) =====
+const MAX_PROMPT_WORDS = 20;
+const MAX_PROMPT_CHARACTERS = 120;
+
+function sanitizePrompt(raw: string): string {
+  // Remove extra punctuation and normalize whitespace
+  let cleaned = raw.replace(/[^a-zA-Z0-9\s\-]/g, " ").replace(/\s+/g, " ").trim();
+  // Enforce word limit
+  cleaned = cleaned.split(" ").slice(0, MAX_PROMPT_WORDS).join(" ");
+  // Enforce character limit
+  if (cleaned.length > MAX_PROMPT_CHARACTERS) {
+    cleaned = cleaned.substring(0, MAX_PROMPT_CHARACTERS).replace(/\s\S*$/, "").trim();
+  }
+  return cleaned;
+}
+
+// ===== BUILD CONCISE SEGMENT PROMPT from production brief =====
 function buildSegmentPrompt(
   brief: ProductionBrief,
   seg: SegmentPlan,
@@ -513,31 +529,20 @@ function buildSegmentPrompt(
   userPrompt: string,
   artistInspiration: string,
 ): string {
-  const sectionMod = SECTION_MODIFIERS[seg.name.replace(/_\d+$/, "")] || seg.description;
+  // Build a concise prompt: genre + section + mood + key instrument + texture
+  const sectionName = seg.name.replace(/_\d+$/, "");
   const textureVar = pickRandom(TEXTURE_VARIATIONS, 1)[0];
-  const rhythmVar = pickRandom(RHYTHM_VARIATIONS, 1)[0];
-  // Pick 1-2 keywords from brief's texture pool
-  const briefTextures = brief.textureKeywords?.length
-    ? pickRandom(brief.textureKeywords, Math.min(2, brief.textureKeywords.length)).join(", ")
-    : "";
 
   const parts = [
-    `${brief.genre} ${brief.subgenre} ${seg.name} section`,
-    `${brief.tempo}`,
-    `${brief.mood} mood, ${brief.atmosphere}`,
-    `${sectionMod}`,
-    `Instrumentation: ${brief.instrumentation}`,
-    `Rhythm: ${brief.rhythmicStyle}, ${rhythmVar}`,
-    `Texture: ${textureVar}${briefTextures ? `, ${briefTextures}` : ""}`,
-    `Environment: ${brief.environment}`,
-    artistInspiration ? `Influenced by: ${artistInspiration}` : "",
-    segIdx === 0 ? "Begin the track with a clear, intentional opening."
-      : segIdx === totalSegments - 1 ? "Bring the track to a natural, resolved conclusion."
-      : "Continue seamlessly from the previous section with natural musical flow.",
-    userPrompt,  // Include original prompt for flavor
-  ];
+    brief.genre,
+    sectionName,
+    brief.mood,
+    pickRandom(brief.instrumentation.split(",").map(s => s.trim()).filter(Boolean), 2).join(" "),
+    textureVar,
+  ].filter(Boolean);
 
-  return parts.filter(Boolean).join(". ") + ".";
+  const raw = parts.join(" ");
+  return sanitizePrompt(raw);
 }
 
 // ===== MAIN PIPELINE =====
