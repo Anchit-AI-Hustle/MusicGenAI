@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
-import { generateTrack, MusicIntent } from '@/lib/music-engine';
+import { generateTrack, MusicIntent, createRng } from '@/lib/music-engine';
 import { generateVideoFromAudio } from '@/lib/video-generator';
 import { generateVocals, mixVocalsIntoInstrumental, inferVocalStyle, generateDefaultLyrics, type VocalConfig } from '@/lib/vocal-engine';
 import { masterAudio } from '@/lib/audio-utils';

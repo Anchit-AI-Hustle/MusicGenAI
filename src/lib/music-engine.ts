@@ -44,7 +44,7 @@ export interface SectionPlan {
 type ProgressCallback = (stage: string, progress: number) => void;
 
 // ===== Seeded random =====
-function createRng(seed: number) {
+export function createRng(seed: number) {
   let s = seed;
   return () => {
     s = (s * 1664525 + 1013904223) & 0xffffffff;
