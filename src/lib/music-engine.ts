@@ -540,16 +540,23 @@ function concatenateBuffers(buffers: AudioBuffer[], sampleRate: number): AudioBu
 
 // ===== Main Generation Function (Segmented) =====
 
+export interface GenerateTrackResult {
+  blob: Blob;
+  instrumentalBuffer: AudioBuffer;
+  rngState: number;
+}
+
 export async function generateTrack(
   intent: MusicIntent,
   onProgress: ProgressCallback,
   seed?: number,
-): Promise<Blob> {
-  const rng = createRng(seed ?? Math.floor(Math.random() * 2147483647));
+): Promise<GenerateTrackResult> {
+  const seedVal = seed ?? Math.floor(Math.random() * 2147483647);
+  const rng = createRng(seedVal);
   const { tempo, key, scale, structure, durationSeconds, energy: globalEnergy } = intent;
   const sampleRate = INTERNAL_SAMPLE_RATE;
 
-  onProgress('generating_midi', 0.12);
+  onProgress('composing_music', 0.12);
   await sleep(30);
 
   // Get genre profile
@@ -571,7 +578,7 @@ export async function generateTrack(
   const leadWaveform: OscillatorType = profile.harmonicStyle === 'chromatic' ? 'sawtooth' : 'square';
   const bassWaveform: OscillatorType = profile.swing > 0.2 ? 'sine' : 'sawtooth';
 
-  onProgress('generating_midi', 0.18);
+  onProgress('generating_instrumental', 0.18);
 
   // ===== Segmented rendering =====
   const totalSegments = Math.ceil(durationSeconds / SEGMENT_DURATION);
@@ -581,9 +588,9 @@ export async function generateTrack(
     const segStart = i * SEGMENT_DURATION;
     const segEnd = Math.min((i + 1) * SEGMENT_DURATION, durationSeconds);
 
-    // Progress: rendering_audio stage, range 0.20 to 0.65
-    const segProgress = 0.20 + (i / totalSegments) * 0.45;
-    onProgress('rendering_audio', segProgress);
+    // Progress: generating_instrumental stage, range 0.20 to 0.55
+    const segProgress = 0.20 + (i / totalSegments) * 0.35;
+    onProgress('generating_instrumental', segProgress);
 
     const segBuffer = await renderSegment(
       intent, i, segStart, segEnd,
@@ -598,14 +605,17 @@ export async function generateTrack(
     await sleep(10);
   }
 
-  onProgress('rendering_audio', 0.67);
+  onProgress('generating_instrumental', 0.57);
 
   // ===== Combine segments =====
-  onProgress('mixing_mastering', 0.70);
+  onProgress('mixing_mastering', 0.58);
   const fullBuffer = concatenateBuffers(segmentBuffers, sampleRate);
 
+  // Keep a copy of the instrumental for separate export/vocal mixing
+  const instrumentalBuffer = copyAudioBuffer(fullBuffer);
+
   // ===== Professional mastering pipeline =====
-  onProgress('mixing_mastering', 0.75);
+  onProgress('mixing_mastering', 0.60);
   console.log('[Mastering] Starting professional mastering pipeline...');
   
   const masterResult = masterAudio(fullBuffer, 2);
@@ -614,10 +624,22 @@ export async function generateTrack(
     `LUFS: ${masterResult.stats.lufs.toFixed(1)}, Clipping: ${masterResult.stats.clipping}, ` +
     `Artifacts: ${masterResult.stats.artifacts}, Quality: ${masterResult.stats.passedQualityCheck ? 'PASS' : 'WARN'}`);
 
-  onProgress('mixing_mastering', 0.88);
-  onProgress('finalizing', 0.92);
+  onProgress('mixing_mastering', 0.65);
 
-  return masterResult.blob;
+  return { blob: masterResult.blob, instrumentalBuffer, rngState: seedVal };
+}
+
+/** Copy an AudioBuffer */
+function copyAudioBuffer(buffer: AudioBuffer): AudioBuffer {
+  const copy = new AudioBuffer({
+    length: buffer.length,
+    numberOfChannels: buffer.numberOfChannels,
+    sampleRate: buffer.sampleRate,
+  });
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    copy.copyToChannel(buffer.getChannelData(ch).slice(), ch);
+  }
+  return copy;
 }
 
 function sleep(ms: number): Promise<void> {
