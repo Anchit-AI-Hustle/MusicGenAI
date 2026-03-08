@@ -328,14 +328,17 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     );
   };
 
-  // ===== 7-Step Pipeline Progress Component =====
+  // ===== 9-Step Pipeline Progress Component =====
   const PIPELINE_STEPS = [
-    { key: 'analyzing', label: 'Analyzing prompt', match: /analyz/i },
-    { key: 'planning', label: 'Planning song structure', match: /plan/i },
-    { key: 'generating', label: 'Generating segments', match: /generat/i },
-    { key: 'downloading', label: 'Downloading generated audio', match: /download/i },
-    { key: 'stitching', label: 'Stitching segments', match: /stitch/i },
-    { key: 'finalizing', label: 'Finalizing track', match: /final/i },
+    { key: 'analyzing', label: 'Analyzing user inputs', icon: '🔍', match: /analyz/i },
+    { key: 'expanding', label: 'Expanding production brief', icon: '📝', match: /expand/i },
+    { key: 'planning', label: 'Planning song structure', icon: '🎼', match: /plan/i },
+    { key: 'generating', label: 'Generating audio segments', icon: '🎵', match: /generat/i },
+    { key: 'downloading', label: 'Downloading audio segments', icon: '⬇️', match: /download/i },
+    { key: 'stitching', label: 'Stitching into final track', icon: '🔗', match: /stitch/i },
+    { key: 'finalizing', label: 'Finalizing audio output', icon: '💾', match: /finaliz.*(?:sav|audio)/i },
+    { key: 'video', label: 'Generating video', icon: '🎬', match: /video/i },
+    { key: 'complete', label: 'Preparing download', icon: '✅', match: /prepar|complete/i },
   ];
 
   const PipelineProgress: React.FC<{
@@ -345,48 +348,90 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     const currentStepIdx = PIPELINE_STEPS.findIndex(s => s.match.test(currentStage));
     const activeIdx = currentStepIdx >= 0 ? currentStepIdx : 0;
 
+    // Extract segment name from stage like "Generating intro segment (1 of 6)"
+    const segmentMatch = currentStage.match(/Generating (\w+) segment \((\d+) of (\d+)\)/);
+    const segmentName = segmentMatch ? segmentMatch[1] : null;
+
+    const formatEta = (secs: number) => {
+      if (secs <= 0) return '';
+      if (secs >= 3600) return `~${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
+      if (secs >= 60) return `~${Math.floor(secs / 60)}m ${secs % 60}s`;
+      return `~${secs}s`;
+    };
+
     return (
-      <div className="mt-3 space-y-2">
+      <div className="mt-4 space-y-3">
         {/* Step indicators */}
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           {PIPELINE_STEPS.map((step, idx) => {
             const isComplete = idx < activeIdx;
             const isActive = idx === activeIdx;
             const isPending = idx > activeIdx;
 
             return (
-              <div key={step.key} className={`flex items-center gap-2 text-xs py-0.5 ${isPending ? 'opacity-40' : ''}`}>
+              <div key={step.key} className={`flex items-center gap-2.5 text-xs py-1 px-2 rounded-md transition-all ${
+                isActive ? 'bg-primary/10 border border-primary/20' : ''
+              } ${isPending ? 'opacity-30' : ''}`}>
                 {isComplete ? (
                   <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
                 ) : isActive ? (
                   <Loader2 className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" />
                 ) : (
-                  <Circle className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                  <Circle className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" />
                 )}
+                <span className="mr-1">{step.icon}</span>
                 <span className={`font-medium ${isActive ? 'text-primary' : isComplete ? 'text-green-400' : 'text-muted-foreground'}`}>
                   {step.label}
-                  {isActive && step.key === 'generating' && ` (${completedSegments}/${totalSegments})`}
                 </span>
+                {/* Segment detail for the generating step */}
+                {isActive && step.key === 'generating' && (
+                  <span className="text-primary/70 ml-auto">
+                    {segmentName && <span className="capitalize">{segmentName} · </span>}
+                    {completedSegments}/{totalSegments} segments
+                  </span>
+                )}
               </div>
             );
           })}
         </div>
 
-        {/* ETA */}
-        {estimatedTimeLeft > 0 && (
-          <p className="text-xs text-muted-foreground">
-            ~{estimatedTimeLeft >= 60
-              ? `${Math.floor(estimatedTimeLeft / 60)}m ${estimatedTimeLeft % 60}s`
-              : `${estimatedTimeLeft}s`} remaining
-          </p>
-        )}
-
         {/* Overall progress bar */}
-        <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-          <span>Step {activeIdx + 1} of {PIPELINE_STEPS.length}</span>
-          <span>{Math.round(progress * 100)}%</span>
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span className="font-medium">Step {activeIdx + 1} of {PIPELINE_STEPS.length}</span>
+            <div className="flex items-center gap-3">
+              {estimatedTimeLeft > 0 && (
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {formatEta(estimatedTimeLeft)} remaining
+                </span>
+              )}
+              <span className="font-mono">{Math.round(progress * 100)}%</span>
+            </div>
+          </div>
+          <Progress value={progress * 100} className="h-2" />
         </div>
-        <Progress value={progress * 100} className="h-2" />
+
+        {/* Segment sub-progress during generation */}
+        {activeIdx === 3 && totalSegments > 1 && (
+          <div className="space-y-1">
+            <div className="flex gap-1">
+              {Array.from({ length: totalSegments }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1.5 flex-1 rounded-full transition-all ${
+                    i < completedSegments ? 'bg-green-400' :
+                    i === completedSegments ? 'bg-primary animate-pulse' :
+                    'bg-muted'
+                  }`}
+                />
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground text-center">
+              {completedSegments} of {totalSegments} segments complete
+            </p>
+          </div>
+        )}
       </div>
     );
   };
