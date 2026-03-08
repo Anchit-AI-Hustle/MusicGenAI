@@ -277,15 +277,23 @@ const VideoPlayerInner: React.FC<VideoPlayerProps> = ({ videoUrl, title, duratio
 
             {/* Download */}
             <button
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
-                const a = document.createElement('a');
-                a.href = videoUrl;
-                a.download = `${title || 'video'}.mp4`;
-                a.style.display = 'none';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+                try {
+                  const response = await fetch(videoUrl);
+                  const blob = await response.blob();
+                  const blobUrl = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = blobUrl;
+                  a.download = `${title || 'video'}_video.mp4`;
+                  a.style.display = 'none';
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(blobUrl);
+                } catch {
+                  window.open(videoUrl, '_blank');
+                }
               }}
               className="text-white/80 hover:text-white transition-colors p-1"
               title="Download Video (MP4)"
