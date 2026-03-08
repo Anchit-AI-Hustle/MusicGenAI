@@ -81,6 +81,68 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const realtimeChannelRef = useRef<any>(null);
+  const broadcastChannelsRef = useRef<Map<string, any>>(new Map());
+
+  // Subscribe to broadcast channel for a track's generation progress
+  const subscribeToBroadcast = useCallback((jobId: string, trackId: string, creationId: string) => {
+    // Don't double-subscribe
+    if (broadcastChannelsRef.current.has(jobId)) return;
+
+    const channel = supabase
+      .channel(`generation:${jobId}`)
+      .on('broadcast', { event: 'progress' }, ({ payload }) => {
+        if (!payload) return;
+        const { stepName, progressPercent, segmentsCompleted, totalSegments, estimatedTimeRemaining } = payload;
+
+        // Parse ETA string to seconds
+        let etaSec = 0;
+        if (estimatedTimeRemaining) {
+          const minMatch = estimatedTimeRemaining.match(/(\d+)\s*minute/);
+          const secMatch = estimatedTimeRemaining.match(/(\d+)\s*second/);
+          if (minMatch) etaSec += parseInt(minMatch[1]) * 60;
+          if (secMatch) etaSec += parseInt(secMatch[1]);
+        }
+
+        const isComplete = stepName === 'Completed';
+        const isFailed = stepName === 'Failed';
+
+        // Update track in creations state
+        const mapTrack = (t: Track): Track =>
+          t.id === trackId
+            ? {
+                ...t,
+                status: isComplete ? 'completed' : isFailed ? 'failed' : 'processing',
+                progress: (progressPercent ?? 0) / 100,
+                currentStage: stepName,
+                completedSegments: segmentsCompleted ?? t.completedSegments,
+                totalSegments: totalSegments ?? t.totalSegments,
+                estimatedTimeLeft: etaSec,
+              }
+            : t;
+
+        setCreations(prev => prev.map(c =>
+          c.id === creationId
+            ? { ...c, tracks: c.tracks.map(mapTrack), status: isComplete ? 'completed' : isFailed ? 'failed' : 'processing', progress: (progressPercent ?? 0) / 100 }
+            : c
+        ));
+        setCurrentCreation(prev => {
+          if (!prev || prev.id !== creationId) return prev;
+          return { ...prev, tracks: prev.tracks.map(mapTrack), status: isComplete ? 'completed' : isFailed ? 'failed' : 'processing', progress: (progressPercent ?? 0) / 100 };
+        });
+
+        // Unsubscribe on completion or failure
+        if (isComplete || isFailed) {
+          const ch = broadcastChannelsRef.current.get(jobId);
+          if (ch) {
+            supabase.removeChannel(ch);
+            broadcastChannelsRef.current.delete(jobId);
+          }
+        }
+      })
+      .subscribe();
+
+    broadcastChannelsRef.current.set(jobId, channel);
+  }, []);
 
   const fetchCreations = useCallback(async () => {
     if (!user?.id) {
