@@ -117,6 +117,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     title, musicPrompt, genres: selectedGenres, durationSeconds,
     vocalLanguages: selectedLanguages, lyrics, artistInspiration, videoStyle,
     tempoBpm, mood, musicalKey, vocalStructure, vocalStyle, vocalIntensity, vocalEffects: selectedVocalEffects,
+    songStructure,
   });
 
   // Apply value directly to a field
