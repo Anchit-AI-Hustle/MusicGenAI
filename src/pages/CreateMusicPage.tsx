@@ -215,30 +215,30 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
           variant="outline"
           size="sm"
           onClick={() => handleAiSuggest(field)}
-          disabled={loading}
+          disabled={currentAction === 'suggest'}
           className="text-xs h-7 px-2 border-primary/30 text-primary hover:bg-primary/10"
         >
-          {loading && currentAction === 'suggest' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Wand2 className="w-3 h-3 mr-1" />}
+          {currentAction === 'suggest' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Wand2 className="w-3 h-3 mr-1" />}
           AI Suggest
         </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={() => handleEnhance(field)}
-          disabled={loading}
+          disabled={currentAction === 'enhance'}
           className="text-xs h-7 px-2 border-accent/30 text-accent hover:bg-accent/10"
         >
-          {loading && currentAction === 'enhance' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Zap className="w-3 h-3 mr-1" />}
+          {currentAction === 'enhance' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Zap className="w-3 h-3 mr-1" />}
           Enhance
         </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={() => handleNewSuggestion(field)}
-          disabled={loading}
+          disabled={currentAction === 'new'}
           className="text-xs h-7 px-2 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50"
         >
-          {loading && currentAction === 'new' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+          {currentAction === 'new' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
           New
         </Button>
         <Button
