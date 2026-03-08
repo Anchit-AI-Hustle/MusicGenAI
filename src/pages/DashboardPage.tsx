@@ -377,8 +377,6 @@ const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number
               currentStage={track.currentStage || track.status}
               progress={track.progress || 0}
               estimatedTimeLeft={track.estimatedTimeLeft || 0}
-              completedSegments={track.completedSegments || 0}
-              totalSegments={track.totalSegments || 1}
             />
           )}
           {track.status === 'failed' && track.errorMessage && (
