@@ -419,6 +419,10 @@ const TrackRow: React.FC<{ track: Track; index: number; formatDuration: (s: numb
           </a>
         )}
       </div>
+      {track.status === 'completed' && track.videoUrl && (
+        <div className="mt-3 ml-9 sm:ml-10">
+          <VideoPlayer videoUrl={track.videoUrl} title={track.title} duration={track.duration} />
+        </div>
+      )}
     </div>
-  );
 };
