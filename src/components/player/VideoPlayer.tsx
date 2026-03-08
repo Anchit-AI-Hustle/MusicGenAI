@@ -276,15 +276,22 @@ const VideoPlayerInner: React.FC<VideoPlayerProps> = ({ videoUrl, title, duratio
             </button>
 
             {/* Download */}
-            <a
-              href={videoUrl}
-              download={`${title || 'video'}.mp4`}
-              onClick={(e) => e.stopPropagation()}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const a = document.createElement('a');
+                a.href = videoUrl;
+                a.download = `${title || 'video'}.mp4`;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+              }}
               className="text-white/80 hover:text-white transition-colors p-1"
-              title="Download Video"
+              title="Download Video (MP4)"
             >
               <Download className="w-4 h-4" />
-            </a>
+            </button>
 
             {/* Fullscreen */}
             <button
