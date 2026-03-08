@@ -827,6 +827,7 @@ Durations MUST sum to exactly ${durationSec}.`,
       console.error(`[${trackId}] ${errorMsg}`);
       await supabase.from("tracks").update({ status: "failed", error_message: errorMsg }).eq("id", trackId);
       await supabase.from("music_creations").update({ status: "failed" }).eq("id", creationId);
+      await broadcastProgress(supabase, jobId, -1, "Failed", 100, 0, 0, "0 seconds");
       return new Response(JSON.stringify({ error: errorMsg }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
