@@ -358,21 +358,25 @@ async function renderSegment(
   const numChannels = 2;
   const ctx = new OfflineAudioContext(numChannels, Math.ceil(sampleRate * segDuration), sampleRate);
 
-  // Master compressor
+  // Master compressor with safe gain staging
   const compressor = ctx.createDynamicsCompressor();
-  compressor.threshold.value = -12;
-  compressor.knee.value = 6;
+  compressor.threshold.value = -18; // Lower threshold for safer headroom
+  compressor.knee.value = 8;
   compressor.ratio.value = 4;
   compressor.attack.value = 0.003;
   compressor.release.value = 0.15;
-  compressor.connect(ctx.destination);
+  
+  // Master gain for headroom control (-6dB target)
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = 0.5; // -6dB headroom
+  compressor.connect(masterGain).connect(ctx.destination);
 
-  // Channel buses
-  const drumBus = ctx.createGain(); drumBus.gain.value = 0.8; drumBus.connect(compressor);
-  const bassBus = ctx.createGain(); bassBus.gain.value = 0.7; bassBus.connect(compressor);
-  const synthBus = ctx.createGain(); synthBus.gain.value = 0.5; synthBus.connect(compressor);
-  const padBus = ctx.createGain(); padBus.gain.value = 0.4; padBus.connect(compressor);
-  const fxBus = ctx.createGain(); fxBus.gain.value = 0.6; fxBus.connect(compressor);
+  // Channel buses with conservative gain staging
+  const drumBus = ctx.createGain(); drumBus.gain.value = 0.65; drumBus.connect(compressor);
+  const bassBus = ctx.createGain(); bassBus.gain.value = 0.55; bassBus.connect(compressor);
+  const synthBus = ctx.createGain(); synthBus.gain.value = 0.40; synthBus.connect(compressor);
+  const padBus = ctx.createGain(); padBus.gain.value = 0.30; padBus.connect(compressor);
+  const fxBus = ctx.createGain(); fxBus.gain.value = 0.45; fxBus.connect(compressor);
 
   // Find which sections overlap this segment
   let sectionStart = 0;
