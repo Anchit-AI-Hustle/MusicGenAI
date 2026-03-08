@@ -243,8 +243,8 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
           try {
             const res = await fetch(track.videoUrl);
             const blob = await res.blob();
-            const videoExt = getVideoExtension(blob);
-            zip.file(`${track.title}.${videoExt}`, blob);
+            const universalMp4 = await ensureUniversalMp4Blob(blob);
+            zip.file(`${track.title}.mp4`, universalMp4);
           } catch {}
         }
       }));

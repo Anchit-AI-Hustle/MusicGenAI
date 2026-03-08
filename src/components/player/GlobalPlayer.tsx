@@ -138,11 +138,20 @@ export const GlobalPlayer: React.FC = () => {
     try {
       const response = await fetch(url);
       const blob = await response.blob();
+
+      let blobToDownload = blob;
       let finalFilename = filename;
-      const ext = getVideoExtension(blob);
-      if (filename.endsWith('.mp4') && ext === 'webm') finalFilename = filename.replace('.mp4', '.webm');
-      else if (filename.endsWith('.webm') && ext === 'mp4') finalFilename = filename.replace('.webm', '.mp4');
-      const blobUrl = URL.createObjectURL(blob);
+      const isVideoFile = blob.type.startsWith('video/') || /\.(mp4|webm)$/i.test(filename);
+
+      if (isVideoFile) {
+        blobToDownload = await ensureUniversalMp4Blob(blob);
+        finalFilename = filename.replace(/\.(webm|mp4)$/i, '.mp4');
+        if (!finalFilename.toLowerCase().endsWith('.mp4')) {
+          finalFilename = `${finalFilename}.mp4`;
+        }
+      }
+
+      const blobUrl = URL.createObjectURL(blobToDownload);
       const a = document.createElement('a');
       a.href = blobUrl;
       a.download = finalFilename;
