@@ -553,7 +553,8 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
-    const { trackId, creationId, input } = await req.json();
+    const { trackId, creationId, input, jobId: reqJobId } = await req.json();
+    const jobId = reqJobId || trackId; // fallback to trackId if no jobId
 
     // ================================================================
     // INPUT FREEZE
