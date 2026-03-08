@@ -106,8 +106,6 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   ];
 
   const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
-  const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
-  const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   // Sync album track count
   React.useEffect(() => {
