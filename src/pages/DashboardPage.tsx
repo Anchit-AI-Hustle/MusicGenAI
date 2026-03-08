@@ -298,12 +298,6 @@ const DashboardTrackProgress: React.FC<{
               <span className={`font-medium ${isActive ? 'text-primary' : isComplete ? 'text-green-400' : 'text-muted-foreground'}`}>
                 {step.label}
               </span>
-              {isActive && step.key === 'generating' && (
-                <span className="text-primary/70 ml-auto">
-                  {segmentName && <span className="capitalize">{segmentName} · </span>}
-                  {completedSegments}/{totalSegments} segments
-                </span>
-              )}
             </div>
           );
         })}
