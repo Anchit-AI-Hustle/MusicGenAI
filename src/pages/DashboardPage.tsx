@@ -253,7 +253,7 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-display font-semibold text-foreground truncate">{creation.title}</h3>
+              <button onClick={(e) => { e.stopPropagation(); onNavigate('song-detail', { creationId: creation.id }); }} className="font-display font-semibold text-foreground truncate hover:underline">{creation.title}</button>
               <Badge variant="secondary" className={`text-xs flex-shrink-0 ${creation.status === 'completed' ? 'bg-green-500/20 text-green-400' : creation.status === 'failed' ? 'bg-destructive/20 text-destructive' : isActiveStatus(creation.status) ? 'bg-primary/20 text-primary' : ''}`}>
                 {STATUS_LABELS[creation.status] || creation.status}
               </Badge>
