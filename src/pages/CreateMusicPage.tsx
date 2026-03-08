@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMusic } from '@/contexts/MusicContext';
+import { usePlayer, PlayerTrack } from '@/contexts/PlayerContext';
 import { GENRES, LANGUAGES } from '@/data/genres';
 import { toast } from 'sonner';
 import { AlbumTrackForm, defaultTrackConfig, type TrackConfig } from '@/components/AlbumTrackForm';
