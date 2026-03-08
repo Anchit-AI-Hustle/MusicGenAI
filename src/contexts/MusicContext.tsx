@@ -4,6 +4,8 @@ import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 import { generateTrack, MusicIntent } from '@/lib/music-engine';
 import { generateVideoFromAudio } from '@/lib/video-generator';
+import { generateVocals, mixVocalsIntoInstrumental, inferVocalStyle, generateDefaultLyrics, type VocalConfig } from '@/lib/vocal-engine';
+import { masterAudio } from '@/lib/audio-utils';
 import type { TrackConfig } from '@/components/AlbumTrackForm';
 
 export interface Track {
