@@ -512,20 +512,15 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                     ))}
                   </div>
                 )}
-                <div className="relative">
+                <div className="relative" ref={genreInputRef}>
                   <Input placeholder="Search genres..." value={genreSearch} onChange={e => setGenreSearch(e.target.value)} onFocus={() => setShowGenreDropdown(true)} className="bg-input border-border" />
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <AnimatePresence>
-                    {showGenreDropdown && (
-                      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute z-50 w-full mt-2 max-h-48 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
-                        {filteredGenres.slice(0, 50).map(genre => (
-                          <button key={genre} onClick={() => toggleGenre(genre)} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${selectedGenres.includes(genre) ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{genre}</button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  <PortalDropdown open={showGenreDropdown} onClose={() => setShowGenreDropdown(false)} triggerRef={genreInputRef as React.RefObject<HTMLElement>} matchTriggerWidth>
+                    {filteredGenres.slice(0, 50).map(genre => (
+                      <button key={genre} onClick={() => toggleGenre(genre)} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${selectedGenres.includes(genre) ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{genre}</button>
+                    ))}
+                  </PortalDropdown>
                 </div>
-                {showGenreDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowGenreDropdown(false)} />}
               </motion.div>
 
               {/* Tempo */}
