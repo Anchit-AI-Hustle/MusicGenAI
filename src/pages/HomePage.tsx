@@ -204,6 +204,41 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           </div>
         </motion.div>
       </section>
+      {/* Demo Video Modal */}
+      <AnimatePresence>
+        {showDemo && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            onClick={() => setShowDemo(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative w-full max-w-4xl aspect-video rounded-2xl overflow-hidden bg-black shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setShowDemo(false)}
+                className="absolute top-3 right-3 z-10 p-2 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <video
+                src="https://vgmwpdktxsjaymdszvvn.supabase.co/storage/v1/object/public/assets/demo.mp4"
+                controls
+                autoPlay
+                className="w-full h-full object-contain"
+                playsInline
+                preload="metadata"
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
