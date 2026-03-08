@@ -366,13 +366,9 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const PipelineProgress: React.FC<{
     currentStage: string; progress: number; estimatedTimeLeft: number;
     completedSegments: number; totalSegments: number;
-  }> = ({ currentStage, progress, estimatedTimeLeft, completedSegments, totalSegments }) => {
+  }> = ({ currentStage, progress, estimatedTimeLeft }) => {
     const currentStepIdx = PIPELINE_STEPS.findIndex(s => s.match.test(currentStage));
     const activeIdx = currentStepIdx >= 0 ? currentStepIdx : 0;
-
-    // Extract segment name from stage like "Generating intro segment (1 of 6)"
-    const segmentMatch = currentStage.match(/Generating (\w+) segment \((\d+) of (\d+)\)/);
-    const segmentName = segmentMatch ? segmentMatch[1] : null;
 
     const formatEta = (secs: number) => {
       if (secs <= 0) return '';
