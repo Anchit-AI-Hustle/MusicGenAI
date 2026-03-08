@@ -238,11 +238,29 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 estimatedTimeLeft: updated.estimated_time_left ?? 0,
               }
             : t;
-        setCreations(prev => prev.map(c => ({ ...c, tracks: c.tracks.map(mapTrack) })));
-        // Also update currentCreation
+
+        const deriveCreationStatus = (tracks: Track[]) => {
+          const statuses = tracks.map(t => t.status);
+          if (statuses.some(s => s === 'failed')) return 'failed';
+          if (statuses.every(s => s === 'completed')) return 'completed';
+          if (statuses.some(s => s !== 'pending' && s !== 'completed')) return statuses.find(s => s !== 'pending' && s !== 'completed') || 'analyzing';
+          return 'pending';
+        };
+
+        const deriveCreationProgress = (tracks: Track[]) => {
+          if (!tracks.length) return 0;
+          return tracks.reduce((acc, t) => acc + (t.progress ?? 0), 0) / tracks.length;
+        };
+
+        setCreations(prev => prev.map(c => {
+          const tracks = c.tracks.map(mapTrack);
+          return { ...c, tracks, status: deriveCreationStatus(tracks), progress: deriveCreationProgress(tracks) };
+        }));
+
         setCurrentCreation(prev => {
           if (!prev) return prev;
-          return { ...prev, tracks: prev.tracks.map(mapTrack) };
+          const tracks = prev.tracks.map(mapTrack);
+          return { ...prev, tracks, status: deriveCreationStatus(tracks), progress: deriveCreationProgress(tracks) };
         });
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'music_creations' }, (payload) => {
