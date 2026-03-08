@@ -826,8 +826,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <h3 className="font-display text-xl font-semibold text-foreground">
                     Your {currentCreation.type === 'song' ? 'Track' : 'Album'}
                   </h3>
-                  <Badge variant="secondary" className={`capitalize ${currentCreation.status === 'completed' ? 'bg-green-500/20 text-green-400' : currentCreation.status === 'failed' ? 'bg-destructive/20 text-destructive' : 'bg-primary/20 text-primary'}`}>
-                    {currentCreation.status}
+                  <Badge variant="secondary" className={`${currentCreation.status === 'completed' ? 'bg-green-500/20 text-green-400' : currentCreation.status === 'failed' ? 'bg-destructive/20 text-destructive' : 'bg-primary/20 text-primary'}`}>
+                    {STATUS_LABELS[currentCreation.status] || currentCreation.status}
                   </Badge>
                 </div>
 
