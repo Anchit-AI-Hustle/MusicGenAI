@@ -901,6 +901,8 @@ Durations MUST sum to exactly ${durationSec}.`,
       status: "completed", progress: 1,
     }).eq("id", creationId);
 
+    // Broadcast completion
+    await broadcastProgress(supabase, jobId, 9, "Completed", 100, totalSegments, totalSegments, "0 seconds");
     console.log(`[${trackId}] ✅ Complete in ${generationTime}s. Audio: ${audioUrl}`);
 
     return new Response(JSON.stringify({
