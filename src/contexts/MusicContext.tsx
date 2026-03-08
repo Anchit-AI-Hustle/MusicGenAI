@@ -249,6 +249,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             vocalStyle: input.vocalStyle,
             mood: input.mood || '',
             musicalKey: input.musicalKey || 'D minor',
+            songStructure: input.songStructure || '',
           },
         }),
       });
