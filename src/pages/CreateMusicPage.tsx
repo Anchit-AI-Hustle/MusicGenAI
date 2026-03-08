@@ -520,7 +520,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                     )}
                   </AnimatePresence>
                 </div>
-                {showGenreDropdown && <div className="fixed inset-0 z-0" onClick={() => setShowGenreDropdown(false)} />}
+                {showGenreDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowGenreDropdown(false)} />}
               </motion.div>
 
               {/* Tempo */}

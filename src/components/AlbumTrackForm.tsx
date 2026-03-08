@@ -280,7 +280,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                     )}
                   </AnimatePresence>
                 </div>
-                {showGenreDropdown && <div className="fixed inset-0 z-10" onClick={() => setShowGenreDropdown(false)} />}
+                {showGenreDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowGenreDropdown(false)} />}
               </div>
 
               {/* Mood */}
