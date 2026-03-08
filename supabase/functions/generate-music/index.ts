@@ -733,51 +733,25 @@ Durations MUST sum to exactly ${durationSec}.`,
       ["segments"]
     );
 
-    let songPlan: SongPlan;
-    if (planResult?.segments?.length > 0) {
-      // Cap each segment at 8s, floor at 3s
-      for (const seg of planResult.segments) {
-        if (seg.duration > 8) seg.duration = 8;
-        if (seg.duration < 3) seg.duration = 4;
-      }
-      const totalPlanned = planResult.segments.reduce((s: number, seg: any) => s + seg.duration, 0);
-      if (totalPlanned !== durationSec) {
-        const diff = durationSec - totalPlanned;
-        if (diff > 0 && diff <= 8) {
-          planResult.segments.push({ name: "extension", duration: diff, description: "Extended section to match duration" });
-        } else if (diff > 8) {
-          let remaining = diff;
-          let extIdx = 1;
-          while (remaining > 0) {
-            const segDur = Math.min(8, remaining);
-            planResult.segments.push({ name: `extension_${extIdx}`, duration: segDur, description: "Extended section" });
-            remaining -= segDur;
-            extIdx++;
-          }
-        } else if (diff < 0) {
-          planResult.segments[planResult.segments.length - 1].duration += diff;
-          if (planResult.segments[planResult.segments.length - 1].duration < 3) {
-            planResult.segments.pop();
-          }
-        }
-      }
-      songPlan = { segments: planResult.segments };
-    } else {
-      // Fallback plan
-      const numSegments = Math.ceil(durationSec / 8);
-      const baseDuration = Math.floor(durationSec / numSegments);
-      const remainder = durationSec - baseDuration * numSegments;
-      const names = ["intro", "build", "peak", "breakdown", "drop", "bridge", "climax", "outro"];
-      const segments: SegmentPlan[] = [];
-      for (let i = 0; i < numSegments; i++) {
-        segments.push({
-          name: names[i % names.length] + (i >= names.length ? `_${Math.floor(i / names.length) + 1}` : ""),
-          duration: baseDuration + (i === numSegments - 1 ? remainder : 0),
-          description: i === 0 ? "Opening atmosphere" : i === numSegments - 1 ? "Closing fade" : "Development section",
-        });
-      }
-      songPlan = { segments };
-    }
+    const targetSegmentDuration = 8;
+    const targetSegmentCount = Math.ceil(durationSec / targetSegmentDuration);
+    const planSegments = planResult?.segments || [];
+    const fallbackNames = ["intro", "build", "peak", "breakdown", "drop", "bridge", "climax", "outro"];
+
+    const segments: SegmentPlan[] = Array.from({ length: targetSegmentCount }, (_, i) => {
+      const planned = planSegments[i];
+      const isLast = i === targetSegmentCount - 1;
+      const remaining = durationSec - (targetSegmentDuration * i);
+      const segDuration = isLast ? Math.max(1, remaining) : targetSegmentDuration;
+
+      return {
+        name: planned?.name || fallbackNames[i % fallbackNames.length] + (i >= fallbackNames.length ? `_${Math.floor(i / fallbackNames.length) + 1}` : ""),
+        duration: segDuration,
+        description: planned?.description || (i === 0 ? "Opening atmosphere" : isLast ? "Closing fade" : "Development section"),
+      };
+    });
+
+    const songPlan: SongPlan = { segments };
 
     console.log(`[${trackId}] Plan: ${songPlan.segments.map(s => `${s.name}(${s.duration}s)`).join(" → ")}`);
     etaRemaining -= 8;
