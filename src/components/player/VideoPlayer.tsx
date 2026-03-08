@@ -18,6 +18,7 @@ import {
   Volume2, VolumeX, Volume1, Monitor, Download
 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
+import { ensureCompatibleMp4Blob } from '@/lib/video-generator';
 
 export type ViewMode = 'embedded' | 'theatre' | 'fullscreen';
 

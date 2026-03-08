@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { useMusic, MusicCreation, Track } from '@/contexts/MusicContext';
 import { usePlayer, PlayerTrack } from '@/contexts/PlayerContext';
+import { ensureCompatibleMp4Blob } from '@/lib/video-generator';
 
 interface SongDetailPageProps {
   creationId: string;

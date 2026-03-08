@@ -9,6 +9,7 @@ import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMusic, MusicCreation, Track } from '@/contexts/MusicContext';
 import { usePlayer, PlayerTrack } from '@/contexts/PlayerContext';
+import { ensureCompatibleMp4Blob } from '@/lib/video-generator';
 
 type FilterType = 'all' | 'songs' | 'albums';
 

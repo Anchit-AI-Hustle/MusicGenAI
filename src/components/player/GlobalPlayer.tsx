@@ -9,6 +9,7 @@ import { Slider } from '@/components/ui/slider';
 import { usePlayer, usePlayerTime, PlaybackMode } from '@/contexts/PlayerContext';
 import { AudioVisualizer } from './AudioVisualizer';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { ensureCompatibleMp4Blob } from '@/lib/video-generator';
 
 const formatTime = (secs: number) => {
   if (!secs || isNaN(secs)) return '0:00';
