@@ -260,7 +260,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     videoStyle: tc.generateVideo ? tc.videoStyle : undefined,
     tempoBpm: tc.tempoBpm,
     mood: tc.mood || undefined,
-    musicalKey: tc.musicalKey,
+    musicalKey: 'D minor',
     vocalStructure: tc.vocalStructure,
     vocalStyle: tc.vocalStyle || undefined,
     vocalIntensity: tc.vocalIntensity,
