@@ -352,7 +352,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                     <Input value={config.vocalStyle} onChange={e => update({ vocalStyle: e.target.value })} onFocus={() => setShowVocalStyleDD(true)} className="bg-input border-border" />
                     <AnimatePresence>
                       {showVocalStyleDD && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-20 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
+                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
                           {VOCAL_STYLE_PRESETS.map(p => (
                             <button key={p} onClick={() => { update({ vocalStyle: p }); setShowVocalStyleDD(false); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-secondary text-foreground">{p}</button>
                           ))}
