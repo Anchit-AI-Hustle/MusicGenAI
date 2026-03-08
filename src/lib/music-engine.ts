@@ -1,13 +1,21 @@
 /**
  * Browser-based music generation engine using Web Audio API OfflineAudioContext.
- * Generates complete techno/EDM tracks with drums, bass, synths, and pads.
- * No external dependencies — runs entirely in the browser.
+ * Genre-aware: adapts synthesis, patterns, and arrangements to any music style.
+ * Uses genre ontology, groove engine, drum patterns, bassline generator,
+ * melody generator, arrangement engine, and transition engine.
  */
 
 import {
   midiToFreq, getScaleMidi, parseKey,
   audioBufferToWav, normalizeAudio, softClipLimiter,
 } from './audio-utils';
+import { getGenreProfile, blendGenreProfiles, type GenreProfile } from './genre-ontology';
+import { getGrooveTemplate, applyGrooveTiming, getGrooveVelocity } from './groove-engine';
+import { getDrumPattern, getDrumFill, type DrumHit } from './drum-patterns';
+import { generateBassline, chooseBassStyle } from './bassline-generator';
+import { generateMelody, generateChords, chooseMelodyStyle } from './melody-generator';
+import { generateArrangement, getTransitionType } from './arrangement-engine';
+import { renderTransition } from './transition-engine';
 
 // ===== Types =====
 
@@ -23,6 +31,7 @@ export interface MusicIntent {
   instruments: string[];
   atmosphere: string;
   durationSeconds: number;
+  genres?: string[]; // multiple genres for blending
 }
 
 export interface SectionPlan {
@@ -34,7 +43,7 @@ export interface SectionPlan {
 
 type ProgressCallback = (stage: string, progress: number) => void;
 
-// ===== Seeded random for reproducibility =====
+// ===== Seeded random =====
 function createRng(seed: number) {
   let s = seed;
   return () => {
@@ -45,190 +54,271 @@ function createRng(seed: number) {
 
 // ===== Instrument Rendering Helpers =====
 
-/** Render a kick drum hit into the audio buffer at a given time */
 function renderKick(
-  ctx: OfflineAudioContext, destination: AudioNode,
-  time: number, velocity: number
+  ctx: OfflineAudioContext, dest: AudioNode,
+  time: number, velocity: number, style: string = 'default'
 ) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = 'sine';
-  osc.frequency.setValueAtTime(150, time);
-  osc.frequency.exponentialRampToValueAtTime(35, time + 0.07);
+  const startFreq = style === 'hard' ? 180 : style === 'sub' ? 120 : 150;
+  const endFreq = style === 'sub' ? 25 : 35;
+  const decay = style === 'hard' ? 0.3 : style === 'sub' ? 0.6 : 0.4;
+  osc.frequency.setValueAtTime(startFreq, time);
+  osc.frequency.exponentialRampToValueAtTime(endFreq, time + 0.07);
   gain.gain.setValueAtTime(velocity * 0.9, time);
-  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.4);
-  osc.connect(gain).connect(destination);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + decay);
+  osc.connect(gain).connect(dest);
   osc.start(time);
-  osc.stop(time + 0.5);
+  osc.stop(time + decay + 0.1);
+
+  // Transient click for hard kicks
+  if (style === 'hard' && velocity > 0.5) {
+    const click = ctx.createOscillator();
+    const clickGain = ctx.createGain();
+    click.type = 'square';
+    click.frequency.value = 800;
+    clickGain.gain.setValueAtTime(velocity * 0.2, time);
+    clickGain.gain.exponentialRampToValueAtTime(0.001, time + 0.01);
+    click.connect(clickGain).connect(dest);
+    click.start(time);
+    click.stop(time + 0.02);
+  }
 }
 
-/** Render a clap/snare noise hit */
+function renderSnare(
+  ctx: OfflineAudioContext, dest: AudioNode,
+  time: number, velocity: number, style: string = 'default'
+) {
+  // Noise component
+  const dur = style === 'brush' ? 0.08 : 0.15;
+  const bufSize = Math.ceil(ctx.sampleRate * dur);
+  const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = noiseBuf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuf;
+  const filter = ctx.createBiquadFilter();
+  filter.type = style === 'rimshot' ? 'highpass' : 'bandpass';
+  filter.frequency.value = style === 'rimshot' ? 5000 : 3000;
+  filter.Q.value = style === 'brush' ? 0.5 : 1.5;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(velocity * (style === 'brush' ? 0.25 : 0.5), time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+  src.connect(filter).connect(gain).connect(dest);
+  src.start(time);
+  src.stop(time + dur + 0.01);
+
+  // Tonal body (not for brush)
+  if (style !== 'brush') {
+    const osc = ctx.createOscillator();
+    const oscGain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(200, time);
+    osc.frequency.exponentialRampToValueAtTime(120, time + 0.05);
+    oscGain.gain.setValueAtTime(velocity * 0.3, time);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+    osc.connect(oscGain).connect(dest);
+    osc.start(time);
+    osc.stop(time + 0.1);
+  }
+}
+
 function renderClap(
-  ctx: OfflineAudioContext, destination: AudioNode,
+  ctx: OfflineAudioContext, dest: AudioNode,
   time: number, velocity: number
 ) {
-  const bufferSize = ctx.sampleRate * 0.15;
-  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-  const data = noiseBuffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i++) {
-    data[i] = (Math.random() * 2 - 1);
+  // Multi-layer clap
+  for (let layer = 0; layer < 3; layer++) {
+    const delay = layer * 0.008;
+    const bufSize = Math.ceil(ctx.sampleRate * 0.12);
+    const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = noiseBuf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 2500 + layer * 500;
+    filter.Q.value = 1.2;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(velocity * 0.2, time + delay);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + delay + 0.1);
+    src.connect(filter).connect(gain).connect(dest);
+    src.start(time + delay);
+    src.stop(time + delay + 0.15);
   }
-  const source = ctx.createBufferSource();
-  source.buffer = noiseBuffer;
-  
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'bandpass';
-  filter.frequency.value = 3000;
-  filter.Q.value = 1.5;
-  
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(velocity * 0.5, time);
-  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
-  
-  source.connect(filter).connect(gain).connect(destination);
-  source.start(time);
-  source.stop(time + 0.15);
 }
 
-/** Render a hi-hat noise hit */
 function renderHihat(
-  ctx: OfflineAudioContext, destination: AudioNode,
+  ctx: OfflineAudioContext, dest: AudioNode,
   time: number, velocity: number, open: boolean = false
 ) {
   const duration = open ? 0.15 : 0.04;
-  const bufferSize = Math.ceil(ctx.sampleRate * duration);
-  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-  const data = noiseBuffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i++) {
-    data[i] = (Math.random() * 2 - 1);
-  }
-  const source = ctx.createBufferSource();
-  source.buffer = noiseBuffer;
-  
+  const bufSize = Math.ceil(ctx.sampleRate * duration);
+  const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = noiseBuf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuf;
   const filter = ctx.createBiquadFilter();
   filter.type = 'highpass';
   filter.frequency.value = open ? 7000 : 9000;
-  
   const gain = ctx.createGain();
   gain.gain.setValueAtTime(velocity * 0.35, time);
   gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-  
-  source.connect(filter).connect(gain).connect(destination);
-  source.start(time);
-  source.stop(time + duration + 0.01);
+  src.connect(filter).connect(gain).connect(dest);
+  src.start(time);
+  src.stop(time + duration + 0.01);
 }
 
-/** Render a bass note (sawtooth + LP filter) */
-function renderBassNote(
-  ctx: OfflineAudioContext, destination: AudioNode,
-  time: number, freq: number, duration: number, velocity: number
+function renderRide(
+  ctx: OfflineAudioContext, dest: AudioNode,
+  time: number, velocity: number
+) {
+  const duration = 0.3;
+  const bufSize = Math.ceil(ctx.sampleRate * duration);
+  const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = noiseBuf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuf;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 6000;
+  filter.Q.value = 3;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(velocity * 0.25, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+  src.connect(filter).connect(gain).connect(dest);
+  src.start(time);
+  src.stop(time + duration + 0.01);
+}
+
+function renderPerc(
+  ctx: OfflineAudioContext, dest: AudioNode,
+  time: number, velocity: number
+) {
+  const dur = 0.06;
+  const bufSize = Math.ceil(ctx.sampleRate * dur);
+  const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = noiseBuf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuf;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 5000;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(velocity * 0.2, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+  src.connect(filter).connect(gain).connect(dest);
+  src.start(time);
+  src.stop(time + dur + 0.01);
+}
+
+function renderTom(
+  ctx: OfflineAudioContext, dest: AudioNode,
+  time: number, velocity: number
 ) {
   const osc = ctx.createOscillator();
-  osc.type = 'sawtooth';
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(200, time);
+  osc.frequency.exponentialRampToValueAtTime(80, time + 0.15);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(velocity * 0.35, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+  osc.connect(gain).connect(dest);
+  osc.start(time);
+  osc.stop(time + 0.3);
+}
+
+function renderDrumHit(
+  ctx: OfflineAudioContext, dest: AudioNode,
+  hit: DrumHit, time: number, profile: GenreProfile
+) {
+  const kickStyle = profile.density > 0.8 ? 'hard' : profile.swing > 0.2 ? 'sub' : 'default';
+  const snareStyle = profile.swing > 0.3 ? 'brush' : 'default';
+
+  switch (hit.instrument) {
+    case 'kick': renderKick(ctx, dest, time, hit.velocity, kickStyle); break;
+    case 'snare': renderSnare(ctx, dest, time, hit.velocity, snareStyle); break;
+    case 'clap': renderClap(ctx, dest, time, hit.velocity); break;
+    case 'hihat_closed': renderHihat(ctx, dest, time, hit.velocity, false); break;
+    case 'hihat_open': renderHihat(ctx, dest, time, hit.velocity, true); break;
+    case 'ride': renderRide(ctx, dest, time, hit.velocity); break;
+    case 'perc': renderPerc(ctx, dest, time, hit.velocity); break;
+    case 'tom': renderTom(ctx, dest, time, hit.velocity); break;
+  }
+}
+
+/** Render a bass note */
+function renderBassNote(
+  ctx: OfflineAudioContext, dest: AudioNode,
+  time: number, freq: number, duration: number, velocity: number,
+  waveform: OscillatorType = 'sawtooth'
+) {
+  const osc = ctx.createOscillator();
+  osc.type = waveform;
   osc.frequency.value = freq;
-  
   const filter = ctx.createBiquadFilter();
   filter.type = 'lowpass';
   filter.frequency.setValueAtTime(800, time);
   filter.frequency.exponentialRampToValueAtTime(200, time + duration * 0.8);
   filter.Q.value = 4;
-  
   const gain = ctx.createGain();
   gain.gain.setValueAtTime(velocity * 0.45, time);
   gain.gain.setValueAtTime(velocity * 0.4, time + duration * 0.1);
   gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-  
-  osc.connect(filter).connect(gain).connect(destination);
+  osc.connect(filter).connect(gain).connect(dest);
   osc.start(time);
   osc.stop(time + duration + 0.01);
 }
 
-/** Render an acid/lead synth note (square + resonant filter) */
-function renderAcidNote(
-  ctx: OfflineAudioContext, destination: AudioNode,
-  time: number, freq: number, duration: number, velocity: number
+/** Render an acid/lead synth note */
+function renderLeadNote(
+  ctx: OfflineAudioContext, dest: AudioNode,
+  time: number, freq: number, duration: number, velocity: number,
+  waveform: OscillatorType = 'square'
 ) {
   const osc = ctx.createOscillator();
-  osc.type = 'square';
+  osc.type = waveform;
   osc.frequency.value = freq;
-  
   const filter = ctx.createBiquadFilter();
   filter.type = 'lowpass';
   filter.frequency.setValueAtTime(freq * 8, time);
   filter.frequency.exponentialRampToValueAtTime(freq * 1.5, time + duration * 0.6);
-  filter.Q.value = 12;
-  
+  filter.Q.value = 10;
   const gain = ctx.createGain();
   gain.gain.setValueAtTime(0.001, time);
   gain.gain.linearRampToValueAtTime(velocity * 0.2, time + 0.01);
   gain.gain.setValueAtTime(velocity * 0.18, time + duration * 0.3);
   gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-  
-  osc.connect(filter).connect(gain).connect(destination);
+  osc.connect(filter).connect(gain).connect(dest);
   osc.start(time);
   osc.stop(time + duration + 0.01);
 }
 
-/** Render a pad chord (triangle waves) */
+/** Render a pad chord */
 function renderPadChord(
-  ctx: OfflineAudioContext, destination: AudioNode,
+  ctx: OfflineAudioContext, dest: AudioNode,
   time: number, freqs: number[], duration: number, velocity: number
 ) {
   for (const freq of freqs) {
     const osc = ctx.createOscillator();
     osc.type = 'triangle';
     osc.frequency.value = freq;
-    
-    // Slight detune for width
     osc.detune.value = (Math.random() - 0.5) * 10;
-    
     const gain = ctx.createGain();
-    const attackTime = Math.min(0.8, duration * 0.15);
-    const releaseTime = Math.min(1.5, duration * 0.3);
+    const attack = Math.min(0.8, duration * 0.15);
+    const release = Math.min(1.5, duration * 0.3);
     gain.gain.setValueAtTime(0.001, time);
-    gain.gain.linearRampToValueAtTime(velocity * 0.08, time + attackTime);
-    gain.gain.setValueAtTime(velocity * 0.07, time + duration - releaseTime);
+    gain.gain.linearRampToValueAtTime(velocity * 0.08, time + attack);
+    gain.gain.setValueAtTime(velocity * 0.07, time + duration - release);
     gain.gain.linearRampToValueAtTime(0.001, time + duration);
-    
-    osc.connect(gain).connect(destination);
+    osc.connect(gain).connect(dest);
     osc.start(time);
     osc.stop(time + duration + 0.05);
-  }
-}
-
-/** Render a percussion hit (metallic noise) */
-function renderPerc(
-  ctx: OfflineAudioContext, destination: AudioNode,
-  time: number, velocity: number, type: 'rim' | 'shaker' | 'tom'
-) {
-  if (type === 'tom') {
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(200, time);
-    osc.frequency.exponentialRampToValueAtTime(80, time + 0.15);
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(velocity * 0.3, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
-    osc.connect(gain).connect(destination);
-    osc.start(time);
-    osc.stop(time + 0.25);
-  } else {
-    const dur = type === 'rim' ? 0.02 : 0.06;
-    const bufSize = Math.ceil(ctx.sampleRate * dur);
-    const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-    const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < bufSize; i++) d[i] = Math.random() * 2 - 1;
-    const src = ctx.createBufferSource();
-    src.buffer = noiseBuf;
-    const filter = ctx.createBiquadFilter();
-    filter.type = type === 'rim' ? 'highpass' : 'bandpass';
-    filter.frequency.value = type === 'rim' ? 5000 : 8000;
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(velocity * 0.2, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
-    src.connect(filter).connect(gain).connect(destination);
-    src.start(time);
-    src.stop(time + dur + 0.01);
   }
 }
 
@@ -245,19 +335,26 @@ export async function generateTrack(
   const numChannels = 2;
 
   onProgress('generating_midi', 0.12);
-  await sleep(50); // Allow UI to update
+  await sleep(50);
+
+  // Get genre profile
+  const genres = intent.genres?.length ? intent.genres : [intent.genre];
+  const profile = blendGenreProfiles(genres);
+  const groove = getGrooveTemplate(profile.grooveTemplate);
 
   // Parse key
   const { root, scale: parsedScale } = parseKey(`${key} ${scale}`);
-
-  // Get scale notes for different octaves
-  const bassNotes = getScaleMidi(root, parsedScale, 1, 8);
-  const leadNotes = getScaleMidi(root, parsedScale, 3, 14);
-  const padNotes = getScaleMidi(root, parsedScale, 3, 8);
-  const percMidi = getScaleMidi(root, parsedScale, 2, 5);
-
   const beatDuration = 60 / tempo;
   const sixteenthDur = beatDuration / 4;
+
+  // Use AI structure or generate from genre profile
+  const sections = structure.length > 0 ? structure : generateArrangement(profile, durationSeconds, rng);
+
+  // Choose genre-appropriate styles
+  const bassStyle = chooseBassStyle(profile.rhythmStyle, intent.genre);
+  const melodyStyle = chooseMelodyStyle(intent.genre, globalEnergy / 10);
+  const leadWaveform: OscillatorType = profile.harmonicStyle === 'chromatic' ? 'sawtooth' : 'square';
+  const bassWaveform: OscillatorType = profile.swing > 0.2 ? 'sine' : 'sawtooth';
 
   // Create offline context
   const ctx = new OfflineAudioContext(numChannels, sampleRate * durationSeconds, sampleRate);
@@ -271,31 +368,35 @@ export async function generateTrack(
   compressor.release.value = 0.15;
   compressor.connect(ctx.destination);
 
-  // Channel buses with individual gains
+  // Channel buses
   const drumBus = ctx.createGain();
-  drumBus.gain.value = 0.85;
+  drumBus.gain.value = 0.8;
   drumBus.connect(compressor);
 
   const bassBus = ctx.createGain();
-  bassBus.gain.value = 0.75;
+  bassBus.gain.value = 0.7;
   bassBus.connect(compressor);
 
   const synthBus = ctx.createGain();
-  synthBus.gain.value = 0.55;
+  synthBus.gain.value = 0.5;
   synthBus.connect(compressor);
 
   const padBus = ctx.createGain();
-  padBus.gain.value = 0.45;
+  padBus.gain.value = 0.4;
   padBus.connect(compressor);
+
+  const fxBus = ctx.createGain();
+  fxBus.gain.value = 0.6;
+  fxBus.connect(compressor);
 
   onProgress('generating_midi', 0.18);
 
   // ===== Schedule all events per section =====
   let currentTime = 0;
-  const totalSections = structure.length;
+  const totalSections = sections.length;
 
   for (let sIdx = 0; sIdx < totalSections; sIdx++) {
-    const section = structure[sIdx];
+    const section = sections[sIdx];
     const sectionEnd = currentTime + section.duration;
     const energy = section.energy;
     const name = section.name.toLowerCase();
@@ -305,124 +406,92 @@ export async function generateTrack(
     const isBreakdown = name.includes('break');
     const isBuild = name.includes('build');
     const isOutro = name.includes('outro');
+    const isVerse = name.includes('verse');
+    const isChorus = name.includes('chorus') || name.includes('hook');
 
-    // --- KICK (4-on-the-floor) ---
-    if (energy > 0.15 && !isBreakdown) {
-      let t = currentTime;
-      // For intros, delay kick entry
-      if (isIntro) t += section.duration * 0.3;
-      while (t < sectionEnd) {
-        const vel = isDrop ? 0.95 : (0.5 + energy * 0.4);
-        renderKick(ctx, drumBus, t, vel);
-        t += beatDuration;
-      }
+    // --- Transitions ---
+    if (sIdx > 0) {
+      const prevEnergy = sections[sIdx - 1].energy;
+      const transType = getTransitionType(prevEnergy, energy, rng);
+      renderTransition(ctx, fxBus, transType, currentTime, Math.min(2, section.duration * 0.15), energy);
     }
 
-    // --- CLAP (beats 2 and 4) ---
-    if (energy > 0.3 && !isIntro) {
-      let t = currentTime + beatDuration;
-      while (t < sectionEnd) {
-        renderClap(ctx, drumBus, t, 0.4 + energy * 0.4);
-        t += beatDuration * 2;
-      }
-    }
+    // --- DRUMS ---
+    if (energy > 0.1 && !isBreakdown) {
+      const pattern = getDrumPattern(profile.rhythmStyle, energy, rng);
+      let barStart = isIntro ? currentTime + section.duration * 0.3 : currentTime;
 
-    // --- HI-HATS (16th notes with velocity variation) ---
-    if (energy > 0.15) {
-      let t = currentTime;
-      let idx = 0;
-      while (t < sectionEnd) {
-        const isDownbeat = idx % 4 === 0;
-        const isUpbeat = idx % 2 === 0;
-        const vel = isDownbeat ? 0.6 : isUpbeat ? 0.35 : 0.18;
-        const adjustedVel = vel * energy;
-        
-        // Occasional open hihat on offbeats
-        const isOpen = idx % 8 === 4 && rng() < 0.3 * energy;
-        
-        if (adjustedVel > 0.05) {
-          renderHihat(ctx, drumBus, t, adjustedVel, isOpen);
+      while (barStart < sectionEnd) {
+        for (const hit of pattern) {
+          const hitTime = barStart + hit.step * sixteenthDur;
+          if (hitTime >= sectionEnd) continue;
+          const groovedTime = applyGrooveTiming(hitTime, sixteenthDur, groove, rng);
+          const groovedVel = hit.velocity * getGrooveVelocity(hitTime, sixteenthDur, groove, rng);
+          if (groovedTime >= 0 && groovedTime < sectionEnd) {
+            renderDrumHit(ctx, drumBus, { ...hit, velocity: groovedVel }, groovedTime, profile);
+          }
         }
-        t += sixteenthDur;
-        idx++;
+        barStart += beatDuration * 4; // one bar
       }
-    }
 
-    // --- PERCUSSION (rims, shakers) ---
-    if (energy > 0.5 && (isDrop || isBuild)) {
-      let t = currentTime + beatDuration * 0.5;
-      while (t < sectionEnd) {
-        if (rng() < energy * 0.4) {
-          const type = rng() < 0.5 ? 'rim' as const : 'shaker' as const;
-          renderPerc(ctx, drumBus, t, 0.3 * energy, type);
+      // Drum fill at section end (if transitioning to higher energy)
+      if (sIdx < totalSections - 1 && sections[sIdx + 1].energy > energy) {
+        const fillPattern = getDrumFill(energy, rng);
+        const fillStart = sectionEnd - beatDuration * 2;
+        for (const hit of fillPattern) {
+          const hitTime = fillStart + hit.step * sixteenthDur;
+          if (hitTime >= sectionEnd) continue;
+          renderDrumHit(ctx, drumBus, hit, hitTime, profile);
         }
-        t += beatDuration;
       }
     }
 
     // --- BASS ---
     if (energy > 0.1 && !isBreakdown) {
-      let t = currentTime;
-      if (isIntro) t += section.duration * 0.4;
-      let noteIdx = Math.floor(rng() * bassNotes.length);
-      const bassStep = isDrop ? sixteenthDur * 2 : beatDuration;
-      
-      while (t < sectionEnd) {
-        if (rng() < (isDrop ? 0.85 : 0.65) * energy) {
-          const midi = bassNotes[noteIdx % bassNotes.length];
-          const freq = midiToFreq(midi);
-          const dur = bassStep * (isDrop ? 0.7 : 0.5);
-          renderBassNote(ctx, bassBus, t, freq, dur, 0.5 + energy * 0.4);
+      const bassStart = isIntro ? currentTime + section.duration * 0.4 : currentTime;
+      const bassEvents = generateBassline(
+        root, parsedScale, bassStart, sectionEnd - bassStart,
+        beatDuration, bassStyle, energy, rng
+      );
+      for (const evt of bassEvents) {
+        const freq = midiToFreq(evt.midi);
+        const groovedTime = applyGrooveTiming(evt.time, sixteenthDur, groove, rng);
+        if (groovedTime >= 0 && groovedTime < sectionEnd) {
+          renderBassNote(ctx, bassBus, groovedTime, freq, evt.duration, evt.velocity, bassWaveform);
         }
-        // Pattern movement
-        noteIdx += rng() < 0.4 ? 1 : rng() < 0.6 ? 0 : Math.floor(rng() * 3);
-        t += bassStep;
       }
     }
 
-    // --- ACID / LEAD SYNTH ---
-    if (energy > 0.35 && (isDrop || isBuild)) {
-      let t = currentTime;
-      let noteIdx = Math.floor(rng() * leadNotes.length);
-      const synthStep = sixteenthDur * (isDrop ? 1 : 2);
-      
-      while (t < sectionEnd) {
-        if (rng() < energy * 0.5) {
-          const midi = leadNotes[noteIdx % leadNotes.length];
-          const freq = midiToFreq(midi);
-          const dur = synthStep * (0.5 + rng() * 0.4);
-          renderAcidNote(ctx, synthBus, t, freq, dur, 0.15 + energy * 0.25);
+    // --- MELODY / LEAD ---
+    if ((isDrop || isBuild || isChorus || isVerse) && energy > 0.3) {
+      const melEvents = generateMelody(
+        root, parsedScale, currentTime, section.duration,
+        beatDuration, energy, isDrop || isChorus ? melodyStyle : 'lead', rng
+      );
+      for (const evt of melEvents) {
+        const freq = midiToFreq(evt.midi);
+        const groovedTime = applyGrooveTiming(evt.time, sixteenthDur, groove, rng);
+        if (groovedTime >= 0 && groovedTime < sectionEnd) {
+          renderLeadNote(ctx, synthBus, groovedTime, freq, evt.duration, evt.velocity, leadWaveform);
         }
-        noteIdx += rng() < 0.3 ? 1 : rng() < 0.5 ? 2 : -1;
-        if (noteIdx < 0) noteIdx = 0;
-        t += synthStep;
       }
     }
 
-    // --- PAD ---
-    if (isIntro || isBreakdown || isOutro || energy < 0.45) {
-      const chordInterval = beatDuration * 8;
-      let t = currentTime;
-      let chordIdx = Math.floor(rng() * 3);
-      
-      while (t < sectionEnd) {
-        const dur = Math.min(chordInterval, sectionEnd - t);
-        if (dur > 1) {
-          // Build a triad from the scale
-          const rootMidi = padNotes[chordIdx % padNotes.length];
-          const thirdMidi = padNotes[(chordIdx + 2) % padNotes.length];
-          const fifthMidi = padNotes[(chordIdx + 4) % padNotes.length];
-          const freqs = [midiToFreq(rootMidi), midiToFreq(thirdMidi), midiToFreq(fifthMidi)];
-          renderPadChord(ctx, padBus, t, freqs, dur, 0.2 + (1 - energy) * 0.3);
-        }
-        t += chordInterval;
-        chordIdx++;
+    // --- PADS / CHORDS ---
+    if (isIntro || isBreakdown || isOutro || energy < 0.5 || isVerse) {
+      const chordEvents = generateChords(
+        root, parsedScale, currentTime, section.duration,
+        beatDuration, energy, rng
+      );
+      for (const evt of chordEvents) {
+        const freqs = evt.midis.map(midiToFreq);
+        renderPadChord(ctx, padBus, evt.time, freqs, evt.duration, evt.velocity);
       }
     }
 
     currentTime = sectionEnd;
 
-    // Update progress per section
+    // Update progress
     const sectionProgress = 0.20 + (sIdx / totalSections) * 0.50;
     onProgress('rendering_audio', sectionProgress);
   }
@@ -436,15 +505,11 @@ export async function generateTrack(
   await sleep(30);
 
   // ===== Post-processing =====
-  // Normalize
   normalizeAudio(renderedBuffer, 0.92);
-  
-  // Soft-clip limiter
   softClipLimiter(renderedBuffer, 0.88);
 
   onProgress('mixing_mastering', 0.88);
 
-  // Convert to WAV
   const wavBlob = audioBufferToWav(renderedBuffer);
 
   onProgress('finalizing', 0.92);
