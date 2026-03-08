@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 import { generateTrack, MusicIntent } from '@/lib/music-engine';
+import { generateVideoFromAudio } from '@/lib/video-generator';
 import type { TrackConfig } from '@/components/AlbumTrackForm';
 
 export interface Track {
