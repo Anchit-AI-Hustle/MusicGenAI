@@ -757,9 +757,6 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
           }
         }
 
-        if (chunkBuffer) {
-          vocalChunks.push(chunkBuffer);
-          }
         }
 
         await updateProgress(
