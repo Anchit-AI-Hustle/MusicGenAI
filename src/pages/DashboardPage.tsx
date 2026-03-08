@@ -329,7 +329,7 @@ const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number
           <button onClick={togglePlay} className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/30 transition-smooth flex-shrink-0">
             {isPlaying ? <Pause className="w-4 h-4 text-primary" /> : <Play className="w-4 h-4 text-primary ml-0.5" />}
           </button>
-        ) : track.status === 'processing' ? (
+        ) : isActiveStatus(track.status) ? (
           <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
             <Loader2 className="w-4 h-4 text-primary animate-spin" />
           </div>
@@ -344,9 +344,9 @@ const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number
         )}
         <div className="flex-1 min-w-0">
           <p className="font-medium text-foreground truncate">{track.title}</p>
-          {track.status === 'processing' && (
+          {isActiveStatus(track.status) && (
             <DashboardTrackProgress
-              currentStage={track.currentStage || 'pending'}
+              currentStage={track.currentStage || track.status}
               progress={track.progress || 0}
               estimatedTimeLeft={track.estimatedTimeLeft || 0}
               completedSegments={track.completedSegments || 0}
@@ -357,8 +357,8 @@ const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number
             <p className="text-xs text-destructive/70 truncate mt-0.5">{track.errorMessage}</p>
           )}
         </div>
-        <Badge variant="secondary" className={`capitalize text-xs hidden sm:inline-flex ${track.status === 'completed' ? 'bg-green-500/20 text-green-400' : track.status === 'failed' ? 'bg-destructive/20 text-destructive' : ''}`}>
-          {track.status}
+        <Badge variant="secondary" className={`text-xs hidden sm:inline-flex ${track.status === 'completed' ? 'bg-green-500/20 text-green-400' : track.status === 'failed' ? 'bg-destructive/20 text-destructive' : isActiveStatus(track.status) ? 'bg-primary/20 text-primary' : ''}`}>
+          {STATUS_LABELS[track.status] || track.status}
         </Badge>
         {track.status === 'failed' && (
           <Button variant="outline" size="sm" onClick={handleRetry} disabled={isRetrying} className="text-xs h-7 border-destructive/30 text-destructive hover:bg-destructive/10">
