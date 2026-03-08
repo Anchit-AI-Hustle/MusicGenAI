@@ -298,15 +298,18 @@ Extract emotional polarity, energy intensity, darkness/brightness, aggression le
 
     const intentResult = await callAI(
       LOVABLE_API_KEY,
-      `You are a music theory expert and producer. Convert sentiment analysis into precise musical parameters. 
+      `You are a music theory expert and producer. Convert sentiment analysis into precise musical parameters.
+The user has specified a FIXED tempo of ${frozenInput.tempoBpm} BPM — you MUST use this exact value.
+Vocal structure: ${frozenInput.vocalStructure}. Vocal style: ${frozenInput.vocalStyle || "instrumental"}. Vocal intensity: ${frozenInput.vocalIntensity}/10. Vocal effects: ${frozenInput.vocalEffects.join(", ") || "none"}.
 Sentiment context: emotion=${sentiment.emotionPolarity}, energy=${sentiment.energyIntensity}/10, darkness=${sentiment.darknessBrightness}, aggression=${sentiment.aggressionLevel}/10, melodicComplexity=${sentiment.melodicComplexity}/10, rhythmicDensity=${sentiment.rhythmicDensity}/10.`,
       `Based on this music request, create a complete musical intent object:
 
 Prompt: "${frozenInput.musicPrompt}"
 Genres: ${frozenInput.genres.join(", ") || "General"}
 Artist Inspiration: "${frozenInput.artistInspiration || "None"}"
+FIXED Tempo: ${frozenInput.tempoBpm} BPM (use this exact value)
 
-Define tempo (BPM), musical key, scale, instruments, vocal style, chord progression, bassline style, melody character, rhythm style, and genre identity.`,
+Define musical key, scale, instruments, vocal style, chord progression, bassline style, melody character, rhythm style, and genre identity. The tempo MUST be ${frozenInput.tempoBpm}.`,
       "create_music_intent",
       "Create structured musical intent from analysis",
       {
