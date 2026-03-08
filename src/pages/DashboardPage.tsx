@@ -375,7 +375,7 @@ const DashboardTrackProgress: React.FC<{
   );
 };
 
-const TrackRow: React.FC<{ track: Track; index: number; formatDuration: (s: number) => string; creation: MusicCreation }> = ({ track, index, formatDuration, creation }) => {
+const TrackRow: React.FC<{ track: Track; index: number; formatDuration: (s: number) => string; creation: MusicCreation; onNavigate: (page: string, params?: Record<string, string>) => void }> = ({ track, index, formatDuration, creation, onNavigate }) => {
   const [isRetrying, setIsRetrying] = useState(false);
   const { retryTrack } = useMusic();
   const player = usePlayer();
