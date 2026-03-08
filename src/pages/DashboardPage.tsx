@@ -16,12 +16,15 @@ const STATUS_LABELS: Record<string, string> = {
   generating_midi: 'Composing patterns',
   rendering_audio: 'Rendering audio',
   mixing_mastering: 'Mixing & mastering',
+  generating_video: 'Generating video',
+  encoding_video: 'Encoding video',
   finalizing: 'Finalizing',
   completed: 'Ready',
   failed: 'Failed',
+  audio_complete_video_failed: 'Audio ready (video failed)',
 };
 
-const ACTIVE_STATUSES = ['analyzing', 'planning_structure', 'generating_midi', 'rendering_audio', 'mixing_mastering', 'finalizing'];
+const ACTIVE_STATUSES = ['analyzing', 'planning_structure', 'generating_midi', 'rendering_audio', 'mixing_mastering', 'generating_video', 'encoding_video', 'finalizing'];
 
 const isActiveStatus = (status: string) => ACTIVE_STATUSES.includes(status);
 
