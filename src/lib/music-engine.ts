@@ -547,7 +547,7 @@ export async function generateTrack(
 ): Promise<Blob> {
   const rng = createRng(seed ?? Math.floor(Math.random() * 2147483647));
   const { tempo, key, scale, structure, durationSeconds, energy: globalEnergy } = intent;
-  const sampleRate = 44100;
+  const sampleRate = INTERNAL_SAMPLE_RATE;
 
   onProgress('generating_midi', 0.12);
   await sleep(30);
@@ -581,8 +581,8 @@ export async function generateTrack(
     const segStart = i * SEGMENT_DURATION;
     const segEnd = Math.min((i + 1) * SEGMENT_DURATION, durationSeconds);
 
-    // Progress: rendering_audio stage, range 0.20 to 0.70
-    const segProgress = 0.20 + (i / totalSegments) * 0.50;
+    // Progress: rendering_audio stage, range 0.20 to 0.65
+    const segProgress = 0.20 + (i / totalSegments) * 0.45;
     onProgress('rendering_audio', segProgress);
 
     const segBuffer = await renderSegment(
@@ -598,22 +598,26 @@ export async function generateTrack(
     await sleep(10);
   }
 
-  onProgress('rendering_audio', 0.72);
+  onProgress('rendering_audio', 0.67);
 
   // ===== Combine segments =====
-  onProgress('mixing_mastering', 0.75);
+  onProgress('mixing_mastering', 0.70);
   const fullBuffer = concatenateBuffers(segmentBuffers, sampleRate);
 
-  // ===== Post-processing =====
-  normalizeAudio(fullBuffer, 0.92);
-  softClipLimiter(fullBuffer, 0.88);
+  // ===== Professional mastering pipeline =====
+  onProgress('mixing_mastering', 0.75);
+  console.log('[Mastering] Starting professional mastering pipeline...');
+  
+  const masterResult = masterAudio(fullBuffer, 2);
+  
+  console.log(`[Mastering] Complete — Peak: ${masterResult.stats.peakDb.toFixed(1)} dB, ` +
+    `LUFS: ${masterResult.stats.lufs.toFixed(1)}, Clipping: ${masterResult.stats.clipping}, ` +
+    `Artifacts: ${masterResult.stats.artifacts}, Quality: ${masterResult.stats.passedQualityCheck ? 'PASS' : 'WARN'}`);
 
   onProgress('mixing_mastering', 0.88);
-
-  const wavBlob = audioBufferToWav(fullBuffer);
-
   onProgress('finalizing', 0.92);
-  return wavBlob;
+
+  return masterResult.blob;
 }
 
 function sleep(ms: number): Promise<void> {
