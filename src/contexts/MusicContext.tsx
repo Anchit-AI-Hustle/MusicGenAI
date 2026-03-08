@@ -321,7 +321,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       await updateTrackDB(trackId, creationId, 'Planning song structure', 0.10, 'planning_structure');
       trackLastUpdateRef.current[trackId] = Date.now();
 
-      // Step 3-5: Generate audio
+      // Step 3-5: Generate audio (segmented rendering)
+      const totalSegments = Math.ceil(input.durationSeconds / 20);
       const onProgress = (stage: string, progress: number) => {
         const stageLabels: Record<string, string> = {
           generating_midi: 'Composing MIDI patterns',
@@ -329,8 +330,19 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           mixing_mastering: 'Mixing and mastering',
           finalizing: 'Finalizing track',
         };
-        const label = stageLabels[stage] || stage;
-        updateTrackLocal(creationId, trackId, { status: stage, currentStage: label, progress });
+        let label = stageLabels[stage] || stage;
+
+        // Add segment info during rendering
+        if (stage === 'rendering_audio' && totalSegments > 1) {
+          const segIdx = Math.min(totalSegments, Math.floor(((progress - 0.20) / 0.50) * totalSegments) + 1);
+          label = `Rendering audio segment ${Math.max(1, segIdx)} / ${totalSegments}`;
+        }
+
+        updateTrackLocal(creationId, trackId, {
+          status: stage, currentStage: label, progress,
+          totalSegments: stage === 'rendering_audio' ? totalSegments : undefined,
+          completedSegments: stage === 'rendering_audio' ? Math.floor(((progress - 0.20) / 0.50) * totalSegments) : undefined,
+        });
         updateTrackDB(trackId, creationId, label, progress, stage).catch(console.warn);
         trackLastUpdateRef.current[trackId] = Date.now();
       };

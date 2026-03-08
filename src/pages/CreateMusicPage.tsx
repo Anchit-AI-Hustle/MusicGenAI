@@ -407,12 +407,20 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
               {/* Album Name + Vibe */}
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="glass-card rounded-xl p-4 sm:p-6 space-y-4">
                 <div>
-                  <Label className="text-foreground font-medium mb-2 block">Album Name</Label>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-2">
+                    <Label className="text-foreground font-medium">Album Name</Label>
+                    <AiToolbar field="albumName" />
+                  </div>
                   <Input placeholder="Enter album name..." value={albumName} onChange={e => setAlbumName(e.target.value)} className="bg-input border-border" />
                 </div>
                 <div>
-                  <Label className="text-foreground font-medium mb-1 block">Album Vibe (optional)</Label>
-                  <p className="text-xs text-muted-foreground mb-2">Global inspiration that can be applied to individual tracks</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-1">
+                    <div>
+                      <Label className="text-foreground font-medium">Album Vibe (optional)</Label>
+                      <p className="text-xs text-muted-foreground mt-1">Global inspiration that can be applied to individual tracks</p>
+                    </div>
+                    <AiToolbar field="albumVibe" />
+                  </div>
                   <Textarea placeholder="e.g., Dark atmospheric journey through urban nightscapes..." value={albumVibe} onChange={e => setAlbumVibe(e.target.value)} className="bg-input border-border min-h-20 resize-none" />
                 </div>
                 <div>

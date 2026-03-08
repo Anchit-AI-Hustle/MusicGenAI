@@ -322,7 +322,219 @@ function renderPadChord(
   }
 }
 
-// ===== Main Generation Function =====
+// ===== Segment-based Generation =====
+
+const SEGMENT_DURATION = 20; // seconds per segment
+
+export interface SegmentProgress {
+  segmentIndex: number;
+  totalSegments: number;
+}
+
+/**
+ * Render a single audio segment (startTime..endTime) from the full intent.
+ * Returns a small AudioBuffer for just that segment.
+ */
+async function renderSegment(
+  intent: MusicIntent,
+  segmentIndex: number,
+  startTime: number,
+  endTime: number,
+  profile: GenreProfile,
+  groove: ReturnType<typeof getGrooveTemplate>,
+  sections: SectionPlan[],
+  root: string,
+  parsedScale: string,
+  beatDuration: number,
+  sixteenthDur: number,
+  bassStyle: string,
+  melodyStyle: string,
+  leadWaveform: OscillatorType,
+  bassWaveform: OscillatorType,
+  rng: () => number,
+): Promise<AudioBuffer> {
+  const segDuration = endTime - startTime;
+  const sampleRate = 44100;
+  const numChannels = 2;
+  const ctx = new OfflineAudioContext(numChannels, Math.ceil(sampleRate * segDuration), sampleRate);
+
+  // Master compressor
+  const compressor = ctx.createDynamicsCompressor();
+  compressor.threshold.value = -12;
+  compressor.knee.value = 6;
+  compressor.ratio.value = 4;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.15;
+  compressor.connect(ctx.destination);
+
+  // Channel buses
+  const drumBus = ctx.createGain(); drumBus.gain.value = 0.8; drumBus.connect(compressor);
+  const bassBus = ctx.createGain(); bassBus.gain.value = 0.7; bassBus.connect(compressor);
+  const synthBus = ctx.createGain(); synthBus.gain.value = 0.5; synthBus.connect(compressor);
+  const padBus = ctx.createGain(); padBus.gain.value = 0.4; padBus.connect(compressor);
+  const fxBus = ctx.createGain(); fxBus.gain.value = 0.6; fxBus.connect(compressor);
+
+  // Find which sections overlap this segment
+  let sectionStart = 0;
+  for (let sIdx = 0; sIdx < sections.length; sIdx++) {
+    const section = sections[sIdx];
+    const sectionEnd = sectionStart + section.duration;
+
+    // Skip sections that don't overlap this segment
+    if (sectionEnd <= startTime || sectionStart >= endTime) {
+      sectionStart = sectionEnd;
+      continue;
+    }
+
+    const energy = section.energy;
+    const name = section.name.toLowerCase();
+    const isIntro = name.includes('intro');
+    const isDrop = name.includes('drop') || name.includes('peak') || name.includes('climax');
+    const isBreakdown = name.includes('break');
+    const isBuild = name.includes('build');
+    const isOutro = name.includes('outro');
+    const isVerse = name.includes('verse');
+    const isChorus = name.includes('chorus') || name.includes('hook');
+
+    // Overlap bounds in global time
+    const overlapStart = Math.max(sectionStart, startTime);
+    const overlapEnd = Math.min(sectionEnd, endTime);
+
+    // Convert to local segment time (0-based)
+    const localStart = overlapStart - startTime;
+    const localEnd = overlapEnd - startTime;
+
+    // Transitions at section start (if within this segment)
+    if (sIdx > 0 && sectionStart >= startTime && sectionStart < endTime) {
+      const prevEnergy = sections[sIdx - 1].energy;
+      const transType = getTransitionType(prevEnergy, energy, rng);
+      const localTransTime = sectionStart - startTime;
+      renderTransition(ctx, fxBus, transType, localTransTime, Math.min(2, section.duration * 0.15), energy);
+    }
+
+    // DRUMS
+    if (energy > 0.1 && !isBreakdown) {
+      const pattern = getDrumPattern(profile.rhythmStyle, energy, rng);
+      let barStartGlobal = isIntro ? sectionStart + section.duration * 0.3 : sectionStart;
+      // Align to bar boundaries
+      const barLen = beatDuration * 4;
+      if (barStartGlobal < overlapStart) {
+        barStartGlobal = overlapStart - ((overlapStart - barStartGlobal) % barLen);
+        if (barStartGlobal < overlapStart) barStartGlobal += barLen;
+        barStartGlobal -= barLen; // include partial bar
+      }
+
+      while (barStartGlobal < overlapEnd) {
+        for (const hit of pattern) {
+          const hitTimeGlobal = barStartGlobal + hit.step * sixteenthDur;
+          if (hitTimeGlobal < overlapStart || hitTimeGlobal >= overlapEnd) continue;
+          const groovedGlobal = applyGrooveTiming(hitTimeGlobal, sixteenthDur, groove, rng);
+          if (groovedGlobal < overlapStart || groovedGlobal >= overlapEnd) continue;
+          const groovedVel = hit.velocity * getGrooveVelocity(hitTimeGlobal, sixteenthDur, groove, rng);
+          const localTime = groovedGlobal - startTime;
+          if (localTime >= 0 && localTime < segDuration) {
+            renderDrumHit(ctx, drumBus, { ...hit, velocity: groovedVel }, localTime, profile);
+          }
+        }
+        barStartGlobal += barLen;
+      }
+
+      // Drum fill at section end
+      if (sIdx < sections.length - 1 && sections[sIdx + 1].energy > energy) {
+        const fillStart = sectionEnd - beatDuration * 2;
+        if (fillStart < overlapEnd && sectionEnd > overlapStart) {
+          const fillPattern = getDrumFill(energy, rng);
+          for (const hit of fillPattern) {
+            const hitGlobal = fillStart + hit.step * sixteenthDur;
+            if (hitGlobal >= overlapStart && hitGlobal < overlapEnd) {
+              const localTime = hitGlobal - startTime;
+              if (localTime >= 0 && localTime < segDuration) {
+                renderDrumHit(ctx, drumBus, hit, localTime, profile);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // BASS
+    if (energy > 0.1 && !isBreakdown) {
+      const bassStartGlobal = isIntro ? sectionStart + section.duration * 0.4 : sectionStart;
+      const bassEndGlobal = sectionEnd;
+      if (bassEndGlobal > overlapStart && bassStartGlobal < overlapEnd) {
+        const effStart = Math.max(bassStartGlobal, overlapStart);
+        const effEnd = Math.min(bassEndGlobal, overlapEnd);
+        const bassEvents = generateBassline(root, parsedScale, effStart, effEnd - effStart, beatDuration, bassStyle, energy, rng);
+        for (const evt of bassEvents) {
+          const groovedGlobal = applyGrooveTiming(evt.time, sixteenthDur, groove, rng);
+          if (groovedGlobal >= overlapStart && groovedGlobal < overlapEnd) {
+            const localTime = groovedGlobal - startTime;
+            if (localTime >= 0 && localTime < segDuration) {
+              renderBassNote(ctx, bassBus, localTime, midiToFreq(evt.midi), evt.duration, evt.velocity, bassWaveform);
+            }
+          }
+        }
+      }
+    }
+
+    // MELODY / LEAD
+    if ((isDrop || isBuild || isChorus || isVerse) && energy > 0.3) {
+      const effStart = Math.max(sectionStart, overlapStart);
+      const effEnd = Math.min(sectionEnd, overlapEnd);
+      const melEvents = generateMelody(root, parsedScale, effStart, effEnd - effStart, beatDuration, energy, isDrop || isChorus ? melodyStyle : 'lead', rng);
+      for (const evt of melEvents) {
+        const groovedGlobal = applyGrooveTiming(evt.time, sixteenthDur, groove, rng);
+        if (groovedGlobal >= overlapStart && groovedGlobal < overlapEnd) {
+          const localTime = groovedGlobal - startTime;
+          if (localTime >= 0 && localTime < segDuration) {
+            renderLeadNote(ctx, synthBus, localTime, midiToFreq(evt.midi), evt.duration, evt.velocity, leadWaveform);
+          }
+        }
+      }
+    }
+
+    // PADS / CHORDS
+    if (isIntro || isBreakdown || isOutro || energy < 0.5 || isVerse) {
+      const effStart = Math.max(sectionStart, overlapStart);
+      const effEnd = Math.min(sectionEnd, overlapEnd);
+      const chordEvents = generateChords(root, parsedScale, effStart, effEnd - effStart, beatDuration, energy, rng);
+      for (const evt of chordEvents) {
+        if (evt.time >= overlapStart && evt.time < overlapEnd) {
+          const localTime = evt.time - startTime;
+          if (localTime >= 0 && localTime < segDuration) {
+            renderPadChord(ctx, padBus, localTime, evt.midis.map(midiToFreq), Math.min(evt.duration, segDuration - localTime), evt.velocity);
+          }
+        }
+      }
+    }
+
+    sectionStart = sectionEnd;
+  }
+
+  return await ctx.startRendering();
+}
+
+/** Concatenate multiple AudioBuffers into one */
+function concatenateBuffers(buffers: AudioBuffer[], sampleRate: number): AudioBuffer {
+  const totalLength = buffers.reduce((acc, b) => acc + b.length, 0);
+  const numChannels = buffers[0]?.numberOfChannels || 2;
+  const result = new OfflineAudioContext(numChannels, totalLength, sampleRate);
+  // We can't use OfflineAudioContext for simple concatenation, use manual copy
+  const finalBuffer = new AudioBuffer({ length: totalLength, numberOfChannels: numChannels, sampleRate });
+  
+  let offset = 0;
+  for (const buf of buffers) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const srcData = buf.getChannelData(ch);
+      const destData = finalBuffer.getChannelData(ch);
+      destData.set(srcData, offset);
+    }
+    offset += buf.length;
+  }
+  return finalBuffer;
+}
+
+// ===== Main Generation Function (Segmented) =====
 
 export async function generateTrack(
   intent: MusicIntent,
@@ -332,10 +544,9 @@ export async function generateTrack(
   const rng = createRng(seed ?? Math.floor(Math.random() * 2147483647));
   const { tempo, key, scale, structure, durationSeconds, energy: globalEnergy } = intent;
   const sampleRate = 44100;
-  const numChannels = 2;
 
   onProgress('generating_midi', 0.12);
-  await sleep(50);
+  await sleep(30);
 
   // Get genre profile
   const genres = intent.genres?.length ? intent.genres : [intent.genre];
@@ -356,161 +567,46 @@ export async function generateTrack(
   const leadWaveform: OscillatorType = profile.harmonicStyle === 'chromatic' ? 'sawtooth' : 'square';
   const bassWaveform: OscillatorType = profile.swing > 0.2 ? 'sine' : 'sawtooth';
 
-  // Create offline context
-  const ctx = new OfflineAudioContext(numChannels, sampleRate * durationSeconds, sampleRate);
-
-  // Master compressor
-  const compressor = ctx.createDynamicsCompressor();
-  compressor.threshold.value = -12;
-  compressor.knee.value = 6;
-  compressor.ratio.value = 4;
-  compressor.attack.value = 0.003;
-  compressor.release.value = 0.15;
-  compressor.connect(ctx.destination);
-
-  // Channel buses
-  const drumBus = ctx.createGain();
-  drumBus.gain.value = 0.8;
-  drumBus.connect(compressor);
-
-  const bassBus = ctx.createGain();
-  bassBus.gain.value = 0.7;
-  bassBus.connect(compressor);
-
-  const synthBus = ctx.createGain();
-  synthBus.gain.value = 0.5;
-  synthBus.connect(compressor);
-
-  const padBus = ctx.createGain();
-  padBus.gain.value = 0.4;
-  padBus.connect(compressor);
-
-  const fxBus = ctx.createGain();
-  fxBus.gain.value = 0.6;
-  fxBus.connect(compressor);
-
   onProgress('generating_midi', 0.18);
 
-  // ===== Schedule all events per section =====
-  let currentTime = 0;
-  const totalSections = sections.length;
+  // ===== Segmented rendering =====
+  const totalSegments = Math.ceil(durationSeconds / SEGMENT_DURATION);
+  const segmentBuffers: AudioBuffer[] = [];
 
-  for (let sIdx = 0; sIdx < totalSections; sIdx++) {
-    const section = sections[sIdx];
-    const sectionEnd = currentTime + section.duration;
-    const energy = section.energy;
-    const name = section.name.toLowerCase();
+  for (let i = 0; i < totalSegments; i++) {
+    const segStart = i * SEGMENT_DURATION;
+    const segEnd = Math.min((i + 1) * SEGMENT_DURATION, durationSeconds);
 
-    const isIntro = name.includes('intro');
-    const isDrop = name.includes('drop') || name.includes('peak') || name.includes('climax');
-    const isBreakdown = name.includes('break');
-    const isBuild = name.includes('build');
-    const isOutro = name.includes('outro');
-    const isVerse = name.includes('verse');
-    const isChorus = name.includes('chorus') || name.includes('hook');
+    // Progress: rendering_audio stage, range 0.20 to 0.70
+    const segProgress = 0.20 + (i / totalSegments) * 0.50;
+    onProgress('rendering_audio', segProgress);
 
-    // --- Transitions ---
-    if (sIdx > 0) {
-      const prevEnergy = sections[sIdx - 1].energy;
-      const transType = getTransitionType(prevEnergy, energy, rng);
-      renderTransition(ctx, fxBus, transType, currentTime, Math.min(2, section.duration * 0.15), energy);
-    }
+    const segBuffer = await renderSegment(
+      intent, i, segStart, segEnd,
+      profile, groove, sections,
+      root, parsedScale, beatDuration, sixteenthDur,
+      bassStyle, melodyStyle, leadWaveform, bassWaveform, rng,
+    );
 
-    // --- DRUMS ---
-    if (energy > 0.1 && !isBreakdown) {
-      const pattern = getDrumPattern(profile.rhythmStyle, energy, rng);
-      let barStart = isIntro ? currentTime + section.duration * 0.3 : currentTime;
+    segmentBuffers.push(segBuffer);
 
-      while (barStart < sectionEnd) {
-        for (const hit of pattern) {
-          const hitTime = barStart + hit.step * sixteenthDur;
-          if (hitTime >= sectionEnd) continue;
-          const groovedTime = applyGrooveTiming(hitTime, sixteenthDur, groove, rng);
-          const groovedVel = hit.velocity * getGrooveVelocity(hitTime, sixteenthDur, groove, rng);
-          if (groovedTime >= 0 && groovedTime < sectionEnd) {
-            renderDrumHit(ctx, drumBus, { ...hit, velocity: groovedVel }, groovedTime, profile);
-          }
-        }
-        barStart += beatDuration * 4; // one bar
-      }
-
-      // Drum fill at section end (if transitioning to higher energy)
-      if (sIdx < totalSections - 1 && sections[sIdx + 1].energy > energy) {
-        const fillPattern = getDrumFill(energy, rng);
-        const fillStart = sectionEnd - beatDuration * 2;
-        for (const hit of fillPattern) {
-          const hitTime = fillStart + hit.step * sixteenthDur;
-          if (hitTime >= sectionEnd) continue;
-          renderDrumHit(ctx, drumBus, hit, hitTime, profile);
-        }
-      }
-    }
-
-    // --- BASS ---
-    if (energy > 0.1 && !isBreakdown) {
-      const bassStart = isIntro ? currentTime + section.duration * 0.4 : currentTime;
-      const bassEvents = generateBassline(
-        root, parsedScale, bassStart, sectionEnd - bassStart,
-        beatDuration, bassStyle, energy, rng
-      );
-      for (const evt of bassEvents) {
-        const freq = midiToFreq(evt.midi);
-        const groovedTime = applyGrooveTiming(evt.time, sixteenthDur, groove, rng);
-        if (groovedTime >= 0 && groovedTime < sectionEnd) {
-          renderBassNote(ctx, bassBus, groovedTime, freq, evt.duration, evt.velocity, bassWaveform);
-        }
-      }
-    }
-
-    // --- MELODY / LEAD ---
-    if ((isDrop || isBuild || isChorus || isVerse) && energy > 0.3) {
-      const melEvents = generateMelody(
-        root, parsedScale, currentTime, section.duration,
-        beatDuration, energy, isDrop || isChorus ? melodyStyle : 'lead', rng
-      );
-      for (const evt of melEvents) {
-        const freq = midiToFreq(evt.midi);
-        const groovedTime = applyGrooveTiming(evt.time, sixteenthDur, groove, rng);
-        if (groovedTime >= 0 && groovedTime < sectionEnd) {
-          renderLeadNote(ctx, synthBus, groovedTime, freq, evt.duration, evt.velocity, leadWaveform);
-        }
-      }
-    }
-
-    // --- PADS / CHORDS ---
-    if (isIntro || isBreakdown || isOutro || energy < 0.5 || isVerse) {
-      const chordEvents = generateChords(
-        root, parsedScale, currentTime, section.duration,
-        beatDuration, energy, rng
-      );
-      for (const evt of chordEvents) {
-        const freqs = evt.midis.map(midiToFreq);
-        renderPadChord(ctx, padBus, evt.time, freqs, evt.duration, evt.velocity);
-      }
-    }
-
-    currentTime = sectionEnd;
-
-    // Update progress
-    const sectionProgress = 0.20 + (sIdx / totalSections) * 0.50;
-    onProgress('rendering_audio', sectionProgress);
+    // Yield to UI between segments
+    await sleep(10);
   }
 
   onProgress('rendering_audio', 0.72);
 
-  // ===== Render =====
-  const renderedBuffer = await ctx.startRendering();
-
-  onProgress('mixing_mastering', 0.80);
-  await sleep(30);
+  // ===== Combine segments =====
+  onProgress('mixing_mastering', 0.75);
+  const fullBuffer = concatenateBuffers(segmentBuffers, sampleRate);
 
   // ===== Post-processing =====
-  normalizeAudio(renderedBuffer, 0.92);
-  softClipLimiter(renderedBuffer, 0.88);
+  normalizeAudio(fullBuffer, 0.92);
+  softClipLimiter(fullBuffer, 0.88);
 
   onProgress('mixing_mastering', 0.88);
 
-  const wavBlob = audioBufferToWav(renderedBuffer);
+  const wavBlob = audioBufferToWav(fullBuffer);
 
   onProgress('finalizing', 0.92);
   return wavBlob;
