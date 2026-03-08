@@ -213,6 +213,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'vocalLanguage': setSelectedLanguages([]); break;
       case 'videoStyle': setVideoStyle(''); break;
       case 'tempoBpm': setTempoBpm(120); break;
+      case 'mood': setMood(''); break;
+      case 'musicalKey': setMusicalKey('D minor'); break;
       case 'vocalStructure': setVocalStructure('Instrumental'); break;
       case 'vocalStyle': setVocalStyle(''); break;
       case 'vocalIntensity': setVocalIntensity(5); break;
