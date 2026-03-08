@@ -297,11 +297,29 @@ export async function generateVideoFromAudio(
   onProgress?.({ stage: 'encoding_video', progress: 0.25 });
 
   return new Promise<Blob>((resolve, reject) => {
-    mediaRecorder.onstop = () => {
-      audioContext.close();
-      const blobType = isMP4 ? 'video/mp4' : 'video/webm';
-      const blob = new Blob(chunks, { type: blobType });
-      resolve(blob);
+    mediaRecorder.onstop = async () => {
+      try {
+        const recordedMime = mediaRecorder.mimeType || selectedMime;
+        const recordedType = recordedMime.includes('mp4') ? 'video/mp4' : 'video/webm';
+        const recordedBlob = new Blob(chunks, { type: recordedType });
+
+        if (recordedType === 'video/mp4') {
+          audioContext.close();
+          resolve(recordedBlob);
+          return;
+        }
+
+        onProgress?.({ stage: 'transcoding_video', progress: 0.96 });
+        const mp4Blob = await transcodeWebmToMp4(recordedBlob, (transcodeProgress) => {
+          onProgress?.({ stage: 'transcoding_video', progress: 0.96 + (transcodeProgress * 0.04) });
+        });
+
+        audioContext.close();
+        resolve(mp4Blob);
+      } catch (error) {
+        audioContext.close();
+        reject(new Error(`Could not create iPhone/Android compatible MP4: ${error instanceof Error ? error.message : 'Unknown error'}`));
+      }
     };
     mediaRecorder.onerror = (e) => reject(e);
 

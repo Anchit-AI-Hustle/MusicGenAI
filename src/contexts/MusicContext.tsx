@@ -491,10 +491,13 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           updateTrackLocal(creationId, trackId, { status: 'finalizing', currentStage: 'Uploading video', progress: 0.96 });
           await updateTrackDB(trackId, creationId, 'Uploading video', 0.96, 'finalizing');
 
-          const videoPath = `tracks/${trackId}/video.webm`;
+          const isMp4Video = videoBlob.type.includes('mp4');
+          const videoExt = isMp4Video ? 'mp4' : 'webm';
+          const videoContentType = isMp4Video ? 'video/mp4' : 'video/webm';
+          const videoPath = `tracks/${trackId}/video.${videoExt}`;
           const { error: vidUploadError } = await supabase.storage
             .from('music-files')
-            .upload(videoPath, videoBlob, { contentType: 'video/webm', upsert: true });
+            .upload(videoPath, videoBlob, { contentType: videoContentType, upsert: true });
 
           if (vidUploadError) throw new Error(`Video upload failed: ${vidUploadError.message}`);
 
