@@ -205,7 +205,7 @@ interface CreationCardProps {
   onNavigate: (page: string, params?: Record<string, string>) => void;
 }
 
-const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDuration, formatDate }) => {
+const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDuration, formatDate, onNavigate }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const { retryTrack } = useMusic();
   const player = usePlayer();
@@ -219,6 +219,29 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
     if (completedTracks.length === 0) return;
     const playerTracks = completedTracks.map(t => toPlayerTrack(t, creation));
     player.setQueue(playerTracks, 0);
+  };
+
+  const handleDownloadAll = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    for (const track of completedTracks) {
+      if (track.audioUrl) {
+        try {
+          const response = await fetch(track.audioUrl);
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = `${track.title}_audio.mp3`;
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+        } catch {
+          window.open(track.audioUrl, '_blank');
+        }
+      }
+    }
   };
 
   return (
