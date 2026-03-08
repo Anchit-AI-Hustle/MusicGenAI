@@ -425,4 +425,5 @@ const TrackRow: React.FC<{ track: Track; index: number; formatDuration: (s: numb
         </div>
       )}
     </div>
+  );
 };
