@@ -714,7 +714,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </button>
                   <AnimatePresence>
                     {showLanguageDropdown && (
-                      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute z-10 w-full mt-2 max-h-48 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
+                      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute z-50 w-full mt-2 max-h-48 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
                         {LANGUAGES.map(lang => (
                           <button key={lang} onClick={() => toggleLanguage(lang)} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${selectedLanguages.includes(lang) ? 'bg-accent/10 text-accent' : 'text-foreground'}`}>{lang}</button>
                         ))}
