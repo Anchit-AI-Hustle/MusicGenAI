@@ -113,63 +113,12 @@ export interface VideoGenerationProgress {
   progress: number;
 }
 
-async function transcodeWebmToMp4(
-  webmBlob: Blob,
-  onProgress?: (progress: number) => void,
-): Promise<Blob> {
-  const [{ FFmpeg }, { fetchFile, toBlobURL }] = await Promise.all([
-    import('@ffmpeg/ffmpeg'),
-    import('@ffmpeg/util'),
-  ]);
-
-  const ffmpeg = new FFmpeg();
-  const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-
-  await ffmpeg.load({
-    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-    workerURL: await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, 'text/javascript'),
-  });
-
-  const inputName = `input-${crypto.randomUUID()}.webm`;
-  const outputName = `output-${crypto.randomUUID()}.mp4`;
-
-  ffmpeg.on('progress', ({ progress }: { progress: number }) => {
-    onProgress?.(Math.min(1, Math.max(0, progress)));
-  });
-
-  try {
-    await ffmpeg.writeFile(inputName, await fetchFile(webmBlob));
-    await ffmpeg.exec([
-      '-i', inputName,
-      '-c:v', 'libx264',
-      '-pix_fmt', 'yuv420p',
-      '-profile:v', 'main',
-      '-level', '3.1',
-      '-c:a', 'aac',
-      '-b:a', '128k',
-      '-ar', '44100',
-      '-movflags', '+faststart',
-      outputName,
-    ]);
-
-    const data = await ffmpeg.readFile(outputName);
-    if (typeof data === 'string') {
-      throw new Error('Transcoder returned invalid binary output');
-    }
-    const normalizedBytes = Uint8Array.from(data);
-    return new Blob([normalizedBytes.buffer], { type: 'video/mp4' });
-  } finally {
-    ffmpeg.terminate();
-  }
-}
-
-export async function ensureCompatibleMp4Blob(
-  videoBlob: Blob,
-  onProgress?: (progress: number) => void,
-): Promise<Blob> {
-  if (videoBlob.type.includes('mp4')) return videoBlob;
-  return transcodeWebmToMp4(videoBlob, onProgress);
+/**
+ * Returns the actual video file extension based on the blob MIME type.
+ */
+export function getVideoExtension(blob: Blob): string {
+  if (blob.type.includes('mp4')) return 'mp4';
+  return 'webm';
 }
 
 /**
