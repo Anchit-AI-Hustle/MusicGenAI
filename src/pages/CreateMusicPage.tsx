@@ -722,7 +722,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                     )}
                   </AnimatePresence>
                 </div>
-                {showLanguageDropdown && <div className="fixed inset-0 z-0" onClick={() => setShowLanguageDropdown(false)} />}
+                {showLanguageDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowLanguageDropdown(false)} />}
               </motion.div>
 
               {/* Lyrics */}
