@@ -51,6 +51,8 @@ interface CreateMusicInput {
   numberOfTracks?: number;
 }
 
+type AiAction = 'suggest' | 'enhance';
+
 interface MusicContextType {
   creations: MusicCreation[];
   currentCreation: MusicCreation | null;
@@ -59,7 +61,7 @@ interface MusicContextType {
   createMusic: (input: CreateMusicInput) => Promise<MusicCreation | null>;
   setCurrentCreation: (creation: MusicCreation | null) => void;
   refreshCreations: () => Promise<void>;
-  aiSuggest: (field: string, value: string, context: Record<string, any>) => Promise<string | null>;
+  aiSuggest: (field: string, value: string, context: Record<string, any>, action?: AiAction) => Promise<string | null>;
 }
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
@@ -347,7 +349,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  const aiSuggest = async (field: string, value: string, context: Record<string, any>): Promise<string | null> => {
+  const aiSuggest = async (field: string, value: string, context: Record<string, any>, action: AiAction = 'suggest'): Promise<string | null> => {
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-suggest`, {
         method: 'POST',
@@ -356,7 +358,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ field, value, context }),
+        body: JSON.stringify({ field, value, context, action }),
       });
 
       if (!response.ok) {

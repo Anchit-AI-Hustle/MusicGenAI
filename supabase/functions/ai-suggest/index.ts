@@ -15,46 +15,65 @@ const FIELD_PROMPTS: Record<string, string> = {
   videoStyle: "Suggest a visual style for a music video. Be specific about colors, movements, and aesthetic.",
 };
 
+const ENHANCE_PROMPTS: Record<string, string> = {
+  trackName: "Take this track name and make it more evocative, unique, and memorable. Preserve the core idea but elevate it.",
+  prompt: "Take this music prompt and expand it with richer detail — add specific instruments, textures, spatial qualities, and emotional arcs. Make it more vivid and production-ready.",
+  genres: "Refine these genre selections — suggest more specific sub-genres or complementary genres that sharpen the sonic identity. Return as comma-separated list.",
+  lyrics: "Enhance these lyrics/themes — add more poetic depth, stronger imagery, better flow, and emotional resonance. Keep the core meaning intact.",
+  artistInspiration: "Expand on these artist inspirations — add complementary artists that would create a richer sonic palette while staying cohesive.",
+  vocalLanguage: "Refine the language selection — suggest languages that would add unique character while fitting the genre and mood.",
+  videoStyle: "Enhance this video style description — add specific visual techniques, color palettes, camera movements, and artistic references.",
+};
+
+function buildContext(context: any): string {
+  if (!context) return "";
+  const parts: string[] = [];
+  if (context.title) parts.push(`Track Name: ${context.title}`);
+  if (context.musicPrompt) parts.push(`Prompt: ${context.musicPrompt}`);
+  if (context.genres?.length) parts.push(`Genres: ${context.genres.join(", ")}`);
+  if (context.durationSeconds) parts.push(`Duration: ${Math.floor(context.durationSeconds / 60)}m ${context.durationSeconds % 60}s`);
+  if (context.vocalLanguages?.length) parts.push(`Languages: ${context.vocalLanguages.join(", ")}`);
+  if (context.lyrics) parts.push(`Lyrics/Theme: ${context.lyrics}`);
+  if (context.artistInspiration) parts.push(`Artist Inspiration: ${context.artistInspiration}`);
+  return parts.length > 0 ? `\n\nContext from other fields:\n${parts.join("\n")}` : "";
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { field, value, context } = await req.json();
+    const { field, value, context, action = "suggest" } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const fieldPrompt = FIELD_PROMPTS[field] || "Provide a helpful suggestion for this music creation field.";
+    const isEnhance = action === "enhance";
+    const prompts = isEnhance ? ENHANCE_PROMPTS : FIELD_PROMPTS;
+    const fieldPrompt = prompts[field] || (isEnhance ? "Improve and enhance this value." : "Provide a helpful suggestion for this music creation field.");
 
-    let contextStr = "";
-    if (context) {
-      const parts: string[] = [];
-      if (context.title) parts.push(`Track Name: ${context.title}`);
-      if (context.musicPrompt) parts.push(`Prompt: ${context.musicPrompt}`);
-      if (context.genres?.length) parts.push(`Genres: ${context.genres.join(", ")}`);
-      if (context.durationSeconds) parts.push(`Duration: ${Math.floor(context.durationSeconds / 60)}m ${context.durationSeconds % 60}s`);
-      if (context.vocalLanguages?.length) parts.push(`Languages: ${context.vocalLanguages.join(", ")}`);
-      if (context.lyrics) parts.push(`Lyrics/Theme: ${context.lyrics}`);
-      if (context.artistInspiration) parts.push(`Artist Inspiration: ${context.artistInspiration}`);
-      if (parts.length > 0) {
-        contextStr = `\n\nContext from other fields:\n${parts.join("\n")}`;
-      }
+    const contextStr = buildContext(context);
+
+    let userContent: string;
+    if (isEnhance) {
+      userContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}`;
+    } else {
+      const currentValueNote = value
+        ? `\n\nThe user has already entered: "${value}". Generate a completely NEW and DIFFERENT suggestion. Do NOT repeat or slightly modify their input.`
+        : "\n\nThe field is empty. Suggest a creative starting point.";
+      userContent = `${fieldPrompt}${contextStr}${currentValueNote}`;
     }
-
-    const currentValueNote = value
-      ? `\n\nThe user has already entered: "${value}". Improve, clarify, or expand on it while preserving the user's intent. Do NOT replace their meaning.`
-      : "\n\nThe field is empty. Suggest a creative starting point.";
 
     const systemPrompt = `You are a music production AI assistant. You help users craft their musical vision.
 CRITICAL RULES:
-- Generate ALL suggestions dynamically based on the user's context. NEVER return example text, template phrases, or placeholder content.
+- Generate ALL outputs dynamically based on the user's context. NEVER return example text, template phrases, or placeholder content.
 - Every response must be unique and creative. Vary your vocabulary, phrasing, and ideas across calls.
 - Analyze the user's filled fields deeply: genre influences mood, mood influences lyrics, BPM influences energy descriptions.
 - Be specific, vivid, and inspiring. Avoid generic or cliché descriptions.
-- Keep suggestions concise (1-3 sentences max for text fields, or a short list for selection fields).`;
+- Keep output concise (1-3 sentences max for text fields, or a short comma-separated list for selection fields like genres/languages).
+- For the "genres" field, return ONLY a comma-separated list of genre names, nothing else.
+- For the "vocalLanguage" field, return ONLY a comma-separated list of language names, nothing else.`;
 
-    // Use varying temperature (0.9-1.1) for creative diversity across identical inputs
     const temperature = 0.9 + Math.random() * 0.2;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -68,18 +87,18 @@ CRITICAL RULES:
         temperature,
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `${fieldPrompt}${contextStr}${currentValueNote}` },
+          { role: "user", content: userContent },
         ],
         tools: [
           {
             type: "function",
             function: {
               name: "provide_suggestion",
-              description: "Return a suggestion for the music creation field",
+              description: "Return the suggestion or enhanced value for the music creation field",
               parameters: {
                 type: "object",
                 properties: {
-                  suggestion: { type: "string", description: "The suggested value for the field" },
+                  suggestion: { type: "string", description: "The suggested or enhanced value for the field" },
                 },
                 required: ["suggestion"],
                 additionalProperties: false,

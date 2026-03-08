@@ -2,7 +2,8 @@ import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Music, Disc, Wand2, Clock, Languages, Mic2, Users, 
-  Video, Palette, Sparkles, Loader2, Play, Pause, Download, ChevronDown, Check, X
+  Video, Palette, Sparkles, Loader2, Play, Pause, Download, ChevronDown, X,
+  RefreshCw, Zap, Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,9 +44,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const [generateVideo, setGenerateVideo] = useState(false);
   const [videoStyle, setVideoStyle] = useState('');
 
-  // AI Suggest state
-  const [suggestingField, setSuggestingField] = useState<string | null>(null);
-  const [pendingSuggestion, setPendingSuggestion] = useState<{ field: string; value: string } | null>(null);
+  // Track which field+action is loading
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
   // Audio player state
   const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
@@ -56,38 +56,88 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     vocalLanguages: selectedLanguages, lyrics, artistInspiration, videoStyle,
   });
 
-  const handleAiSuggest = async (field: string, currentValue: string) => {
-    setSuggestingField(field);
-    const suggestion = await aiSuggest(field, currentValue, getFormContext());
-    setSuggestingField(null);
-    if (suggestion) {
-      setPendingSuggestion({ field, value: suggestion });
-    }
-  };
-
-  const applySuggestion = () => {
-    if (!pendingSuggestion) return;
-    const { field, value } = pendingSuggestion;
+  // Apply value directly to a field
+  const applyToField = (field: string, value: string) => {
     switch (field) {
       case 'trackName': setTitle(value); break;
       case 'prompt': setMusicPrompt(value); break;
       case 'genres':
         const suggested = value.split(',').map(g => g.trim()).filter(g => GENRES.includes(g));
-        setSelectedGenres(prev => [...new Set([...prev, ...suggested])]);
+        if (suggested.length > 0) setSelectedGenres(suggested);
         break;
       case 'lyrics': setLyrics(value); break;
       case 'artistInspiration': setArtistInspiration(value); break;
       case 'vocalLanguage':
         const langs = value.split(',').map(l => l.trim()).filter(l => LANGUAGES.includes(l));
-        setSelectedLanguages(prev => [...new Set([...prev, ...langs])]);
+        if (langs.length > 0) setSelectedLanguages(langs);
         break;
       case 'videoStyle': setVideoStyle(value); break;
     }
-    setPendingSuggestion(null);
-    toast.success('Suggestion applied!');
   };
 
-  const dismissSuggestion = () => setPendingSuggestion(null);
+  const getFieldValue = (field: string): string => {
+    switch (field) {
+      case 'trackName': return title;
+      case 'prompt': return musicPrompt;
+      case 'genres': return selectedGenres.join(', ');
+      case 'lyrics': return lyrics;
+      case 'artistInspiration': return artistInspiration;
+      case 'vocalLanguage': return selectedLanguages.join(', ');
+      case 'videoStyle': return videoStyle;
+      default: return '';
+    }
+  };
+
+  // Instant AI Suggest — applies directly
+  const handleAiSuggest = async (field: string) => {
+    const key = `suggest-${field}`;
+    setLoadingAction(key);
+    const suggestion = await aiSuggest(field, getFieldValue(field), getFormContext(), 'suggest');
+    setLoadingAction(null);
+    if (suggestion) {
+      applyToField(field, suggestion);
+    }
+  };
+
+  // Instant Enhance — applies directly
+  const handleEnhance = async (field: string) => {
+    const currentVal = getFieldValue(field);
+    if (!currentVal.trim()) {
+      toast.error('Nothing to enhance — add some content first');
+      return;
+    }
+    const key = `enhance-${field}`;
+    setLoadingAction(key);
+    const enhanced = await aiSuggest(field, currentVal, getFormContext(), 'enhance');
+    setLoadingAction(null);
+    if (enhanced) {
+      applyToField(field, enhanced);
+    }
+  };
+
+  // New Suggestions — generates fresh and applies directly
+  const handleNewSuggestion = async (field: string) => {
+    const key = `new-${field}`;
+    setLoadingAction(key);
+    const suggestion = await aiSuggest(field, '', getFormContext(), 'suggest');
+    setLoadingAction(null);
+    if (suggestion) {
+      applyToField(field, suggestion);
+    }
+  };
+
+  // Clear field
+  const handleClear = (field: string) => {
+    switch (field) {
+      case 'trackName': setTitle(''); break;
+      case 'prompt': setMusicPrompt(''); break;
+      case 'genres': setSelectedGenres([]); break;
+      case 'lyrics': setLyrics(''); break;
+      case 'artistInspiration': setArtistInspiration(''); break;
+      case 'vocalLanguage': setSelectedLanguages([]); break;
+      case 'videoStyle': setVideoStyle(''); break;
+    }
+  };
 
   const updateFromSlider = (value: number[]) => {
     const total = value[0];
@@ -148,22 +198,57 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     }
   };
 
-  const AiSuggestButton: React.FC<{ field: string; value: string; className?: string }> = ({ field, value, className }) => (
-    <Button
-      variant="aiSuggest"
-      size="sm"
-      onClick={() => handleAiSuggest(field, value)}
-      disabled={suggestingField === field}
-      className={className}
-    >
-      {suggestingField === field ? (
-        <Loader2 className="w-4 h-4 animate-spin" />
-      ) : (
-        <Wand2 className="w-4 h-4 mr-1" />
-      )}
-      <span className="hidden sm:inline">{suggestingField === field ? 'Thinking...' : 'AI Suggest'}</span>
-    </Button>
-  );
+  const isFieldLoading = (field: string) => loadingAction?.endsWith(`-${field}`) ?? false;
+
+  // AI Action Toolbar for each field
+  const AiToolbar: React.FC<{ field: string }> = ({ field }) => {
+    const loading = isFieldLoading(field);
+    const currentAction = loadingAction?.split('-')[0] || '';
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleAiSuggest(field)}
+          disabled={loading}
+          className="text-xs h-7 px-2 border-primary/30 text-primary hover:bg-primary/10"
+        >
+          {loading && currentAction === 'suggest' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Wand2 className="w-3 h-3 mr-1" />}
+          AI Suggest
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleEnhance(field)}
+          disabled={loading}
+          className="text-xs h-7 px-2 border-accent/30 text-accent hover:bg-accent/10"
+        >
+          {loading && currentAction === 'enhance' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Zap className="w-3 h-3 mr-1" />}
+          Enhance
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleNewSuggestion(field)}
+          disabled={loading}
+          className="text-xs h-7 px-2 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50"
+        >
+          {loading && currentAction === 'new' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+          New
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handleClear(field)}
+          disabled={loading}
+          className="text-xs h-7 px-2 text-muted-foreground hover:text-destructive"
+        >
+          <Trash2 className="w-3 h-3 mr-1" />
+          Clear
+        </Button>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8 overflow-y-auto">
@@ -173,33 +258,6 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground mb-2">Create Music</h1>
           <p className="text-muted-foreground text-sm sm:text-base">Describe your musical vision and let AI bring it to life</p>
         </motion.div>
-
-        {/* AI Suggestion Banner */}
-        <AnimatePresence>
-          {pendingSuggestion && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="mb-6 glass-card rounded-xl p-4 border-primary/30"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-primary mb-1">AI Suggestion for {pendingSuggestion.field}</p>
-                  <p className="text-sm text-foreground">{pendingSuggestion.value}</p>
-                </div>
-                <div className="flex gap-2 flex-shrink-0">
-                  <Button size="sm" variant="default" onClick={applySuggestion}>
-                    <Check className="w-4 h-4 mr-1" /> Apply
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={dismissSuggestion}>
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         <div className="grid gap-6 sm:gap-8">
           {/* Mode Selection */}
@@ -235,30 +293,32 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
           {/* Title */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="glass-card rounded-xl p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
               <Label className="text-foreground font-medium">{mode === 'song' ? 'Track Name' : 'Album Name'}</Label>
-              <AiSuggestButton field="trackName" value={title} />
+              <AiToolbar field="trackName" />
             </div>
             <Input placeholder={mode === 'song' ? 'Enter track name (optional)' : 'Enter album name (optional)'} value={title} onChange={(e) => setTitle(e.target.value)} className="bg-input border-border" />
           </motion.div>
 
           {/* Music Prompt */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass-card rounded-xl p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-0 mb-4">
-              <div>
-                <Label className="text-foreground font-medium">Music Prompt</Label>
-                <p className="text-sm text-muted-foreground mt-1">Describe the mood, energy, atmosphere, and imagery</p>
+            <div className="flex flex-col gap-2 mb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <Label className="text-foreground font-medium">Music Prompt</Label>
+                  <p className="text-sm text-muted-foreground mt-1">Describe the mood, energy, atmosphere, and imagery</p>
+                </div>
               </div>
-              <AiSuggestButton field="prompt" value={musicPrompt} className="self-start" />
+              <AiToolbar field="prompt" />
             </div>
             <Textarea placeholder="e.g., A dreamy, nostalgic sunset vibe with warm synths and gentle beats..." value={musicPrompt} onChange={(e) => setMusicPrompt(e.target.value)} className="bg-input border-border min-h-32 resize-none" />
           </motion.div>
 
           {/* Genres */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="glass-card rounded-xl p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
               <Label className="text-foreground font-medium">Genres</Label>
-              <AiSuggestButton field="genres" value={selectedGenres.join(', ')} />
+              <AiToolbar field="genres" />
             </div>
             {selectedGenres.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-4">
@@ -318,12 +378,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
           {/* Vocal Language */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="glass-card rounded-xl p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
               <div className="flex items-center gap-2">
                 <Languages className="w-5 h-5 text-muted-foreground" />
                 <Label className="text-foreground font-medium">Vocal Language(s)</Label>
               </div>
-              <AiSuggestButton field="vocalLanguage" value={selectedLanguages.join(', ')} />
+              <AiToolbar field="vocalLanguage" />
             </div>
             {selectedLanguages.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-4">
@@ -356,7 +416,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
           {/* Lyrics */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass-card rounded-xl p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-0 mb-4">
+            <div className="flex flex-col gap-2 mb-3">
               <div className="flex items-center gap-2">
                 <Mic2 className="w-5 h-5 text-muted-foreground" />
                 <div>
@@ -364,19 +424,19 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <p className="text-sm text-muted-foreground">Themes, stories, or full lyrics</p>
                 </div>
               </div>
-              <AiSuggestButton field="lyrics" value={lyrics} className="self-start" />
+              <AiToolbar field="lyrics" />
             </div>
             <Textarea placeholder="e.g., A story about finding hope after loss..." value={lyrics} onChange={(e) => setLyrics(e.target.value)} className="bg-input border-border min-h-32 resize-none" />
           </motion.div>
 
           {/* Artist Inspiration */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="glass-card rounded-xl p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-muted-foreground" />
                 <Label className="text-foreground font-medium">Artist Inspiration</Label>
               </div>
-              <AiSuggestButton field="artistInspiration" value={artistInspiration} />
+              <AiToolbar field="artistInspiration" />
             </div>
             <Input placeholder="e.g., Tame Impala, Daft Punk, Billie Eilish..." value={artistInspiration} onChange={(e) => setArtistInspiration(e.target.value)} className="bg-input border-border" />
           </motion.div>
@@ -396,12 +456,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
             <AnimatePresence>
               {generateVideo && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-4">
+                  <div className="flex flex-col gap-2 mb-3">
                     <div className="flex items-center gap-2">
                       <Palette className="w-5 h-5 text-muted-foreground" />
                       <Label className="text-foreground font-medium">Video Style</Label>
                     </div>
-                    <AiSuggestButton field="videoStyle" value={videoStyle} />
+                    <AiToolbar field="videoStyle" />
                   </div>
                   <Input placeholder="e.g., Abstract geometric visuals, neon colors..." value={videoStyle} onChange={(e) => setVideoStyle(e.target.value)} className="bg-input border-border" />
                 </motion.div>
@@ -483,7 +543,6 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                           </a>
                         )}
                       </div>
-                      {/* Inline audio element for completed tracks */}
                       {track.status === 'completed' && track.audioUrl && (
                         <audio controls className="w-full mt-3" src={track.audioUrl} />
                       )}
