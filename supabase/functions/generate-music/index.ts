@@ -393,23 +393,22 @@ function buildWavFile(pcm: Uint8Array, sampleRate: number, numChannels: number, 
   return wavBuffer;
 }
 
-// ===== PARALLEL BATCH HELPER =====
-async function runParallel<T>(
+// ===== RATE-LIMITED SEQUENTIAL QUEUE =====
+// Free tier: 6 predictions/min, burst 1. Wait between requests.
+const REQUEST_DELAY_MS = 10_000; // 10s between predictions
+const MAX_PARALLEL = 1; // Sequential only on free tier
+
+async function runSequentialWithDelay<T>(
   tasks: (() => Promise<T>)[],
-  maxConcurrency: number,
 ): Promise<T[]> {
-  const results: T[] = new Array(tasks.length);
-  let nextIdx = 0;
-
-  async function worker() {
-    while (nextIdx < tasks.length) {
-      const idx = nextIdx++;
-      results[idx] = await tasks[idx]();
+  const results: T[] = [];
+  for (let i = 0; i < tasks.length; i++) {
+    if (i > 0) {
+      console.log(`[RateLimit] Waiting ${REQUEST_DELAY_MS / 1000}s before next segment...`);
+      await new Promise(r => setTimeout(r, REQUEST_DELAY_MS));
     }
+    results.push(await tasks[i]());
   }
-
-  const workers = Array.from({ length: Math.min(maxConcurrency, tasks.length) }, () => worker());
-  await Promise.all(workers);
   return results;
 }
 
