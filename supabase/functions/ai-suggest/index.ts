@@ -37,7 +37,9 @@ function pickRandom<T>(arr: T[], seed: number, count = 1): T[] {
 }
 
 const FIELD_PROMPTS: Record<string, string> = {
-  trackName: "Suggest a creative, evocative track name for a music piece. Consider the context of other fields if provided.",
+  albumName: "Suggest a short, evocative album title (2-5 words max). Be creative and memorable. Return ONLY the title, no descriptions or explanations.",
+  albumVibe: "Suggest a vivid album-wide mood/vibe description. Describe the overarching atmosphere, sonic palette, and emotional journey of the album.",
+  trackName: "Suggest a creative, evocative track name for a music piece. Return ONLY the title (2-5 words). No descriptions.",
   prompt: "Suggest a detailed music prompt describing mood, energy, atmosphere, and imagery for a track. Be vivid and cinematic.",
   genres: "Suggest 2-4 fitting music genres from any style worldwide. Return as comma-separated list.",
   lyrics: "Suggest lyrical themes, storylines, or actual lyrics. Be poetic and emotionally resonant.",
@@ -45,6 +47,7 @@ const FIELD_PROMPTS: Record<string, string> = {
   vocalLanguage: "Suggest vocal language(s) that would best fit this track's genre and mood.",
   videoStyle: "Suggest a visual style for a music video. Be specific about colors, movements, and aesthetic.",
   tempoBpm: "Suggest a BPM value (60-200) that fits the genre, mood, and energy of this track. Return ONLY a number.",
+  duration: "Suggest a duration in seconds (30-600) that fits the genre and structure. Return ONLY a number.",
   vocalStructure: "Suggest a vocal structure for this song using section names separated by ' – '. Consider lyrics length, genre, and mood.",
   vocalStyle: "Suggest a vocal style that fits the genre and lyrics. Return a short description like 'Female Vocal', 'Rap Vocal', 'Ethereal Choir', etc.",
   vocalIntensity: "Suggest a vocal intensity level from 1-10 based on the track's energy. Return ONLY a number.",
