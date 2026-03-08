@@ -421,7 +421,10 @@ const TrackRow: React.FC<{ track: Track; index: number; formatDuration: (s: numb
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <p className={`font-medium truncate ${isCurrentTrack ? 'text-primary' : 'text-foreground'}`}>{track.title}</p>
+          <button
+            onClick={(e) => { e.stopPropagation(); onNavigate('song-detail', { creationId: creation.id, trackId: track.id }); }}
+            className={`font-medium truncate hover:underline text-left ${isCurrentTrack ? 'text-primary' : 'text-foreground'}`}
+          >{track.title}</button>
           {isActiveStatus(track.status) && (
             <DashboardTrackProgress
               currentStage={track.currentStage || track.status}
