@@ -199,7 +199,7 @@ async function generateSegmentWithRetry(
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const cappedDuration = Math.min(duration, 30);
-      const audioUrl = await replicateGenerate(apiToken, prompt, cappedDuration);
+      const audioUrl = await replicateCreatePrediction(apiToken, prompt, cappedDuration);
       const buffer = await downloadAudio(audioUrl);
       return { audioUrl, buffer };
     } catch (e) {
