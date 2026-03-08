@@ -129,6 +129,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const applyToField = (field: string, value: string) => {
     switch (field) {
       case 'trackName': setTitle(value); break;
+      case 'albumName': setAlbumName(value); break;
+      case 'albumVibe': setAlbumVibe(value); break;
       case 'prompt': setMusicPrompt(value); break;
       case 'genres':
         const suggested = value.split(',').map(g => g.trim()).filter(g => GENRES.includes(g));
