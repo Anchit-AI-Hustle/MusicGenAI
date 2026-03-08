@@ -197,7 +197,7 @@ CRITICAL RULES:
     });
 
     // Retry with exponential backoff for rate limits
-    const MAX_RETRIES = 4;
+    const MAX_RETRIES = 2;
     let lastError = "";
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       if (attempt > 0) {

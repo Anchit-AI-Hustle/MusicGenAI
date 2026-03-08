@@ -753,7 +753,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           });
 
           if (response.status === 429 && attempt < maxRetries) {
-            const delay = Math.min(2000 * Math.pow(2, attempt) + Math.random() * 1000, 15000);
+            const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 5000);
             await new Promise(r => setTimeout(r, delay));
             continue;
           }
