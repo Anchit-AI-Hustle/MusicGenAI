@@ -170,6 +170,7 @@ interface CreationCardProps {
 
 const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDuration, formatDate }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const { retryTrack } = useMusic();
   const Icon = creation.type === 'song' ? Music : Disc;
   const totalDuration = creation.tracks.reduce((acc, t) => acc + t.duration, 0);
 
@@ -223,7 +224,7 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-t border-border">
             <div className="p-3 sm:p-4 space-y-2">
               {creation.tracks.map((track, i) => (
-                <TrackRow key={track.id} track={track} index={i} formatDuration={formatDuration} />
+                <TrackRow key={track.id} track={track} index={i} formatDuration={formatDuration} creationId={creation.id} onRetry={retryTrack} />
               ))}
             </div>
           </motion.div>
