@@ -110,6 +110,7 @@ const SongDownloadMenu: React.FC<{ track: Track; triggerDownload: (url: string, 
       </AnimatePresence>
     </div>
   );
+};
 
 export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trackId, onBack }) => {
   const { creations } = useMusic();
