@@ -167,7 +167,7 @@ async function replicateCreatePrediction(
     await new Promise(r => setTimeout(r, pollInterval));
 
     const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
-      headers: { Authorization: `Bearer ${apiToken}` },
+      headers: { Authorization: `Token ${apiToken}` },
     });
 
     if (!pollRes.ok) {
