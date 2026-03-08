@@ -871,7 +871,7 @@ Durations MUST sum to exactly ${durationSec}.`,
     // ================================================================
     // STEP 6 — FINALIZING TRACK
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Finalizing and saving audio output", 0.92, 5);
+    await updateProgress(supabase, trackId, creationId, "Finalizing and saving audio output", 0.92, 5, jobId, 8);
 
     const finalPath = `tracks/${trackId}/final.wav`;
     const { error: uploadError } = await supabase.storage
