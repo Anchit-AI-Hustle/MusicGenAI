@@ -233,6 +233,50 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
   );
 };
 
+const DASH_PIPELINE_STEPS = [
+  { key: 'analyzing', label: 'Analyzing', match: /analyz/i },
+  { key: 'expanding', label: 'Production brief', match: /expand/i },
+  { key: 'planning', label: 'Planning structure', match: /plan/i },
+  { key: 'generating', label: 'Generating segments', match: /generat/i },
+  { key: 'downloading', label: 'Downloading audio', match: /download/i },
+  { key: 'stitching', label: 'Stitching track', match: /stitch/i },
+  { key: 'finalizing', label: 'Finalizing', match: /finaliz/i },
+];
+
+const DashboardTrackProgress: React.FC<{
+  currentStage: string; progress: number; estimatedTimeLeft: number;
+  completedSegments: number; totalSegments: number;
+}> = ({ currentStage, progress, estimatedTimeLeft, completedSegments, totalSegments }) => {
+  const activeIdx = Math.max(0, DASH_PIPELINE_STEPS.findIndex(s => s.match.test(currentStage)));
+  const segMatch = currentStage.match(/\((\d+) of (\d+)\)/);
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      <div className="flex items-center gap-2 text-xs">
+        <Loader2 className="w-3 h-3 text-primary animate-spin flex-shrink-0" />
+        <span className="text-primary font-medium truncate">
+          {DASH_PIPELINE_STEPS[activeIdx]?.label || currentStage}
+          {activeIdx === 3 && segMatch && ` (${segMatch[1]}/${segMatch[2]})`}
+          {activeIdx === 3 && !segMatch && ` (${completedSegments}/${totalSegments})`}
+        </span>
+        {estimatedTimeLeft > 0 && (
+          <span className="text-muted-foreground ml-auto flex-shrink-0">
+            ~{estimatedTimeLeft >= 60 ? `${Math.floor(estimatedTimeLeft / 60)}m ${estimatedTimeLeft % 60}s` : `${estimatedTimeLeft}s`}
+          </span>
+        )}
+      </div>
+      <Progress value={progress * 100} className="h-1.5" />
+      <div className="flex gap-0.5">
+        {DASH_PIPELINE_STEPS.map((step, idx) => (
+          <div key={step.key} className={`h-1 flex-1 rounded-full ${
+            idx < activeIdx ? 'bg-green-400' : idx === activeIdx ? 'bg-primary animate-pulse' : 'bg-muted'
+          }`} />
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number) => string }> = ({ track, index, formatDuration }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
