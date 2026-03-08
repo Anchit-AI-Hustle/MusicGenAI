@@ -559,7 +559,7 @@ serve(async (req) => {
     // ================================================================
     // STEP 1 — ANALYZING PROMPT
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Analyzing prompt", 0.02, etaRemaining);
+    await updateProgress(supabase, trackId, creationId, "Analyzing user inputs and prompt", 0.02, etaRemaining);
 
     const sentiment = await callAI(
       LOVABLE_API_KEY,
