@@ -106,12 +106,12 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const isComplete = stepName === 'Completed';
         const isFailed = stepName === 'Failed';
 
-        // Update track in creations state
+        // Update track in creations state (DB remains source-of-truth for status)
         const mapTrack = (t: Track): Track =>
           t.id === trackId
             ? {
                 ...t,
-                status: isComplete ? 'completed' : isFailed ? 'failed' : 'processing',
+                status: isComplete ? 'completed' : isFailed ? 'failed' : t.status,
                 progress: (progressPercent ?? 0) / 100,
                 currentStage: stepName,
                 completedSegments: segmentsCompleted ?? t.completedSegments,
@@ -122,12 +122,12 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
         setCreations(prev => prev.map(c =>
           c.id === creationId
-            ? { ...c, tracks: c.tracks.map(mapTrack), status: isComplete ? 'completed' : isFailed ? 'failed' : 'processing', progress: (progressPercent ?? 0) / 100 }
+            ? { ...c, tracks: c.tracks.map(mapTrack), progress: (progressPercent ?? 0) / 100 }
             : c
         ));
         setCurrentCreation(prev => {
           if (!prev || prev.id !== creationId) return prev;
-          return { ...prev, tracks: prev.tracks.map(mapTrack), status: isComplete ? 'completed' : isFailed ? 'failed' : 'processing', progress: (progressPercent ?? 0) / 100 };
+          return { ...prev, tracks: prev.tracks.map(mapTrack), progress: (progressPercent ?? 0) / 100 };
         });
 
         // Unsubscribe on completion or failure
