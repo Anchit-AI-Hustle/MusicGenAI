@@ -68,6 +68,7 @@ interface MusicContextType {
   createMusic: (input: CreateMusicInput) => Promise<MusicCreation | null>;
   setCurrentCreation: (creation: MusicCreation | null) => void;
   refreshCreations: () => Promise<void>;
+  retryTrack: (trackId: string, creationId: string) => Promise<void>;
   aiSuggest: (field: string, value: string, context: Record<string, any>, action?: AiAction) => Promise<string | null>;
 }
 
