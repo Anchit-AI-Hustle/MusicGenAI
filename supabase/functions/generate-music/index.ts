@@ -572,7 +572,8 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
     // ================================================================
     // STAGE 8 — INSTRUMENT SYNTHESIS DESCRIPTIONS
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "instrument-synthesis", 0.23);
+    etaRemaining -= 10;
+    await updateProgress(supabase, trackId, creationId, "Synthesizing instruments", 0.23, etaRemaining);
 
     const instrumentDescriptions = sections.map(section => {
       const activeInstruments = section.instruments.length > 0
