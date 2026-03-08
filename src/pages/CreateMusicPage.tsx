@@ -130,6 +130,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         if (!isNaN(parsed)) setTempoBpm(Math.max(60, Math.min(200, parsed)));
         break;
       }
+      case 'mood': setMood(value); break;
+      case 'musicalKey': setMusicalKey(value); break;
       case 'vocalStructure': setVocalStructure(value); break;
       case 'vocalStyle': setVocalStyle(value); break;
       case 'vocalIntensity': {
