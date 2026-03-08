@@ -428,8 +428,14 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
+  // Session suggestion history to prevent repeats
+  const suggestionHistoryRef = useRef<Record<string, string[]>>({});
+
   const aiSuggest = async (field: string, value: string, context: Record<string, any>, action: AiAction = 'suggest'): Promise<string | null> => {
     const maxRetries = 3;
+    const history = suggestionHistoryRef.current[field] || [];
+    const randomSeed = Math.floor(Math.random() * 100000);
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-suggest`, {
@@ -439,7 +445,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ field, value, context, action }),
+          body: JSON.stringify({
+            field, value, context, action,
+            previousSuggestions: history.slice(-10),
+            randomSeed,
+          }),
         });
 
         if (response.status === 429 && attempt < maxRetries) {
@@ -454,7 +464,15 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }
 
         const data = await response.json();
-        return data.suggestion || null;
+        const suggestion = data.suggestion || null;
+
+        // Store in history to prevent future repeats
+        if (suggestion) {
+          if (!suggestionHistoryRef.current[field]) suggestionHistoryRef.current[field] = [];
+          suggestionHistoryRef.current[field].push(suggestion);
+        }
+
+        return suggestion;
       } catch (e) {
         if (attempt === maxRetries) { toast.error('Failed to get AI suggestion'); return null; }
         await new Promise(r => setTimeout(r, (attempt + 1) * 1500));

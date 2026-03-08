@@ -5,6 +5,37 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const MOOD_DESCRIPTORS = [
+  "dark", "aggressive", "melancholic", "uplifting", "atmospheric", "hypnotic",
+  "ethereal", "brooding", "euphoric", "haunting", "serene", "chaotic",
+  "dreamy", "fierce", "nostalgic", "triumphant", "mysterious", "playful",
+];
+
+const ENVIRONMENT_DESCRIPTORS = [
+  "warehouse", "festival", "club", "underground", "arena", "studio",
+  "rooftop", "desert", "cathedral", "forest", "ocean", "cityscape",
+  "neon-lit", "industrial", "coastal", "mountain", "subterranean",
+];
+
+const ENERGY_DESCRIPTORS = [
+  "minimal", "driving", "intense", "progressive", "explosive",
+  "pulsating", "relentless", "flowing", "thunderous", "simmering",
+  "cascading", "raw", "polished", "volatile", "steady",
+];
+
+const STYLE_PATTERNS = [
+  "genre + mood + environment",
+  "mood + genre + instrumentation",
+  "environment + genre + energy",
+  "energy + mood + genre + texture",
+  "genre + environment + mood + rhythm",
+];
+
+function pickRandom<T>(arr: T[], seed: number, count = 1): T[] {
+  const shuffled = [...arr].sort(() => Math.sin(seed++) - 0.5);
+  return shuffled.slice(0, count);
+}
+
 const FIELD_PROMPTS: Record<string, string> = {
   trackName: "Suggest a creative, evocative track name for a music piece. Consider the context of other fields if provided.",
   prompt: "Suggest a detailed music prompt describing mood, energy, atmosphere, and imagery for a track. Be vivid and cinematic.",
@@ -14,25 +45,29 @@ const FIELD_PROMPTS: Record<string, string> = {
   vocalLanguage: "Suggest vocal language(s) that would best fit this track's genre and mood.",
   videoStyle: "Suggest a visual style for a music video. Be specific about colors, movements, and aesthetic.",
   tempoBpm: "Suggest a BPM value (60-200) that fits the genre, mood, and energy of this track. Return ONLY a number.",
-  vocalStructure: "Suggest a vocal structure for this song using section names separated by ' – '. Consider lyrics length, genre, and mood. Example format: 'Verse – Chorus – Bridge – Chorus'. Be creative and genre-appropriate.",
+  vocalStructure: "Suggest a vocal structure for this song using section names separated by ' – '. Consider lyrics length, genre, and mood.",
   vocalStyle: "Suggest a vocal style that fits the genre and lyrics. Return a short description like 'Female Vocal', 'Rap Vocal', 'Ethereal Choir', etc.",
   vocalIntensity: "Suggest a vocal intensity level from 1-10 based on the track's energy. Return ONLY a number.",
   vocalEffects: "Suggest vocal effects as a comma-separated list. Choose from or create effects like Reverb, Delay, Chorus, Distortion, Autotune, Vocoder, or other creative effects that fit the genre.",
+  mood: "Suggest a mood/atmosphere description that fits the genre and context. Be evocative and specific.",
+  songStructure: "Suggest a song structure using section names connected by ' → '. Be creative and genre-appropriate.",
 };
 
 const ENHANCE_PROMPTS: Record<string, string> = {
   trackName: "Take this track name and make it more evocative, unique, and memorable. Preserve the core idea but elevate it.",
-  prompt: "Take this music prompt and expand it with richer detail — add specific instruments, textures, spatial qualities, and emotional arcs. Make it more vivid and production-ready.",
-  genres: "Refine these genre selections — suggest more specific sub-genres or complementary genres that sharpen the sonic identity. Return as comma-separated list.",
-  lyrics: "Enhance these lyrics/themes — add more poetic depth, stronger imagery, better flow, and emotional resonance. Keep the core meaning intact.",
-  artistInspiration: "Expand on these artist inspirations — add complementary artists that would create a richer sonic palette while staying cohesive.",
-  vocalLanguage: "Refine the language selection — suggest languages that would add unique character while fitting the genre and mood.",
-  videoStyle: "Enhance this video style description — add specific visual techniques, color palettes, camera movements, and artistic references.",
-  tempoBpm: "Analyze the genre and mood, then adjust this BPM slightly to improve musical fit. Return ONLY a number between 60-200.",
-  vocalStructure: "Refine this vocal structure by introducing additional sections like pre-chorus, bridge, or breakdown to create more dynamic arrangement. Return section names separated by ' – '.",
+  prompt: "Take this music prompt and expand it with richer detail — add specific instruments, textures, spatial qualities, and emotional arcs.",
+  genres: "Refine these genre selections — suggest more specific sub-genres or complementary genres. Return as comma-separated list.",
+  lyrics: "Enhance these lyrics/themes — add more poetic depth, stronger imagery, better flow. Keep the core meaning.",
+  artistInspiration: "Expand on these artist inspirations — add complementary artists for a richer sonic palette.",
+  vocalLanguage: "Refine the language selection — suggest languages that add unique character while fitting the genre.",
+  videoStyle: "Enhance this video style — add specific visual techniques, color palettes, camera movements.",
+  tempoBpm: "Adjust this BPM slightly to improve musical fit. Return ONLY a number between 60-200.",
+  vocalStructure: "Refine this vocal structure with additional sections. Return section names separated by ' – '.",
   vocalStyle: "Refine this vocal style to be more specific and nuanced. Add descriptive modifiers.",
   vocalIntensity: "Adjust this intensity value based on the genre and energy context. Return ONLY a number between 1-10.",
-  vocalEffects: "Refine these vocal effects — add complementary effects or replace with better-fitting ones for the genre. Return as comma-separated list.",
+  vocalEffects: "Refine these vocal effects — add complementary effects or replace with better-fitting ones. Return as comma-separated list.",
+  mood: "Enhance this mood description — make it more vivid, specific, and evocative.",
+  songStructure: "Refine this song structure — add or adjust sections for better dynamics. Return sections connected by ' → '.",
 };
 
 function buildContext(context: any): string {
@@ -46,11 +81,35 @@ function buildContext(context: any): string {
   if (context.lyrics) parts.push(`Lyrics/Theme: ${context.lyrics}`);
   if (context.artistInspiration) parts.push(`Artist Inspiration: ${context.artistInspiration}`);
   if (context.tempoBpm) parts.push(`Tempo: ${context.tempoBpm} BPM`);
+  if (context.mood) parts.push(`Mood: ${context.mood}`);
+  if (context.musicalKey) parts.push(`Key: ${context.musicalKey}`);
   if (context.vocalStructure) parts.push(`Vocal Structure: ${context.vocalStructure}`);
   if (context.vocalStyle) parts.push(`Vocal Style: ${context.vocalStyle}`);
   if (context.vocalIntensity) parts.push(`Vocal Intensity: ${context.vocalIntensity}/10`);
   if (context.vocalEffects?.length) parts.push(`Vocal Effects: ${context.vocalEffects.join(", ")}`);
+  if (context.songStructure) parts.push(`Song Structure: ${context.songStructure}`);
   return parts.length > 0 ? `\n\nContext from other fields:\n${parts.join("\n")}` : "";
+}
+
+function buildEntropyDirective(seed: number, previousSuggestions: string[]): string {
+  const moods = pickRandom(MOOD_DESCRIPTORS, seed, 2);
+  const envs = pickRandom(ENVIRONMENT_DESCRIPTORS, seed + 100, 2);
+  const energies = pickRandom(ENERGY_DESCRIPTORS, seed + 200, 1);
+  const pattern = pickRandom(STYLE_PATTERNS, seed + 300, 1)[0];
+
+  let directive = `\n\n--- VARIATION DIRECTIVE (seed: ${seed}) ---`;
+  directive += `\nStyle pattern to follow: ${pattern}`;
+  directive += `\nDraw inspiration from these descriptors: ${[...moods, ...envs, ...energies].join(", ")}`;
+
+  if (previousSuggestions.length > 0) {
+    directive += `\n\nCRITICAL: The following suggestions were ALREADY given. You MUST NOT repeat, rephrase, or slightly modify any of them. Generate something completely different in wording, structure, and style:`;
+    previousSuggestions.forEach((s, i) => {
+      directive += `\n  ${i + 1}. "${s}"`;
+    });
+    directive += `\n\nUse different vocabulary, sentence structure, and creative angles than ALL of the above.`;
+  }
+
+  return directive;
 }
 
 serve(async (req) => {
@@ -59,7 +118,7 @@ serve(async (req) => {
   }
 
   try {
-    const { field, value, context, action = "suggest" } = await req.json();
+    const { field, value, context, action = "suggest", previousSuggestions = [], randomSeed = 0 } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -68,33 +127,38 @@ serve(async (req) => {
     const fieldPrompt = prompts[field] || (isEnhance ? "Improve and enhance this value." : "Provide a helpful suggestion for this music creation field.");
 
     const contextStr = buildContext(context);
+    const entropyDirective = buildEntropyDirective(randomSeed || Math.floor(Math.random() * 100000), previousSuggestions || []);
 
     let userContent: string;
     if (isEnhance) {
-      userContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}`;
+      userContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}${entropyDirective}`;
     } else {
       const currentValueNote = value
         ? `\n\nThe user has already entered: "${value}". Generate a completely NEW and DIFFERENT suggestion. Do NOT repeat or slightly modify their input.`
         : "\n\nThe field is empty. Suggest a creative starting point.";
-      userContent = `${fieldPrompt}${contextStr}${currentValueNote}`;
+      userContent = `${fieldPrompt}${contextStr}${currentValueNote}${entropyDirective}`;
     }
 
     const systemPrompt = `You are a music production AI assistant. You help users craft their musical vision.
 CRITICAL RULES:
-- Generate ALL outputs dynamically based on the user's context. NEVER return example text, template phrases, or placeholder content.
-- Every response must be unique and creative. Vary your vocabulary, phrasing, and ideas across calls.
-- Analyze the user's filled fields deeply: genre influences mood, mood influences lyrics, BPM influences energy descriptions.
+- Generate ALL outputs dynamically. NEVER return example text, template phrases, or placeholder content.
+- Every response MUST be unique. Use completely different wording, vocabulary, phrasing, and creative angles each time.
+- If previous suggestions are listed, you MUST avoid repeating any of them — not even paraphrased versions.
+- Draw from the variation directive's descriptors and style pattern to ensure novelty.
+- Analyze the user's filled fields deeply: genre influences mood, mood influences lyrics, BPM influences energy.
 - Be specific, vivid, and inspiring. Avoid generic or cliché descriptions.
-- Keep output concise (1-3 sentences max for text fields, or a short comma-separated list for selection fields like genres/languages).
-- For the "genres" field, return ONLY a comma-separated list of genre names, nothing else.
-- For the "vocalLanguage" field, return ONLY a comma-separated list of language names, nothing else.
-- For the "tempoBpm" field, return ONLY a single integer number between 60-200, nothing else.
-- For the "vocalIntensity" field, return ONLY a single integer number between 1-10, nothing else.
-- For the "vocalStructure" field, return ONLY section names separated by " – " (e.g., "Verse – Chorus – Bridge – Chorus"), nothing else.
-- For the "vocalStyle" field, return ONLY a short style description (1-4 words), nothing else.
-- For the "vocalEffects" field, return ONLY a comma-separated list of effect names, nothing else.`;
+- Keep output concise (1-3 sentences max for text fields, or a short comma-separated list for selection fields).
+- For "genres": return ONLY a comma-separated list of genre names.
+- For "vocalLanguage": return ONLY a comma-separated list of language names.
+- For "tempoBpm": return ONLY a single integer number between 60-200.
+- For "vocalIntensity": return ONLY a single integer number between 1-10.
+- For "vocalStructure": return ONLY section names separated by " – ".
+- For "vocalStyle": return ONLY a short style description (1-4 words).
+- For "vocalEffects": return ONLY a comma-separated list of effect names.
+- For "songStructure": return ONLY section names connected by " → ".`;
 
-    const temperature = 0.9 + Math.random() * 0.2;
+    // High temperature + top_p for maximum creativity
+    const temperature = 0.95 + Math.random() * 0.15;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -105,6 +169,7 @@ CRITICAL RULES:
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         temperature,
+        top_p: 0.95,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userContent },
