@@ -129,13 +129,10 @@ async function updateProgress(
   }
 }
 
-// ===== REPLICATE: Model fallback list =====
-const REPLICATE_MODELS = [
-  "meta/musicgen",
-  "riffusion/riffusion",
-];
+// ===== REPLICATE: Riffusion version hash =====
+const RIFFUSION_VERSION = "8cf61ea6c56c3e8fb3d2a8f3c3e4c2a6b5df9c28c383e1281870e7d56da42197";
 
-// ===== REPLICATE: Create prediction with model fallback + rate-limit awareness =====
+// ===== REPLICATE: Create prediction with polling =====
 async function replicateCreatePrediction(
   apiToken: string,
   prompt: string,
@@ -146,65 +143,48 @@ async function replicateCreatePrediction(
   const maxCreateAttempts = 10;
 
   let predictionId = "";
-  let lastError = "";
 
-  for (const model of REPLICATE_MODELS) {
-    // meta/musicgen max duration is ~8s; other models may support more
-    const modelDuration = model === "meta/musicgen" ? Math.min(duration, 8) : Math.min(duration, 30);
-    console.log(`[Replicate] Trying model: ${model} (duration=${modelDuration}s)`);
-    predictionId = "";
-
-    for (let attempt = 1; attempt <= maxCreateAttempts; attempt++) {
-      // Use the model-specific predictions endpoint (works for all models without version)
-      const createRes = await fetch(`https://api.replicate.com/v1/models/${model}/predictions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Token ${apiToken}`,
-          "Content-Type": "application/json",
+  for (let attempt = 1; attempt <= maxCreateAttempts; attempt++) {
+    const createRes = await fetch("https://api.replicate.com/v1/predictions", {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${apiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        version: RIFFUSION_VERSION,
+        input: {
+          prompt,
+          seed: actualSeed,
         },
-        body: JSON.stringify({
-          input: {
-            prompt,
-            duration: modelDuration,
-            seed: actualSeed,
-          },
-        }),
-      });
+      }),
+    });
 
-      if (createRes.ok) {
-        const prediction = await createRes.json();
-        predictionId = prediction.id;
-        console.log(`[Replicate] Prediction ${predictionId} created with model=${model} (seed=${actualSeed}, attempt=${attempt})`);
-        break;
-      }
-
-      const errBody = await createRes.text();
-
-      if (createRes.status === 404 || createRes.status === 422) {
-        console.warn(`[Replicate] Model ${model} returned ${createRes.status}: ${errBody}. Switching to next model.`);
-        lastError = `${model} returned ${createRes.status}: ${errBody}`;
-        break; // try next model
-      }
-
-      if (createRes.status === 429) {
-        let waitSec = 10 * attempt;
-        try {
-          const parsed = JSON.parse(errBody);
-          if (parsed.retry_after) waitSec = Math.max(parsed.retry_after + 1, 2);
-        } catch { /* use default */ }
-        console.warn(`[Replicate] Rate limited (attempt ${attempt}/${maxCreateAttempts}). Waiting ${waitSec}s...`);
-        await new Promise(r => setTimeout(r, waitSec * 1000));
-        continue;
-      }
-
-      throw new Error(`Replicate create failed [${createRes.status}]: ${errBody}`);
+    if (createRes.ok) {
+      const prediction = await createRes.json();
+      predictionId = prediction.id;
+      console.log(`[Replicate] Prediction ${predictionId} created (seed=${actualSeed}, attempt=${attempt})`);
+      break;
     }
 
-    if (predictionId) break; // success
+    const errBody = await createRes.text();
+
+    if (createRes.status === 429) {
+      let waitSec = 10 * attempt;
+      try {
+        const parsed = JSON.parse(errBody);
+        if (parsed.retry_after) waitSec = Math.max(parsed.retry_after + 1, 2);
+      } catch { /* use default */ }
+      console.warn(`[Replicate] Rate limited (attempt ${attempt}/${maxCreateAttempts}). Waiting ${waitSec}s...`);
+      await new Promise(r => setTimeout(r, waitSec * 1000));
+      continue;
+    }
+
+    throw new Error(`Replicate create failed [${createRes.status}]: ${errBody}`);
   }
 
   if (!predictionId) {
-    throw new Error(`All Replicate models failed. Last error: ${lastError}`);
+    throw new Error("Failed to create Replicate prediction after all attempts");
   }
 
   // Poll for completion every 2s (max 120s per segment attempt)
