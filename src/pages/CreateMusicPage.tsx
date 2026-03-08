@@ -753,6 +753,19 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                           </p>
                           {track.status === 'processing' && (
                             <div className="mt-2">
+                              {track.currentStage && (
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <span className="text-xs font-medium text-primary animate-pulse">●</span>
+                                  <span className="text-xs font-medium text-foreground">{track.currentStage}</span>
+                                  {(track.estimatedTimeLeft ?? 0) > 0 && (
+                                    <span className="text-xs text-muted-foreground ml-auto">
+                                      ~{track.estimatedTimeLeft! >= 60
+                                        ? `${Math.floor(track.estimatedTimeLeft! / 60)}m ${track.estimatedTimeLeft! % 60}s`
+                                        : `${track.estimatedTimeLeft}s`} left
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                               <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
                                 <span>Segment {track.completedSegments || 0}/{track.totalSegments || 1}</span>
                                 <span>{Math.round((track.progress || 0) * 100)}%</span>
