@@ -328,6 +328,70 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     );
   };
 
+  // ===== 7-Step Pipeline Progress Component =====
+  const PIPELINE_STEPS = [
+    { key: 'analyzing', label: 'Analyzing prompt', match: /analyz/i },
+    { key: 'planning', label: 'Planning song structure', match: /plan/i },
+    { key: 'generating', label: 'Generating segments', match: /generat.*segment/i },
+    { key: 'vocals', label: 'Synthesizing vocals', match: /synth.*vocal|vocal/i },
+    { key: 'stitching', label: 'Stitching audio', match: /stitch|align/i },
+    { key: 'mastering', label: 'Mastering final track', match: /master/i },
+    { key: 'encoding', label: 'Encoding final track', match: /encod|final/i },
+  ];
+
+  const PipelineProgress: React.FC<{
+    currentStage: string; progress: number; estimatedTimeLeft: number;
+    completedSegments: number; totalSegments: number;
+  }> = ({ currentStage, progress, estimatedTimeLeft, completedSegments, totalSegments }) => {
+    const currentStepIdx = PIPELINE_STEPS.findIndex(s => s.match.test(currentStage));
+    const activeIdx = currentStepIdx >= 0 ? currentStepIdx : 0;
+
+    return (
+      <div className="mt-3 space-y-2">
+        {/* Step indicators */}
+        <div className="space-y-1">
+          {PIPELINE_STEPS.map((step, idx) => {
+            const isComplete = idx < activeIdx;
+            const isActive = idx === activeIdx;
+            const isPending = idx > activeIdx;
+
+            return (
+              <div key={step.key} className={`flex items-center gap-2 text-xs py-0.5 ${isPending ? 'opacity-40' : ''}`}>
+                {isComplete ? (
+                  <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+                ) : isActive ? (
+                  <Loader2 className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" />
+                ) : (
+                  <Circle className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                )}
+                <span className={`font-medium ${isActive ? 'text-primary' : isComplete ? 'text-green-400' : 'text-muted-foreground'}`}>
+                  {step.label}
+                  {isActive && step.key === 'generating' && ` (${completedSegments}/${totalSegments})`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ETA */}
+        {estimatedTimeLeft > 0 && (
+          <p className="text-xs text-muted-foreground">
+            ~{estimatedTimeLeft >= 60
+              ? `${Math.floor(estimatedTimeLeft / 60)}m ${estimatedTimeLeft % 60}s`
+              : `${estimatedTimeLeft}s`} remaining
+          </p>
+        )}
+
+        {/* Overall progress bar */}
+        <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+          <span>Step {activeIdx + 1} of {PIPELINE_STEPS.length}</span>
+          <span>{Math.round(progress * 100)}%</span>
+        </div>
+        <Progress value={progress * 100} className="h-2" />
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8 overflow-y-auto">
       <div className="max-w-4xl mx-auto">
