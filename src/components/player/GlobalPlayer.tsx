@@ -209,9 +209,9 @@ export const GlobalPlayer: React.FC = () => {
               </div>
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-primary/10 via-background to-background">
-                {currentTrack.coverUrl ? (
+                {currentTrack.coverArt ? (
                   <img
-                    src={currentTrack.coverUrl}
+                    src={currentTrack.coverArt}
                     alt={currentTrack.title}
                     className="w-28 h-28 sm:w-40 sm:h-40 rounded-2xl object-cover shadow-2xl shadow-primary/20"
                   />
