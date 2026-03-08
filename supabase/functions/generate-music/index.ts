@@ -763,11 +763,13 @@ Durations MUST sum to exactly ${durationSec}.`,
         console.log(`[${trackId}] Segment ${idx + 1} prompt: ${prompt.substring(0, 120)}...`);
 
         const segmentsRemaining = totalSegments - completedSegments;
+        const segLabel = `Generating ${seg.name} segment (${idx + 1} of ${totalSegments})`;
         await updateProgress(
           supabase, trackId, creationId,
-          `Generating segment ${idx + 1} of ${totalSegments}`,
+          segLabel,
           segProgressStart + (completedSegments / totalSegments) * (segProgressEnd - segProgressStart),
           Math.max(0, segmentsRemaining * estSegmentTime + 10)
+        );
         );
 
         const { buffer } = await generateSegmentWithRetry(REPLICATE_API_TOKEN!, prompt, seg.duration);
