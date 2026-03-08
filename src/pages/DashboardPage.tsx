@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Music, Disc, Play, Pause, Download, Calendar, Clock, Filter, Loader2, RefreshCw, X } from 'lucide-react';
+import { Music, Disc, Play, Pause, Download, Calendar, Clock, Filter, Loader2, RefreshCw, X, Check, Circle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
