@@ -13,10 +13,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Pre-download models at build time (optional, speeds up first request)
-# RUN python -c "from audiocraft.models import MusicGen; MusicGen.get_pretrained('facebook/musicgen-medium')"
-# RUN python -c "from bark import preload_models; preload_models()"
+EXPOSE 8080
 
-EXPOSE 8000
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

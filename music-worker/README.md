@@ -1,12 +1,29 @@
-# Music Generation Worker Service
-# Deploy this as a standalone Python service (Docker, cloud VM, etc.)
-# The Supabase Edge Function will call this service via HTTP
+# Music Generation Worker
 
-## Requirements
-# pip install fastapi uvicorn audiocraft torchaudio bark scipy numpy
+Standalone Python service for AI music synthesis using MusicGen and Bark.
 
-## Running
-# uvicorn music_worker.main:app --host 0.0.0.0 --port 8000
+## Endpoints
+
+- `GET /health` — Returns model load status
+- `POST /generate` — Generate instrumental audio (MusicGen)
+- `POST /generate-vocals` — Generate vocal audio (Bark)
+
+## Local Development
+
+```bash
+cd music-worker
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8080
+```
 
 ## Docker
-# See Dockerfile in this directory
+
+```bash
+docker build -t music-worker .
+docker run -p 8080:8080 music-worker
+```
+
+## Railway Deployment
+
+Connect this repository to Railway and set the root directory to `music-worker/`.
+Railway will auto-detect the Dockerfile and deploy.
