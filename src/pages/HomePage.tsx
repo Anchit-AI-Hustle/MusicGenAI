@@ -81,6 +81,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 variant="glass"
                 size="xl"
                 className="group w-full sm:w-auto"
+                onClick={() => setShowDemo(true)}
               >
                 <Play className="w-5 h-5" />
                 Watch Demo
