@@ -157,24 +157,23 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       .channel('music-realtime')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tracks' }, (payload) => {
         const updated = payload.new as any;
-        setCreations(prev => prev.map(c => ({
-          ...c,
-          tracks: c.tracks.map(t =>
-            t.id === updated.id
-              ? {
-                  ...t,
-                  status: updated.status,
-                  audioUrl: updated.audio_url || undefined,
-                  videoUrl: updated.video_url || undefined,
-                  progress: updated.progress ?? 0,
-                  totalSegments: updated.total_segments ?? 1,
-                  completedSegments: updated.completed_segments ?? 0,
-                  errorMessage: updated.error_message || undefined,
-                  duration: updated.duration_seconds,
-                }
-              : t
-          ),
-        })));
+        const mapTrack = (t: Track): Track =>
+          t.id === updated.id
+            ? {
+                ...t,
+                status: updated.status,
+                audioUrl: updated.audio_url || undefined,
+                videoUrl: updated.video_url || undefined,
+                progress: updated.progress ?? 0,
+                totalSegments: updated.total_segments ?? 1,
+                completedSegments: updated.completed_segments ?? 0,
+                errorMessage: updated.error_message || undefined,
+                duration: updated.duration_seconds,
+                currentStage: updated.current_stage || undefined,
+                estimatedTimeLeft: updated.estimated_time_left ?? 0,
+              }
+            : t;
+        setCreations(prev => prev.map(c => ({ ...c, tracks: c.tracks.map(mapTrack) })));
         // Also update currentCreation
         setCurrentCreation(prev => {
           if (!prev) return prev;
