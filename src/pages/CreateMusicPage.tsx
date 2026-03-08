@@ -145,11 +145,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'videoStyle': setVideoStyle(value); break;
       case 'tempoBpm': { const p = parseInt(value); if (!isNaN(p)) setTempoBpm(Math.max(60, Math.min(200, p))); break; }
       case 'mood': setMood(value); break;
-      case 'musicalKey': setMusicalKey(value); break;
+      case 'songStructure': setSongStructure(value); break;
       case 'vocalStructure': setVocalStructure(value); break;
       case 'vocalStyle': setVocalStyle(value); break;
       case 'vocalIntensity': { const p = parseInt(value); if (!isNaN(p)) setVocalIntensity(Math.max(1, Math.min(10, p))); break; }
       case 'vocalEffects': setSelectedVocalEffects(value.split(',').map(e => e.trim()).filter(Boolean)); break;
+      case 'duration': { const p = parseInt(value); if (!isNaN(p)) { const clamped = Math.max(30, Math.min(600, p)); setDurationSeconds(clamped); setHours(Math.floor(clamped / 3600)); setMinutes(Math.floor((clamped % 3600) / 60)); setSeconds(clamped % 60); } break; }
     }
   };
 
