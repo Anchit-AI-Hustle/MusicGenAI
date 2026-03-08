@@ -43,17 +43,11 @@ const triggerDownload = async (url: string, filename: string) => {
   try {
     const response = await fetch(url);
     const blob = await response.blob();
-    const downloadBlob = blob.type.includes('webm')
-      ? await ensureCompatibleMp4Blob(blob)
-      : blob;
-    // Fix extension based on actual blob type
     let finalFilename = filename;
-    if (downloadBlob.type.includes('webm') && filename.endsWith('.mp4')) {
-      finalFilename = filename.replace('.mp4', '.webm');
-    } else if (downloadBlob.type.includes('mp4') && filename.endsWith('.webm')) {
-      finalFilename = filename.replace('.webm', '.mp4');
-    }
-    const blobUrl = URL.createObjectURL(downloadBlob);
+    const ext = getVideoExtension(blob);
+    if (filename.endsWith('.mp4') && ext === 'webm') finalFilename = filename.replace('.mp4', '.webm');
+    else if (filename.endsWith('.webm') && ext === 'mp4') finalFilename = filename.replace('.webm', '.mp4');
+    const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
     a.download = finalFilename;

@@ -283,13 +283,10 @@ const VideoPlayerInner: React.FC<VideoPlayerProps> = ({ videoUrl, title, duratio
                 try {
                   const response = await fetch(videoUrl);
                   const blob = await response.blob();
-                  const downloadBlob = blob.type.includes('webm')
-                    ? await ensureCompatibleMp4Blob(blob)
-                    : blob;
-                  const blobUrl = URL.createObjectURL(downloadBlob);
+                  const blobUrl = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = blobUrl;
-                  const ext = downloadBlob.type.includes('mp4') ? 'mp4' : 'webm';
+                  const ext = getVideoExtension(blob);
                   a.download = `${title || 'video'}_video.${ext}`;
                   a.style.display = 'none';
                   document.body.appendChild(a);

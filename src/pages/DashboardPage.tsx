@@ -243,11 +243,8 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
           try {
             const res = await fetch(track.videoUrl);
             const blob = await res.blob();
-            const compatibleBlob = blob.type.includes('webm')
-              ? await ensureCompatibleMp4Blob(blob)
-              : blob;
-            const videoExt = compatibleBlob.type.includes('mp4') ? 'mp4' : 'webm';
-            zip.file(`${track.title}.${videoExt}`, compatibleBlob);
+            const videoExt = getVideoExtension(blob);
+            zip.file(`${track.title}.${videoExt}`, blob);
           } catch {}
         }
       }));
