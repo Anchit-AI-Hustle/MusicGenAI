@@ -277,6 +277,11 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
                 <Play className="w-5 h-5 text-primary ml-0.5" />
               </Button>
             )}
+            {completedTracks.length > 1 && (
+              <Button variant="ghost" size="icon" onClick={handleDownloadAll} className="h-10 w-10 rounded-full bg-secondary hover:bg-secondary/80" title="Download All Tracks">
+                <Download className="w-4 h-4 text-muted-foreground" />
+              </Button>
+            )}
             <div className="text-right hidden md:block">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Calendar className="w-4 h-4" />
