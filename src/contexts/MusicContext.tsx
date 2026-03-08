@@ -373,6 +373,60 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const refreshCreations = async () => { await fetchCreations(); };
 
+  const retryTrack = async (trackId: string, creationId: string) => {
+    // Find the creation to get input params
+    const creation = creations.find(c => c.id === creationId);
+    if (!creation) {
+      toast.error('Creation not found');
+      return;
+    }
+
+    // Reset track status in DB
+    await supabase.from('tracks').update({
+      status: 'pending', progress: 0, error_message: null,
+      completed_segments: 0, current_stage: 'pending', estimated_time_left: 0,
+    }).eq('id', trackId);
+    await supabase.from('music_creations').update({
+      status: 'processing', progress: 0,
+    }).eq('id', creationId);
+
+    // Delete old segments for this track
+    await supabase.from('segments').delete().eq('track_id', trackId);
+
+    // Update local state immediately
+    const updateTrack = (t: Track): Track =>
+      t.id === trackId ? { ...t, status: 'pending', progress: 0, errorMessage: undefined, completedSegments: 0, currentStage: 'pending', estimatedTimeLeft: 0 } : t;
+    setCreations(prev => prev.map(c => c.id === creationId ? { ...c, status: 'processing', progress: 0, tracks: c.tracks.map(updateTrack) } : c));
+    setCurrentCreation(prev => prev?.id === creationId ? { ...prev, status: 'processing', progress: 0, tracks: prev.tracks.map(updateTrack) } : prev);
+
+    toast.success('Retrying track generation...');
+
+    // Re-trigger generation
+    fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-music`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+      },
+      body: JSON.stringify({
+        trackId,
+        creationId,
+        input: {
+          musicPrompt: creation.musicPrompt,
+          genres: creation.genres,
+          durationSeconds: creation.durationSeconds,
+          vocalLanguages: creation.vocalLanguages,
+          lyrics: creation.lyrics,
+          artistInspiration: creation.artistInspiration,
+        },
+      }),
+    }).catch(err => {
+      console.error('Retry trigger error:', err);
+      toast.error('Failed to retry track generation.');
+    });
+  };
+
   return (
     <MusicContext.Provider value={{
       creations,
@@ -382,6 +436,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       createMusic,
       setCurrentCreation,
       refreshCreations,
+      retryTrack,
       aiSuggest,
     }}>
       {children}
