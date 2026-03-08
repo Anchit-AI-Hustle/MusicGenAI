@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, memo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Volume1,
@@ -6,8 +6,7 @@ import {
   ChevronUp, ChevronDown, ListMusic, X
 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
-import { Button } from '@/components/ui/button';
-import { usePlayer, PlaybackMode } from '@/contexts/PlayerContext';
+import { usePlayer, usePlayerTime, PlaybackMode } from '@/contexts/PlayerContext';
 import { AudioVisualizer } from './AudioVisualizer';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -26,50 +25,121 @@ const MODE_ICONS: Record<PlaybackMode, React.ReactNode> = {
   visualizer: <Activity className="w-4 h-4" />,
 };
 
+// ===== Isolated SeekBar (only component that re-renders on time ticks) =====
+const SeekBar = memo(() => {
+  const { currentTime, duration } = usePlayerTime();
+  const { seek } = usePlayer();
+
+  return (
+    <div className="px-4 pt-2 group">
+      <Slider
+        value={[currentTime]}
+        min={0}
+        max={duration || 1}
+        step={0.1}
+        onValueChange={([v]) => seek(v)}
+        className="h-1 group-hover:h-2 transition-all cursor-pointer"
+      />
+      <div className="flex justify-between text-[10px] text-muted-foreground mt-1 px-0.5">
+        <span>{formatTime(currentTime)}</span>
+        <span>{formatTime(duration)}</span>
+      </div>
+    </div>
+  );
+});
+SeekBar.displayName = 'SeekBar';
+
+// ===== Mini progress bar (mobile compact) =====
+const MiniProgress = memo(() => {
+  const { currentTime, duration } = usePlayerTime();
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  return (
+    <div className="absolute top-0 left-0 right-0 h-0.5 bg-border">
+      <div
+        className="h-full bg-primary"
+        style={{ width: `${progress}%`, willChange: 'width', transition: 'width 0.25s linear' }}
+      />
+    </div>
+  );
+});
+MiniProgress.displayName = 'MiniProgress';
+
+// ===== Stable Video Player (ref-controlled, no source reassignment during playback) =====
+const StableVideoPlayer = memo<{ videoUrl: string; className?: string }>(({ videoUrl, className }) => {
+  const { videoRef, audioRef } = usePlayer();
+  const { isPlaying } = usePlayer();
+  const srcRef = useRef('');
+
+  // Only change src when URL actually changes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (srcRef.current !== videoUrl) {
+      srcRef.current = videoUrl;
+      video.src = videoUrl;
+      video.load();
+    }
+  }, [videoUrl, videoRef]);
+
+  // Control play/pause via ref — never through React state
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (isPlaying) video.play().catch(() => {});
+    else video.pause();
+  }, [isPlaying, videoRef]);
+
+  // Sync video time with audio at low frequency
+  useEffect(() => {
+    const video = videoRef.current;
+    const audio = audioRef.current;
+    if (!video || !audio) return;
+
+    const sync = setInterval(() => {
+      if (Math.abs(video.currentTime - audio.currentTime) > 0.3) {
+        video.currentTime = audio.currentTime;
+      }
+    }, 1000);
+
+    return () => clearInterval(sync);
+  }, [videoRef, audioRef]);
+
+  return (
+    <video
+      ref={videoRef}
+      className={className}
+      muted
+      playsInline
+      preload="metadata"
+      style={{ willChange: 'transform' }}
+    />
+  );
+});
+StableVideoPlayer.displayName = 'StableVideoPlayer';
+
+// ===== Main GlobalPlayer =====
 export const GlobalPlayer: React.FC = () => {
   const {
     currentTrack, isPlaying, volume, playbackMode, playbackSpeed,
-    currentTime, duration, isMuted, isExpanded, queue, queueIndex,
-    togglePlay, next, previous, seek, setVolume, setPlaybackMode,
-    setPlaybackSpeed, toggleMute, setIsExpanded,
+    isMuted, isExpanded, queue, queueIndex,
+    togglePlay, next, previous, setVolume, setPlaybackMode,
+    setPlaybackSpeed, toggleMute, setIsExpanded, play,
   } = usePlayer();
 
   const isMobile = useIsMobile();
   const [showQueue, setShowQueue] = useState(false);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
-  const { play } = usePlayer();
 
-  // Sync video with audio
-  const { audioRef } = usePlayer();
-  useEffect(() => {
-    if (!videoRef.current || !audioRef.current || playbackMode !== 'video') return;
-    const video = videoRef.current;
-    const audio = audioRef.current;
-
-    const syncVideo = () => {
-      if (Math.abs(video.currentTime - audio.currentTime) > 0.3) {
-        video.currentTime = audio.currentTime;
-      }
-    };
-
-    if (isPlaying) { video.play().catch(() => {}); }
-    else { video.pause(); }
-
-    const interval = setInterval(syncVideo, 500);
-    return () => clearInterval(interval);
-  }, [isPlaying, playbackMode, audioRef]);
-
-  const toggleFullscreen = () => {
+  const toggleFullscreen = useCallback(() => {
     if (!playerRef.current) return;
     if (!document.fullscreenElement) {
       playerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
     } else {
       document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
     }
-  };
+  }, []);
 
   useEffect(() => {
     const handler = () => setIsFullscreen(!!document.fullscreenElement);
@@ -79,28 +149,18 @@ export const GlobalPlayer: React.FC = () => {
 
   if (!currentTrack) return null;
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
   // Mobile compact player
   if (isMobile && !isExpanded) {
     return (
-      <motion.div
-        initial={{ y: 80 }}
-        animate={{ y: 0 }}
+      <div
         className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-xl border-t border-border px-3 py-2"
+        style={{ willChange: 'transform' }}
         onClick={() => setIsExpanded(true)}
       >
-        {/* Mini progress bar */}
-        <div className="absolute top-0 left-0 right-0 h-0.5 bg-border">
-          <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
-        </div>
+        <MiniProgress />
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 overflow-hidden">
-            {playbackMode === 'visualizer' ? (
-              <AudioVisualizer className="rounded-lg" barCount={8} />
-            ) : (
-              <Music className="w-5 h-5 text-primary" />
-            )}
+            <Music className="w-5 h-5 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground truncate">{currentTrack.title}</p>
@@ -113,24 +173,25 @@ export const GlobalPlayer: React.FC = () => {
             {isPlaying ? <Pause className="w-5 h-5 text-primary-foreground" /> : <Play className="w-5 h-5 text-primary-foreground ml-0.5" />}
           </button>
         </div>
-      </motion.div>
+      </div>
     );
   }
 
   return (
     <>
-      <motion.div
+      <div
         ref={playerRef}
-        initial={{ y: 100 }}
-        animate={{ y: 0 }}
         className={`fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-xl border-t border-border ${
           isFullscreen ? 'h-screen flex flex-col' : ''
         }`}
+        style={{ willChange: 'transform' }}
       >
-        {/* Media display area (expanded mobile or fullscreen) */}
+        {/* Media display area */}
         {(isExpanded || isFullscreen) && (
-          <div className={`relative bg-background ${isFullscreen ? 'flex-1' : 'h-48 sm:h-64'}`}>
-            {/* Close/minimize for mobile */}
+          <div
+            className={`relative bg-background ${isFullscreen ? 'flex-1' : 'h-48 sm:h-64'}`}
+            style={{ willChange: 'transform', contain: 'layout style' }}
+          >
             {isExpanded && isMobile && (
               <button onClick={() => setIsExpanded(false)} className="absolute top-3 left-3 z-10 p-2 rounded-full bg-background/60 backdrop-blur">
                 <ChevronDown className="w-5 h-5 text-foreground" />
@@ -138,12 +199,9 @@ export const GlobalPlayer: React.FC = () => {
             )}
 
             {playbackMode === 'video' && currentTrack.videoUrl ? (
-              <video
-                ref={videoRef}
-                src={currentTrack.videoUrl}
+              <StableVideoPlayer
+                videoUrl={currentTrack.videoUrl}
                 className="w-full h-full object-contain"
-                muted
-                playsInline
               />
             ) : playbackMode === 'visualizer' ? (
               <div className="w-full h-full flex items-center justify-center p-6">
@@ -163,33 +221,16 @@ export const GlobalPlayer: React.FC = () => {
           </div>
         )}
 
-        {/* Seekbar - top of player controls */}
-        <div className="px-4 pt-2 group">
-          <Slider
-            value={[currentTime]}
-            min={0}
-            max={duration || 1}
-            step={0.1}
-            onValueChange={([v]) => seek(v)}
-            className="h-1 group-hover:h-2 transition-all cursor-pointer"
-          />
-          <div className="flex justify-between text-[10px] text-muted-foreground mt-1 px-0.5">
-            <span>{formatTime(currentTime)}</span>
-            <span>{formatTime(duration)}</span>
-          </div>
-        </div>
+        {/* SeekBar — isolated re-renders */}
+        <SeekBar />
 
         {/* Main controls */}
         <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-6 pb-3 pt-1">
-          {/* LEFT: track info (desktop) */}
+          {/* LEFT: track info */}
           {!isMobile && (
             <div className="flex items-center gap-3 w-1/4 min-w-0">
               <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 overflow-hidden">
-                {playbackMode === 'visualizer' && isPlaying ? (
-                  <AudioVisualizer className="rounded-lg" barCount={8} />
-                ) : (
-                  <Music className="w-6 h-6 text-primary" />
-                )}
+                <Music className="w-6 h-6 text-primary" />
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">{currentTrack.title}</p>
@@ -278,7 +319,7 @@ export const GlobalPlayer: React.FC = () => {
 
             {/* Volume */}
             {!isMobile && (
-              <div className="flex items-center gap-1.5 group/vol">
+              <div className="flex items-center gap-1.5">
                 <button onClick={toggleMute} className="p-1.5 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
                   {isMuted || volume === 0 ? <VolumeX className="w-4 h-4" /> :
                    volume < 0.5 ? <Volume1 className="w-4 h-4" /> :
@@ -332,7 +373,7 @@ export const GlobalPlayer: React.FC = () => {
             )}
           </div>
         </div>
-      </motion.div>
+      </div>
 
       {/* Queue panel */}
       <AnimatePresence>
