@@ -18,6 +18,19 @@ interface SongPlan {
   segments: SegmentPlan[];
 }
 
+interface ProductionBrief {
+  genre: string;
+  subgenre: string;
+  tempo: string;
+  mood: string;
+  atmosphere: string;
+  environment: string;
+  instrumentation: string;
+  energyCurve: string;
+  rhythmicStyle: string;
+  textureKeywords: string[];
+}
+
 // ===== HELPER: Call Lovable AI with tool calling =====
 async function callAI(
   apiKey: string,
