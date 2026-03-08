@@ -402,7 +402,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   </button>
                   <AnimatePresence>
                     {showVocalEffectsDD && (
-                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-20 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
+                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
                         {VOCAL_EFFECTS_OPTIONS.map(ef => (
                           <button key={ef} onClick={() => update({ vocalEffects: config.vocalEffects.includes(ef) ? config.vocalEffects.filter(x => x !== ef) : [...config.vocalEffects, ef] })} className={`w-full text-left px-3 py-1.5 text-sm hover:bg-secondary ${config.vocalEffects.includes(ef) ? 'bg-accent/10 text-accent' : 'text-foreground'}`}>{ef}</button>
                         ))}
