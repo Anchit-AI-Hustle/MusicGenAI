@@ -575,12 +575,76 @@ serve(async (req) => {
     ) || { emotionPolarity: "neutral", energyIntensity: 5, darknessBrightness: 0, aggressionLevel: 3, melodicComplexity: 5, rhythmicDensity: 5 };
 
     console.log(`[${trackId}] Sentiment:`, JSON.stringify(sentiment));
-    etaRemaining -= 8;
+    etaRemaining -= 5;
+
+    // ================================================================
+    // STEP 1b — EXPANDING PROMPT INTO PRODUCTION BRIEF
+    // ================================================================
+    await updateProgress(supabase, trackId, creationId, "Expanding production brief", 0.04, etaRemaining);
+
+    const briefResult = await callAI(
+      LOVABLE_API_KEY,
+      `You are an expert music producer. Given a user's music request and sentiment analysis, generate a detailed production brief that will guide AI music generation. Be specific about instruments, textures, and sonic character. Tailor everything to the genre and mood.`,
+      `User prompt: "${frozenInput.musicPrompt}"
+Genres: ${frozenInput.genres.join(", ") || "electronic"}
+Tempo: ${frozenInput.tempoBpm} BPM
+Artist Inspiration: "${frozenInput.artistInspiration || "None"}"
+Sentiment: mood=${sentiment.emotionPolarity}, energy=${sentiment.energyIntensity}/10, darkness=${sentiment.darknessBrightness}, aggression=${sentiment.aggressionLevel}/10
+Vocal structure: "${frozenInput.vocalStructure}"
+
+Generate a production brief with: genre, subgenre, tempo description, mood, atmosphere, environment, instrumentation (specific instruments/synths), energy curve, rhythmic style, and 5-8 texture keywords for variation.`,
+      "create_production_brief",
+      "Create a structured production brief for music generation",
+      {
+        genre: { type: "string", description: "Primary genre e.g. Industrial Techno" },
+        subgenre: { type: "string", description: "Subgenre or style variation e.g. Dark Warehouse" },
+        tempo: { type: "string", description: "Tempo description e.g. 140 BPM, driving four-on-the-floor" },
+        mood: { type: "string", description: "Mood description e.g. dark, aggressive, relentless" },
+        atmosphere: { type: "string", description: "Atmospheric quality e.g. smoky, claustrophobic, vast" },
+        environment: { type: "string", description: "Sonic environment e.g. underground warehouse, open air festival" },
+        instrumentation: { type: "string", description: "Specific instruments e.g. distorted 909 kick, metallic hi-hats, acid 303 bass" },
+        energyCurve: { type: "string", description: "Energy arc e.g. slow build → explosive drop → breakdown → final peak" },
+        rhythmicStyle: { type: "string", description: "Rhythmic character e.g. driving four-on-the-floor with syncopated hats" },
+        textureKeywords: {
+          type: "array",
+          items: { type: "string" },
+          description: "5-8 texture/sonic keywords for variation e.g. metallic, gritty, cavernous",
+        },
+      },
+      ["genre", "subgenre", "tempo", "mood", "atmosphere", "environment", "instrumentation", "energyCurve", "rhythmicStyle", "textureKeywords"]
+    );
+
+    const productionBrief: ProductionBrief = briefResult ? {
+      genre: briefResult.genre || frozenInput.genres[0] || "electronic",
+      subgenre: briefResult.subgenre || "",
+      tempo: briefResult.tempo || `${frozenInput.tempoBpm} BPM`,
+      mood: briefResult.mood || sentiment.emotionPolarity,
+      atmosphere: briefResult.atmosphere || "immersive",
+      environment: briefResult.environment || "studio production",
+      instrumentation: briefResult.instrumentation || "synthesizers, drums, bass",
+      energyCurve: briefResult.energyCurve || "build → peak → resolve",
+      rhythmicStyle: briefResult.rhythmicStyle || "steady groove",
+      textureKeywords: briefResult.textureKeywords || [],
+    } : {
+      genre: frozenInput.genres[0] || "electronic",
+      subgenre: "",
+      tempo: `${frozenInput.tempoBpm} BPM`,
+      mood: sentiment.emotionPolarity,
+      atmosphere: "immersive",
+      environment: "studio production",
+      instrumentation: "synthesizers, drums, bass",
+      energyCurve: "build → peak → resolve",
+      rhythmicStyle: "steady groove",
+      textureKeywords: [],
+    };
+
+    console.log(`[${trackId}] Production Brief:`, JSON.stringify(productionBrief));
+    etaRemaining -= 5;
 
     // ================================================================
     // STEP 2 — PLANNING SONG STRUCTURE
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Planning song structure", 0.06, etaRemaining);
+    await updateProgress(supabase, trackId, creationId, "Planning song structure", 0.07, etaRemaining);
 
     const planResult = await callAI(
       LOVABLE_API_KEY,
