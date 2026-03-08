@@ -411,7 +411,7 @@ export const GlobalPlayer: React.FC = () => {
 
             {/* Download dropdown */}
             {(currentTrack.audioUrl || currentTrack.videoUrl) && (
-              <div className="relative">
+              <div className="relative" ref={downloadBtnRef}>
                 <button
                   onClick={() => setShowDownloadMenu(prev => !prev)}
                   className="p-1.5 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
@@ -419,36 +419,24 @@ export const GlobalPlayer: React.FC = () => {
                 >
                   <Download className="w-4 h-4" />
                 </button>
-                <AnimatePresence>
-                  {showDownloadMenu && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShowDownloadMenu(false)} />
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        className="absolute bottom-full mb-2 right-0 bg-popover border border-border rounded-lg shadow-lg z-50 py-1 min-w-[140px]"
-                      >
-                        {currentTrack.audioUrl && (
-                          <button
-                            onClick={() => { triggerDownload(currentTrack.audioUrl!, `${currentTrack.title || 'track'}.mp3`); setShowDownloadMenu(false); }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
-                          >
-                            <Music className="w-4 h-4" /> Download Audio
-                          </button>
-                        )}
-                        {currentTrack.videoUrl && (
-                          <button
-                            onClick={() => { triggerDownload(currentTrack.videoUrl!, `${currentTrack.title || 'track'}.mp4`); setShowDownloadMenu(false); }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
-                          >
-                            <MonitorPlay className="w-4 h-4" /> Download Video
-                          </button>
-                        )}
-                      </motion.div>
-                    </>
+                <PortalDropdown open={showDownloadMenu} onClose={() => setShowDownloadMenu(false)} triggerRef={downloadBtnRef as React.RefObject<HTMLElement>} direction="up" align="right" minWidth={140}>
+                  {currentTrack.audioUrl && (
+                    <button
+                      onClick={() => { triggerDownload(currentTrack.audioUrl!, `${currentTrack.title || 'track'}.mp3`); setShowDownloadMenu(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
+                    >
+                      <Music className="w-4 h-4" /> Download Audio
+                    </button>
                   )}
-                </AnimatePresence>
+                  {currentTrack.videoUrl && (
+                    <button
+                      onClick={() => { triggerDownload(currentTrack.videoUrl!, `${currentTrack.title || 'track'}.mp4`); setShowDownloadMenu(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
+                    >
+                      <MonitorPlay className="w-4 h-4" /> Download Video
+                    </button>
+                  )}
+                </PortalDropdown>
               </div>
             )}
 
