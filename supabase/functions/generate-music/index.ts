@@ -260,12 +260,12 @@ async function generateSegmentWithRetry(
   apiToken: string,
   prompt: string,
   duration: number,
-  maxRetries: number = 10,
+  maxRetries: number = 5,
 ): Promise<{ audioUrl: string; buffer: ArrayBuffer }> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const cappedDuration = Math.min(duration, 30);
-      const audioUrl = await replicateCreatePrediction(apiToken, prompt, cappedDuration);
+      // Pass duration as-is; replicateCreatePrediction caps per model
+      const audioUrl = await replicateCreatePrediction(apiToken, prompt, duration);
       const buffer = await downloadAudio(audioUrl);
       return { audioUrl, buffer };
     } catch (e) {
