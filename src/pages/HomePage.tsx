@@ -1,6 +1,6 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Music, Wand2, Sparkles, ArrowRight, Play } from 'lucide-react';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Music, Wand2, Sparkles, ArrowRight, Play, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface HomePageProps {
