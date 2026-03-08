@@ -130,7 +130,7 @@ async function updateProgress(
 }
 
 // ===== REPLICATE: Riffusion version hash =====
-const RIFFUSION_VERSION = "8cf61ea6c56c3e8fb3d2a8f3c3e4c2a6b5df9c28c383e1281870e7d56da42197";
+const RIFFUSION_VERSION = "8cf61ea6c56afd61d8f5b9ffd14d7c216c0a93844ce2d82ac1c9ecc9c7f24e05";
 
 // ===== REPLICATE: Create prediction with polling =====
 async function replicateCreatePrediction(
@@ -154,8 +154,9 @@ async function replicateCreatePrediction(
       body: JSON.stringify({
         version: RIFFUSION_VERSION,
         input: {
-          prompt,
-          seed: actualSeed,
+          prompt_a: prompt,
+          denoising: 0.75,
+          num_inference_steps: 50,
         },
       }),
     });
@@ -163,7 +164,7 @@ async function replicateCreatePrediction(
     if (createRes.ok) {
       const prediction = await createRes.json();
       predictionId = prediction.id;
-      console.log(`[Replicate] Prediction ${predictionId} created (seed=${actualSeed}, attempt=${attempt})`);
+      console.log(`[Replicate] Prediction ${predictionId} created (attempt=${attempt})`);
       break;
     }
 
@@ -212,10 +213,18 @@ async function replicateCreatePrediction(
     console.log(`[Replicate] Poll ${i + 1}/${maxPolls}: status=${result.status}`);
 
     if (result.status === "succeeded") {
-      // output can be a string URL or an array of URLs
-      const outputUrl = Array.isArray(result.output) ? result.output[0] : result.output;
+      // Riffusion returns { audio: url, spectrogram: url }
+      let outputUrl: string | null = null;
+      if (result.output && typeof result.output === "object" && !Array.isArray(result.output)) {
+        outputUrl = result.output.audio || null;
+      } else if (Array.isArray(result.output)) {
+        outputUrl = result.output[0];
+      } else if (typeof result.output === "string") {
+        outputUrl = result.output;
+      }
+
       if (!outputUrl) {
-        throw new Error(`Replicate prediction succeeded but output is empty: ${JSON.stringify(result.output)}`);
+        throw new Error(`Replicate prediction succeeded but no audio URL in output: ${JSON.stringify(result.output)}`);
       }
       console.log(`[Replicate] ✅ Prediction ${predictionId} complete: ${outputUrl}`);
       return outputUrl;
