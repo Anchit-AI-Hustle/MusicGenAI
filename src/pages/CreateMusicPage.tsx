@@ -245,7 +245,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
           variant="ghost"
           size="sm"
           onClick={() => handleClear(field)}
-          disabled={loading}
+          disabled={fieldLoading}
           className="text-xs h-7 px-2 text-muted-foreground hover:text-destructive"
         >
           <Trash2 className="w-3 h-3 mr-1" />
