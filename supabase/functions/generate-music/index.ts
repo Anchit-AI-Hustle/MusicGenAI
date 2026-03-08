@@ -634,10 +634,12 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
         frozenInput.artistInspiration ? `Influenced by: ${frozenInput.artistInspiration}.` : "",
       ].filter(Boolean).join(" ");
 
+      const segEta = Math.max(0, (totalSegments - segIdx) * 60 + (hasVocals ? 40 : 0) + 15);
       await updateProgress(
         supabase, trackId, creationId,
-        `segment-${segIdx + 1}/${totalSegments}`,
-        segProgressStart + (segIdx / totalSegments) * (segProgressEnd - segProgressStart)
+        `Generating segment ${segIdx + 1} of ${totalSegments}`,
+        segProgressStart + (segIdx / totalSegments) * (segProgressEnd - segProgressStart),
+        segEta
       );
 
       // Generate with MusicGen via Python worker (with retry)
