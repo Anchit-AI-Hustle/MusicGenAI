@@ -278,8 +278,9 @@ const DashboardTrackProgress: React.FC<{
   );
 };
 
-const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number) => string }> = ({ track, index, formatDuration }) => {
+const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number) => string; creationId: string; onRetry: (trackId: string, creationId: string) => Promise<void> }> = ({ track, index, formatDuration, creationId, onRetry }) => {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   const togglePlay = () => {
@@ -297,6 +298,13 @@ const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number
     }
   };
 
+  const handleRetry = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsRetrying(true);
+    await onRetry(track.id, creationId);
+    setIsRetrying(false);
+  };
+
   return (
     <div className="p-2 sm:p-3 rounded-lg hover:bg-secondary/50 transition-smooth">
       <div className="flex items-center gap-3 sm:gap-4">
@@ -310,9 +318,9 @@ const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number
             <Loader2 className="w-4 h-4 text-primary animate-spin" />
           </div>
         ) : track.status === 'failed' ? (
-          <div className="w-8 h-8 rounded-full bg-destructive/20 flex items-center justify-center flex-shrink-0">
-            <X className="w-4 h-4 text-destructive" />
-          </div>
+          <button onClick={handleRetry} disabled={isRetrying} className="w-8 h-8 rounded-full bg-destructive/20 flex items-center justify-center hover:bg-destructive/30 transition-smooth flex-shrink-0">
+            {isRetrying ? <Loader2 className="w-4 h-4 text-destructive animate-spin" /> : <RotateCcw className="w-4 h-4 text-destructive" />}
+          </button>
         ) : (
           <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
             <Music className="w-4 h-4 text-muted-foreground" />
@@ -329,10 +337,19 @@ const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number
               totalSegments={track.totalSegments || 1}
             />
           )}
+          {track.status === 'failed' && track.errorMessage && (
+            <p className="text-xs text-destructive/70 truncate mt-0.5">{track.errorMessage}</p>
+          )}
         </div>
         <Badge variant="secondary" className={`capitalize text-xs hidden sm:inline-flex ${track.status === 'completed' ? 'bg-green-500/20 text-green-400' : track.status === 'failed' ? 'bg-destructive/20 text-destructive' : ''}`}>
           {track.status}
         </Badge>
+        {track.status === 'failed' && (
+          <Button variant="outline" size="sm" onClick={handleRetry} disabled={isRetrying} className="text-xs h-7 border-destructive/30 text-destructive hover:bg-destructive/10">
+            {isRetrying ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RotateCcw className="w-3 h-3 mr-1" />}
+            Retry
+          </Button>
+        )}
         <span className="text-sm text-muted-foreground">{formatDuration(track.duration)}</span>
         {track.status === 'completed' && track.audioUrl && (
           <a href={track.audioUrl} download>
