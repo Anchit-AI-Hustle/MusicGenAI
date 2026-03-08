@@ -63,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
           <AnimatePresence>
             {(!isCollapsed || isMobile) && (
               <motion.div initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }} exit={{ opacity: 0, width: 0 }} className="overflow-hidden">
-                <h1 className="font-display font-bold text-lg text-foreground whitespace-nowrap">HarmonyAI</h1>
+                <h1 className="font-display font-bold text-lg text-foreground whitespace-nowrap">MuseVibe Studio</h1>
                 <p className="text-xs text-muted-foreground whitespace-nowrap">Create with AI</p>
               </motion.div>
             )}

@@ -50,7 +50,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           </button>
 
           <div className="text-center mb-8">
-            <h2 className="font-display text-2xl font-bold text-foreground mb-2">Welcome to HarmonyAI</h2>
+            <h2 className="font-display text-2xl font-bold text-foreground mb-2">Welcome to MuseVibe Studio</h2>
             <p className="text-muted-foreground">Enter your details to sign in or create an account</p>
           </div>
 
