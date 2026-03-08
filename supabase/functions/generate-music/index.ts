@@ -142,15 +142,17 @@ async function replicateCreatePrediction(
   let predictionId = "";
 
   for (let attempt = 1; attempt <= maxCreateAttempts; attempt++) {
-    const createRes = await fetch("https://api.replicate.com/v1/models/lucataco/musicgen-songstarter/predictions", {
+    const createRes = await fetch("https://api.replicate.com/v1/predictions", {
       method: "POST",
       headers: {
         Authorization: `Token ${apiToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        model: "replicate/musicgen",
         input: {
           prompt,
+          duration,
           seed: actualSeed,
         },
       }),
@@ -164,6 +166,10 @@ async function replicateCreatePrediction(
     }
 
     const errBody = await createRes.text();
+
+    if (createRes.status === 404) {
+      throw new Error(`Replicate model not found: ${errBody}`);
+    }
 
     if (createRes.status === 429) {
       let waitSec = 10 * attempt;
@@ -183,43 +189,6 @@ async function replicateCreatePrediction(
     }
 
     throw new Error(`Replicate create failed [${createRes.status}]: ${errBody}`);
-  }
-
-  if (!predictionId) {
-    throw new Error("Replicate rate limit: could not create prediction after multiple attempts");
-  }
-
-  // Poll for completion (max 5 minutes)
-  const maxPolls = 60;
-  const pollInterval = 5000;
-
-  for (let i = 0; i < maxPolls; i++) {
-    await new Promise(r => setTimeout(r, pollInterval));
-
-    const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
-      headers: { Authorization: `Token ${apiToken}` },
-    });
-
-    if (!pollRes.ok) {
-      const errBody = await pollRes.text();
-      console.error(`[Replicate] Poll error: ${pollRes.status} ${errBody}`);
-      if (pollRes.status === 429) {
-        await new Promise(r => setTimeout(r, 10000));
-      }
-      continue;
-    }
-
-    const status = await pollRes.json();
-
-    if (status.status === "succeeded") {
-      const outputUrl = status.output;
-      console.log(`[Replicate] ✅ Prediction ${predictionId} complete`);
-      return outputUrl;
-    }
-
-    if (status.status === "failed" || status.status === "canceled") {
-      throw new Error(`Replicate prediction ${status.status}: ${status.error || "Unknown"}`);
-    }
   }
 
   throw new Error(`Replicate prediction timed out after ${maxPolls * pollInterval / 1000}s`);
