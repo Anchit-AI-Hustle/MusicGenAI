@@ -336,6 +336,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
               vocalLanguages: input.vocalLanguages,
               lyrics: input.lyrics,
               artistInspiration: input.artistInspiration,
+              tempoBpm: input.tempoBpm,
+              vocalStructure: input.vocalStructure,
+              vocalStyle: input.vocalStyle,
+              vocalIntensity: input.vocalIntensity,
+              vocalEffects: input.vocalEffects,
             },
           }),
         }).catch(err => {

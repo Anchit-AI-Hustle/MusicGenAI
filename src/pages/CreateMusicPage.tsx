@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Music, Disc, Wand2, Clock, Languages, Mic2, Users, 
   Video, Palette, Sparkles, Loader2, Play, Pause, Download, ChevronDown, X,
-  RefreshCw, Zap, Trash2
+  RefreshCw, Zap, Trash2, Activity, AudioWaveform
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,32 @@ import { toast } from 'sonner';
 interface CreateMusicPageProps {
   onAuthClick: () => void;
 }
+
+const VOCAL_STRUCTURE_PRESETS = [
+  'Verse – Chorus – Verse – Chorus',
+  'Verse – Chorus – Bridge – Chorus',
+  'Build – Drop – Build – Drop',
+  'Continuous Vocal Flow',
+  'Instrumental',
+];
+
+const VOCAL_STYLE_PRESETS = [
+  'Male Vocal',
+  'Female Vocal',
+  'Robotic Vocal',
+  'Rap Vocal',
+  'Choir Vocal',
+  'Whisper Vocal',
+];
+
+const VOCAL_EFFECTS_OPTIONS = [
+  'Reverb',
+  'Delay',
+  'Chorus',
+  'Distortion',
+  'Autotune',
+  'Vocoder',
+];
 
 export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick }) => {
   const { isAuthenticated } = useAuth();
@@ -44,6 +70,16 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const [generateVideo, setGenerateVideo] = useState(false);
   const [videoStyle, setVideoStyle] = useState('');
 
+  // New fields
+  const [tempoBpm, setTempoBpm] = useState(120);
+  const [vocalStructure, setVocalStructure] = useState('Instrumental');
+  const [showVocalStructureDropdown, setShowVocalStructureDropdown] = useState(false);
+  const [vocalStyle, setVocalStyle] = useState('');
+  const [showVocalStyleDropdown, setShowVocalStyleDropdown] = useState(false);
+  const [vocalIntensity, setVocalIntensity] = useState(5);
+  const [selectedVocalEffects, setSelectedVocalEffects] = useState<string[]>([]);
+  const [showVocalEffectsDropdown, setShowVocalEffectsDropdown] = useState(false);
+
   // Track which field+action pairs are loading (supports parallel)
   const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
 
@@ -54,6 +90,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const getFormContext = () => ({
     title, musicPrompt, genres: selectedGenres, durationSeconds,
     vocalLanguages: selectedLanguages, lyrics, artistInspiration, videoStyle,
+    tempoBpm, vocalStructure, vocalStyle, vocalIntensity, vocalEffects: selectedVocalEffects,
   });
 
   // Apply value directly to a field
@@ -72,6 +109,23 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         if (langs.length > 0) setSelectedLanguages(langs);
         break;
       case 'videoStyle': setVideoStyle(value); break;
+      case 'tempoBpm': {
+        const parsed = parseInt(value);
+        if (!isNaN(parsed)) setTempoBpm(Math.max(60, Math.min(200, parsed)));
+        break;
+      }
+      case 'vocalStructure': setVocalStructure(value); break;
+      case 'vocalStyle': setVocalStyle(value); break;
+      case 'vocalIntensity': {
+        const parsed = parseInt(value);
+        if (!isNaN(parsed)) setVocalIntensity(Math.max(1, Math.min(10, parsed)));
+        break;
+      }
+      case 'vocalEffects': {
+        const effects = value.split(',').map(e => e.trim()).filter(Boolean);
+        setSelectedVocalEffects(effects);
+        break;
+      }
     }
   };
 
@@ -84,6 +138,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'artistInspiration': return artistInspiration;
       case 'vocalLanguage': return selectedLanguages.join(', ');
       case 'videoStyle': return videoStyle;
+      case 'tempoBpm': return String(tempoBpm);
+      case 'vocalStructure': return vocalStructure;
+      case 'vocalStyle': return vocalStyle;
+      case 'vocalIntensity': return String(vocalIntensity);
+      case 'vocalEffects': return selectedVocalEffects.join(', ');
       default: return '';
     }
   };
@@ -133,6 +192,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'artistInspiration': setArtistInspiration(''); break;
       case 'vocalLanguage': setSelectedLanguages([]); break;
       case 'videoStyle': setVideoStyle(''); break;
+      case 'tempoBpm': setTempoBpm(120); break;
+      case 'vocalStructure': setVocalStructure('Instrumental'); break;
+      case 'vocalStyle': setVocalStyle(''); break;
+      case 'vocalIntensity': setVocalIntensity(5); break;
+      case 'vocalEffects': setSelectedVocalEffects([]); break;
     }
   };
 
@@ -159,6 +223,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     setSelectedLanguages(prev => prev.includes(lang) ? prev.filter(l => l !== lang) : [...prev, lang]);
   };
 
+  const toggleVocalEffect = (effect: string) => {
+    setSelectedVocalEffects(prev => prev.includes(effect) ? prev.filter(e => e !== effect) : [...prev, effect]);
+  };
+
   const filteredGenres = GENRES.filter(g => g.toLowerCase().includes(genreSearch.toLowerCase()));
 
   const handleGenerate = async () => {
@@ -172,6 +240,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       artistInspiration: artistInspiration || undefined,
       videoStyle: generateVideo ? videoStyle : undefined,
       numberOfTracks: mode === 'album' ? numberOfSongs : 1,
+      tempoBpm,
+      vocalStructure,
+      vocalStyle: vocalStyle || undefined,
+      vocalIntensity,
+      vocalEffects: selectedVocalEffects,
     });
   };
 
@@ -355,6 +428,30 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
             {showGenreDropdown && <div className="fixed inset-0 z-0" onClick={() => setShowGenreDropdown(false)} />}
           </motion.div>
 
+          {/* Tempo (BPM) */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }} className="glass-card rounded-xl p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-muted-foreground" />
+                <Label className="text-foreground font-medium">Tempo (BPM)</Label>
+                <span className="ml-2 text-lg font-display text-primary">{tempoBpm} BPM</span>
+              </div>
+              <AiToolbar field="tempoBpm" />
+            </div>
+            <Slider
+              value={[tempoBpm]}
+              onValueChange={(v) => setTempoBpm(v[0])}
+              min={60}
+              max={200}
+              step={1}
+              className="mb-3"
+            />
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>60 BPM (Slow)</span>
+              <span>200 BPM (Fast)</span>
+            </div>
+          </motion.div>
+
           {/* Duration */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card rounded-xl p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-4">
@@ -381,8 +478,136 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
             </div>
           </motion.div>
 
-          {/* Vocal Language */}
+          {/* Vocal Structure */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.33 }} className="glass-card rounded-xl p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
+              <div className="flex items-center gap-2">
+                <AudioWaveform className="w-5 h-5 text-muted-foreground" />
+                <Label className="text-foreground font-medium">Vocal Structure</Label>
+              </div>
+              <AiToolbar field="vocalStructure" />
+            </div>
+            <div className="relative">
+              <Input
+                placeholder="Type or select a vocal structure..."
+                value={vocalStructure}
+                onChange={(e) => setVocalStructure(e.target.value)}
+                onFocus={() => setShowVocalStructureDropdown(true)}
+                className="bg-input border-border"
+              />
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <AnimatePresence>
+                {showVocalStructureDropdown && (
+                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute z-10 w-full mt-2 max-h-48 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
+                    {VOCAL_STRUCTURE_PRESETS.map(preset => (
+                      <button key={preset} onClick={() => { setVocalStructure(preset); setShowVocalStructureDropdown(false); }} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${vocalStructure === preset ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>
+                        {preset}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            {showVocalStructureDropdown && <div className="fixed inset-0 z-0" onClick={() => setShowVocalStructureDropdown(false)} />}
+          </motion.div>
+
+          {/* Vocal Style */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.34 }} className="glass-card rounded-xl p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
+              <div className="flex items-center gap-2">
+                <Mic2 className="w-5 h-5 text-muted-foreground" />
+                <Label className="text-foreground font-medium">Vocal Style</Label>
+              </div>
+              <AiToolbar field="vocalStyle" />
+            </div>
+            <div className="relative">
+              <Input
+                placeholder="Type or select a vocal style..."
+                value={vocalStyle}
+                onChange={(e) => setVocalStyle(e.target.value)}
+                onFocus={() => setShowVocalStyleDropdown(true)}
+                className="bg-input border-border"
+              />
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <AnimatePresence>
+                {showVocalStyleDropdown && (
+                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute z-10 w-full mt-2 max-h-48 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
+                    {VOCAL_STYLE_PRESETS.map(preset => (
+                      <button key={preset} onClick={() => { setVocalStyle(preset); setShowVocalStyleDropdown(false); }} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${vocalStyle === preset ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>
+                        {preset}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            {showVocalStyleDropdown && <div className="fixed inset-0 z-0" onClick={() => setShowVocalStyleDropdown(false)} />}
+          </motion.div>
+
+          {/* Vocal Intensity */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="glass-card rounded-xl p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-muted-foreground" />
+                <Label className="text-foreground font-medium">Vocal Intensity</Label>
+                <span className="ml-2 text-lg font-display text-primary">{vocalIntensity}/10</span>
+              </div>
+              <AiToolbar field="vocalIntensity" />
+            </div>
+            <Slider
+              value={[vocalIntensity]}
+              onValueChange={(v) => setVocalIntensity(v[0])}
+              min={1}
+              max={10}
+              step={1}
+              className="mb-3"
+            />
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>1 — Soft whisper</span>
+              <span>10 — Powerful performance</span>
+            </div>
+          </motion.div>
+
+          {/* Vocal Effects */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.36 }} className="glass-card rounded-xl p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
+              <div className="flex items-center gap-2">
+                <AudioWaveform className="w-5 h-5 text-muted-foreground" />
+                <Label className="text-foreground font-medium">Vocal Effects</Label>
+              </div>
+              <AiToolbar field="vocalEffects" />
+            </div>
+            {selectedVocalEffects.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {selectedVocalEffects.map(effect => (
+                  <Badge key={effect} variant="secondary" className="bg-accent/20 text-accent border-accent/30 cursor-pointer hover:bg-accent/30" onClick={() => toggleVocalEffect(effect)}>
+                    {effect} ×
+                  </Badge>
+                ))}
+              </div>
+            )}
+            <div className="relative">
+              <button onClick={() => setShowVocalEffectsDropdown(!showVocalEffectsDropdown)} className="w-full flex items-center justify-between px-4 py-3 bg-input border border-border rounded-lg text-left">
+                <span className="text-muted-foreground">{selectedVocalEffects.length === 0 ? 'Select effects...' : 'Add more effects'}</span>
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              </button>
+              <AnimatePresence>
+                {showVocalEffectsDropdown && (
+                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute z-10 w-full mt-2 max-h-48 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
+                    {VOCAL_EFFECTS_OPTIONS.map(effect => (
+                      <button key={effect} onClick={() => toggleVocalEffect(effect)} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${selectedVocalEffects.includes(effect) ? 'bg-accent/10 text-accent' : 'text-foreground'}`}>
+                        {effect}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            {showVocalEffectsDropdown && <div className="fixed inset-0 z-0" onClick={() => setShowVocalEffectsDropdown(false)} />}
+          </motion.div>
+
+          {/* Vocal Language */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.37 }} className="glass-card rounded-xl p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
               <div className="flex items-center gap-2">
                 <Languages className="w-5 h-5 text-muted-foreground" />

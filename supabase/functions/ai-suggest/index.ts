@@ -13,6 +13,11 @@ const FIELD_PROMPTS: Record<string, string> = {
   artistInspiration: "Suggest 2-3 artists whose style would complement this track. Include diverse influences.",
   vocalLanguage: "Suggest vocal language(s) that would best fit this track's genre and mood.",
   videoStyle: "Suggest a visual style for a music video. Be specific about colors, movements, and aesthetic.",
+  tempoBpm: "Suggest a BPM value (60-200) that fits the genre, mood, and energy of this track. Return ONLY a number.",
+  vocalStructure: "Suggest a vocal structure for this song using section names separated by ' – '. Consider lyrics length, genre, and mood. Example format: 'Verse – Chorus – Bridge – Chorus'. Be creative and genre-appropriate.",
+  vocalStyle: "Suggest a vocal style that fits the genre and lyrics. Return a short description like 'Female Vocal', 'Rap Vocal', 'Ethereal Choir', etc.",
+  vocalIntensity: "Suggest a vocal intensity level from 1-10 based on the track's energy. Return ONLY a number.",
+  vocalEffects: "Suggest vocal effects as a comma-separated list. Choose from or create effects like Reverb, Delay, Chorus, Distortion, Autotune, Vocoder, or other creative effects that fit the genre.",
 };
 
 const ENHANCE_PROMPTS: Record<string, string> = {
@@ -23,6 +28,11 @@ const ENHANCE_PROMPTS: Record<string, string> = {
   artistInspiration: "Expand on these artist inspirations — add complementary artists that would create a richer sonic palette while staying cohesive.",
   vocalLanguage: "Refine the language selection — suggest languages that would add unique character while fitting the genre and mood.",
   videoStyle: "Enhance this video style description — add specific visual techniques, color palettes, camera movements, and artistic references.",
+  tempoBpm: "Analyze the genre and mood, then adjust this BPM slightly to improve musical fit. Return ONLY a number between 60-200.",
+  vocalStructure: "Refine this vocal structure by introducing additional sections like pre-chorus, bridge, or breakdown to create more dynamic arrangement. Return section names separated by ' – '.",
+  vocalStyle: "Refine this vocal style to be more specific and nuanced. Add descriptive modifiers.",
+  vocalIntensity: "Adjust this intensity value based on the genre and energy context. Return ONLY a number between 1-10.",
+  vocalEffects: "Refine these vocal effects — add complementary effects or replace with better-fitting ones for the genre. Return as comma-separated list.",
 };
 
 function buildContext(context: any): string {
@@ -35,6 +45,11 @@ function buildContext(context: any): string {
   if (context.vocalLanguages?.length) parts.push(`Languages: ${context.vocalLanguages.join(", ")}`);
   if (context.lyrics) parts.push(`Lyrics/Theme: ${context.lyrics}`);
   if (context.artistInspiration) parts.push(`Artist Inspiration: ${context.artistInspiration}`);
+  if (context.tempoBpm) parts.push(`Tempo: ${context.tempoBpm} BPM`);
+  if (context.vocalStructure) parts.push(`Vocal Structure: ${context.vocalStructure}`);
+  if (context.vocalStyle) parts.push(`Vocal Style: ${context.vocalStyle}`);
+  if (context.vocalIntensity) parts.push(`Vocal Intensity: ${context.vocalIntensity}/10`);
+  if (context.vocalEffects?.length) parts.push(`Vocal Effects: ${context.vocalEffects.join(", ")}`);
   return parts.length > 0 ? `\n\nContext from other fields:\n${parts.join("\n")}` : "";
 }
 
@@ -72,7 +87,12 @@ CRITICAL RULES:
 - Be specific, vivid, and inspiring. Avoid generic or cliché descriptions.
 - Keep output concise (1-3 sentences max for text fields, or a short comma-separated list for selection fields like genres/languages).
 - For the "genres" field, return ONLY a comma-separated list of genre names, nothing else.
-- For the "vocalLanguage" field, return ONLY a comma-separated list of language names, nothing else.`;
+- For the "vocalLanguage" field, return ONLY a comma-separated list of language names, nothing else.
+- For the "tempoBpm" field, return ONLY a single integer number between 60-200, nothing else.
+- For the "vocalIntensity" field, return ONLY a single integer number between 1-10, nothing else.
+- For the "vocalStructure" field, return ONLY section names separated by " – " (e.g., "Verse – Chorus – Bridge – Chorus"), nothing else.
+- For the "vocalStyle" field, return ONLY a short style description (1-4 words), nothing else.
+- For the "vocalEffects" field, return ONLY a comma-separated list of effect names, nothing else.`;
 
     const temperature = 0.9 + Math.random() * 0.2;
 
