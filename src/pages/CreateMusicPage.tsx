@@ -280,6 +280,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       vocalStyle: vocalStyle || undefined,
       vocalIntensity,
       vocalEffects: selectedVocalEffects,
+      songStructure: songStructure || undefined,
     });
   };
 
