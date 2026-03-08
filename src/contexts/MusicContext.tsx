@@ -177,24 +177,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         // Also update currentCreation
         setCurrentCreation(prev => {
           if (!prev) return prev;
-          return {
-            ...prev,
-            tracks: prev.tracks.map(t =>
-              t.id === updated.id
-                ? {
-                    ...t,
-                    status: updated.status,
-                    audioUrl: updated.audio_url || undefined,
-                    videoUrl: updated.video_url || undefined,
-                    progress: updated.progress ?? 0,
-                    totalSegments: updated.total_segments ?? 1,
-                    completedSegments: updated.completed_segments ?? 0,
-                    errorMessage: updated.error_message || undefined,
-                    duration: updated.duration_seconds,
-                  }
-                : t
-            ),
-          };
+          return { ...prev, tracks: prev.tracks.map(mapTrack) };
         });
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'music_creations' }, (payload) => {
