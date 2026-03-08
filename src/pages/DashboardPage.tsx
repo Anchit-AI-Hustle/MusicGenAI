@@ -222,27 +222,44 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
     player.setQueue(playerTracks, 0);
   };
 
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+
   const handleDownloadAll = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    for (const track of completedTracks) {
-      if (track.audioUrl) {
-        try {
-          const response = await fetch(track.audioUrl);
-          const blob = await response.blob();
-          const blobUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = blobUrl;
-          a.download = `${track.title}_audio.mp3`;
-          a.style.display = 'none';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(blobUrl);
-        } catch {
-          window.open(track.audioUrl, '_blank');
+    if (completedTracks.length === 0) return;
+    setIsDownloadingZip(true);
+    try {
+      const zip = new JSZip();
+      await Promise.all(completedTracks.map(async (track) => {
+        if (track.audioUrl) {
+          try {
+            const res = await fetch(track.audioUrl);
+            const blob = await res.blob();
+            zip.file(`${track.title}.mp3`, blob);
+          } catch {}
         }
-      }
+        if (track.videoUrl) {
+          try {
+            const res = await fetch(track.videoUrl);
+            const blob = await res.blob();
+            zip.file(`${track.title}.mp4`, blob);
+          } catch {}
+        }
+      }));
+      const content = await zip.generateAsync({ type: 'blob' });
+      const blobUrl = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `${creation.title}.zip`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      // fallback: nothing
     }
+    setIsDownloadingZip(false);
   };
 
   return (
