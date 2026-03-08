@@ -195,12 +195,20 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     }
   };
 
-  const isFieldLoading = (field: string) => loadingAction?.endsWith(`-${field}`) ?? false;
+  const isFieldLoading = (field: string) => 
+    loadingActions.has(`suggest-${field}`) || loadingActions.has(`enhance-${field}`) || loadingActions.has(`new-${field}`);
+
+  const getActiveAction = (field: string): string => {
+    if (loadingActions.has(`suggest-${field}`)) return 'suggest';
+    if (loadingActions.has(`enhance-${field}`)) return 'enhance';
+    if (loadingActions.has(`new-${field}`)) return 'new';
+    return '';
+  };
 
   // AI Action Toolbar for each field
   const AiToolbar: React.FC<{ field: string }> = ({ field }) => {
-    const loading = isFieldLoading(field);
-    const currentAction = loadingAction?.split('-')[0] || '';
+    const fieldLoading = isFieldLoading(field);
+    const currentAction = getActiveAction(field);
     return (
       <div className="flex items-center gap-1.5 flex-wrap">
         <Button
