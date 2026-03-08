@@ -830,7 +830,7 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
     // The final track is the instrumental (mixing vocals requires FFmpeg
     // which isn't available in edge functions; vocal track stored separately)
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "mastering", 0.90);
+    await updateProgress(supabase, trackId, creationId, "Mastering audio", 0.90, 8);
 
     // Use instrumental as final output
     // (Vocal mixing would require a dedicated audio processing service)
