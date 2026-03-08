@@ -240,6 +240,11 @@ serve(async (req) => {
       vocalLanguages: input.vocalLanguages || [],
       lyrics: input.lyrics || "",
       artistInspiration: input.artistInspiration || "",
+      tempoBpm: input.tempoBpm || 120,
+      vocalStructure: input.vocalStructure || "Instrumental",
+      vocalStyle: input.vocalStyle || "",
+      vocalIntensity: input.vocalIntensity || 5,
+      vocalEffects: input.vocalEffects || [],
       frozenAt: new Date().toISOString(),
     };
 
