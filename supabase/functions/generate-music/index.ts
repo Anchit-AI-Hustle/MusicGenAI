@@ -592,15 +592,13 @@ serve(async (req) => {
       vocalLanguages: input.vocalLanguages || [],
       lyrics: input.lyrics || "",
       artistInspiration: input.artistInspiration || "",
+      generateVideo: Boolean(input.generateVideo),
       tempoBpm: input.tempoBpm || 120,
       vocalStructure: input.vocalStructure || "Instrumental",
       vocalStyle: input.vocalStyle || "",
       vocalIntensity: input.vocalIntensity || 5,
       vocalEffects: input.vocalEffects || [],
     };
-
-    await supabase.from("tracks").update({ status: "processing", progress: 0 }).eq("id", trackId);
-    await supabase.from("music_creations").update({ status: "processing", progress: 0 }).eq("id", creationId);
 
     const durationSec = frozenInput.durationSeconds;
     const estSegmentTime = 15; // ~15s per segment (gen + poll + 10s delay)
