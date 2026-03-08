@@ -875,7 +875,17 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                             <p className="text-sm text-muted-foreground">{formatDuration(track.duration)}</p>
                           )}
                           {track.status === 'failed' && track.errorMessage && (
-                            <p className="text-sm text-destructive">{track.errorMessage}</p>
+                            <div className="mt-2">
+                              <p className="text-sm text-destructive">{track.errorMessage}</p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="mt-2 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
+                                onClick={handleGenerate}
+                              >
+                                <RefreshCw className="w-3 h-3 mr-1" /> Retry Generation
+                              </Button>
+                            </div>
                           )}
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
