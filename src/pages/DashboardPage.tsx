@@ -276,7 +276,13 @@ const TrackRow: React.FC<{ track: any; index: number; formatDuration: (s: number
         <div className="flex-1 min-w-0">
           <p className="font-medium text-foreground truncate">{track.title}</p>
           {track.status === 'processing' && (
-            <Progress value={(track.progress || 0) * 100} className="h-1 mt-1" />
+            <DashboardTrackProgress
+              currentStage={track.currentStage || 'pending'}
+              progress={track.progress || 0}
+              estimatedTimeLeft={track.estimatedTimeLeft || 0}
+              completedSegments={track.completedSegments || 0}
+              totalSegments={track.totalSegments || 1}
+            />
           )}
         </div>
         <Badge variant="secondary" className={`capitalize text-xs hidden sm:inline-flex ${track.status === 'completed' ? 'bg-green-500/20 text-green-400' : track.status === 'failed' ? 'bg-destructive/20 text-destructive' : ''}`}>
