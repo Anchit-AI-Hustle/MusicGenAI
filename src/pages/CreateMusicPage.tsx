@@ -157,6 +157,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'vocalLanguage': return selectedLanguages.join(', ');
       case 'videoStyle': return videoStyle;
       case 'tempoBpm': return String(tempoBpm);
+      case 'mood': return mood;
+      case 'musicalKey': return musicalKey;
       case 'vocalStructure': return vocalStructure;
       case 'vocalStyle': return vocalStyle;
       case 'vocalIntensity': return String(vocalIntensity);
