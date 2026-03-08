@@ -386,10 +386,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           const vocalBuffer = await generateVocals(vocalConfig, (p) => {
             const vocalProgress = 0.66 + p.progress * 0.08;
             const vocalStageLabels: Record<string, string> = {
-              parsing: 'Parsing lyrics',
+              parsing: 'Parsing lyrics into syllables',
               aligning: 'Aligning vocals to structure',
-              generating: 'Synthesizing vocal audio',
-              mixing: 'Mixing vocals',
+              melody: 'Mapping lyrics to melody',
+              generating: 'Synthesizing singing vocals',
+              mixing: 'Mixing vocals into track',
             };
             updateTrackLocal(creationId, trackId, {
               status: 'generating_vocals',
