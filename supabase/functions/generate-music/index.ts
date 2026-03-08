@@ -583,9 +583,10 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
       const currentSection = sections.find(s => segMidpoint >= s.startSec && segMidpoint < s.endSec) || sections[sections.length - 1];
       const sectionInstruments = instrumentDescriptions.find(d => d.section === currentSection.name);
 
-      // Build rich MusicGen prompt
+      // Build rich MusicGen prompt with beat grid
+      const secondsPerBeat = 60 / musicIntent.tempo;
       const segPrompt = [
-        `${musicIntent.genreIdentity} music in ${musicIntent.key} ${musicIntent.scale} at ${musicIntent.tempo} BPM.`,
+        `${musicIntent.genreIdentity} music in ${musicIntent.key} ${musicIntent.scale} at exactly ${musicIntent.tempo} BPM (beat every ${secondsPerBeat.toFixed(3)}s).`,
         frozenInput.musicPrompt,
         `Section: ${currentSection.name} — ${currentSection.description}.`,
         `Active instruments: ${(sectionInstruments?.instruments || musicIntent.instrumentPalette).join(", ")}.`,
@@ -594,6 +595,7 @@ For non-English: v2/ja_speaker_0, v2/fr_speaker_0, v2/de_speaker_0, v2/hi_speake
         `${rhythmResult.timeSignature} time. Kick: ${rhythmResult.kickPattern}. Hi-hats: ${rhythmResult.hihatPattern}.`,
         `Melody: ${harmonyResult.melodyMotifs[0] || musicIntent.melodyCharacter}.`,
         `Mood: ${sentiment.emotionPolarity}. Aggression: ${sentiment.aggressionLevel}/10.`,
+        `All drums, bass, and melodies MUST lock to ${musicIntent.tempo} BPM beat grid.`,
         segIdx > 0 ? "Continue seamlessly from the previous section, maintaining musical continuity." : "Begin the track with a clear opening.",
         frozenInput.artistInspiration ? `Influenced by: ${frozenInput.artistInspiration}.` : "",
       ].filter(Boolean).join(" ");
