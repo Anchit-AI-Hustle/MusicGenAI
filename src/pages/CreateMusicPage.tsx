@@ -424,25 +424,6 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         </div>
 
         {/* Segment sub-progress during generation */}
-        {activeIdx === 3 && totalSegments > 1 && (
-          <div className="space-y-1">
-            <div className="flex gap-1">
-              {Array.from({ length: totalSegments }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-1.5 flex-1 rounded-full transition-all ${
-                    i < completedSegments ? 'bg-green-400' :
-                    i === completedSegments ? 'bg-primary animate-pulse' :
-                    'bg-muted'
-                  }`}
-                />
-              ))}
-            </div>
-            <p className="text-[10px] text-muted-foreground text-center">
-              {completedSegments} of {totalSegments} segments complete
-            </p>
-          </div>
-        )}
       </div>
     );
   };
