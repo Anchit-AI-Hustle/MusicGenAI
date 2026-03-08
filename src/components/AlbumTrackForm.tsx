@@ -443,7 +443,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                       </motion.div>
                     )}
                   </AnimatePresence>
-                  {showLangDropdown && <div className="fixed inset-0 z-10" onClick={() => setShowLangDropdown(false)} />}
+                  {showLangDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowLangDropdown(false)} />}
                 </div>
               </div>
 
