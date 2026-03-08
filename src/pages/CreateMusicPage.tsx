@@ -638,7 +638,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                     )}
                   </AnimatePresence>
                 </div>
-                {showVocalStyleDropdown && <div className="fixed inset-0 z-0" onClick={() => setShowVocalStyleDropdown(false)} />}
+                {showVocalStyleDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowVocalStyleDropdown(false)} />}
               </motion.div>
 
               {/* Vocal Intensity */}
