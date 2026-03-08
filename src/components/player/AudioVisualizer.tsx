@@ -52,10 +52,10 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ className = ''
       ctx.clearRect(0, 0, width, height);
 
       const analyser = analyserRef.current;
-      let dataArray: Uint8Array;
+      let dataArray: Uint8Array<ArrayBuffer>;
 
       if (analyser) {
-        dataArray = new Uint8Array(analyser.frequencyBinCount);
+        dataArray = new Uint8Array(analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>;
         analyser.getByteFrequencyData(dataArray);
       } else {
         // Fake visualization when analyser unavailable
