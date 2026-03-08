@@ -168,71 +168,89 @@ CRITICAL RULES:
     // High temperature + top_p for maximum creativity
     const temperature = 0.95 + Math.random() * 0.15;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        temperature,
-        top_p: 0.95,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userContent },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "provide_suggestion",
-              description: "Return the suggestion or enhanced value for the music creation field",
-              parameters: {
-                type: "object",
-                properties: {
-                  suggestion: { type: "string", description: "The suggested or enhanced value for the field" },
-                },
-                required: ["suggestion"],
-                additionalProperties: false,
+    const requestBody = JSON.stringify({
+      model: "google/gemini-2.5-flash-lite",
+      temperature,
+      top_p: 0.95,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "provide_suggestion",
+            description: "Return the suggestion or enhanced value for the music creation field",
+            parameters: {
+              type: "object",
+              properties: {
+                suggestion: { type: "string", description: "The suggested or enhanced value for the field" },
               },
+              required: ["suggestion"],
+              additionalProperties: false,
             },
           },
-        ],
-        tool_choice: { type: "function", function: { name: "provide_suggestion" } },
-      }),
+        },
+      ],
+      tool_choice: { type: "function", function: { name: "provide_suggestion" } },
     });
 
-    if (!response.ok) {
+    // Retry with exponential backoff for rate limits
+    const MAX_RETRIES = 4;
+    let lastError = "";
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 8000);
+        await new Promise(r => setTimeout(r, delay));
+      }
+
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: requestBody,
+      });
+
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again shortly." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        lastError = "Rate limit exceeded";
+        console.log(`Rate limited on attempt ${attempt + 1}, retrying...`);
+        continue;
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+
+      if (!response.ok) {
+        if (response.status === 402) {
+          return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits." }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const errText = await response.text();
+        console.error("AI gateway error:", response.status, errText);
+        throw new Error("AI suggestion failed");
       }
-      const errText = await response.text();
-      console.error("AI gateway error:", response.status, errText);
-      throw new Error("AI suggestion failed");
+
+      const data = await response.json();
+      const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+      let suggestion = "";
+
+      if (toolCall?.function?.arguments) {
+        const args = JSON.parse(toolCall.function.arguments);
+        suggestion = args.suggestion || "";
+      } else {
+        suggestion = data.choices?.[0]?.message?.content || "";
+      }
+
+      return new Response(JSON.stringify({ suggestion, field }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    let suggestion = "";
-
-    if (toolCall?.function?.arguments) {
-      const args = JSON.parse(toolCall.function.arguments);
-      suggestion = args.suggestion || "";
-    } else {
-      suggestion = data.choices?.[0]?.message?.content || "";
-    }
-
-    return new Response(JSON.stringify({ suggestion, field }), {
+    // All retries exhausted
+    return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
+      status: 429,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
