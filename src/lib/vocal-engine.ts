@@ -1,9 +1,13 @@
 /**
- * Browser-based Vocal Synthesis Engine
- * Uses formant synthesis (oscillator banks + filters) to generate sung/spoken vocals
- * from lyrics text, aligned to song structure and timing.
+ * Browser-based Vocal Synthesis Engine — Melody-Mapped Singing
  * 
- * Supports vocal styles: melodic singing, robotic vocoder, rap, choir, whisper
+ * Converts lyrics into sung vocals by:
+ * 1. Splitting text into syllables
+ * 2. Generating a melodic contour per line (scale-constrained)
+ * 3. Mapping each syllable to a specific note & beat-aligned duration
+ * 4. Rendering via formant synthesis with vibrato, breathiness, harmonics
+ * 
+ * Supports vocal styles: melodic singing, robotic vocoder, rap, choir, whisper, etc.
  */
 
 import { midiToFreq, getScaleMidi, parseKey, INTERNAL_SAMPLE_RATE } from './audio-utils';
@@ -25,8 +29,8 @@ export interface VocalConfig {
   mood: string;
 }
 
-export type VocalStyleType = 
-  | 'male_electronic' | 'female_melodic' | 'robotic_vocoder' 
+export type VocalStyleType =
+  | 'male_electronic' | 'female_melodic' | 'robotic_vocoder'
   | 'rap' | 'choir' | 'whisper' | 'melodic_singing';
 
 export interface VocalSegment {
@@ -38,27 +42,204 @@ export interface VocalSegment {
 }
 
 export interface VocalProgress {
-  stage: 'parsing' | 'generating' | 'aligning' | 'mixing';
+  stage: 'parsing' | 'melody' | 'generating' | 'aligning' | 'mixing';
   progress: number;
 }
 
+// ===== Syllable Splitter =====
+
+function splitIntoSyllables(word: string): string[] {
+  // Simple English syllable heuristic based on vowel clusters
+  const vowels = new Set(['a', 'e', 'i', 'o', 'u', 'y']);
+  const lower = word.toLowerCase().replace(/[^a-z]/g, '');
+  if (lower.length <= 2) return [word];
+
+  const syllables: string[] = [];
+  let current = '';
+  let prevVowel = false;
+
+  for (let i = 0; i < lower.length; i++) {
+    const ch = lower[i];
+    const isV = vowels.has(ch);
+    current += word[i] || ch;
+
+    if (prevVowel && !isV && i < lower.length - 1) {
+      // Check if next char is vowel — if so, split before this consonant
+      const nextIsV = i + 1 < lower.length && vowels.has(lower[i + 1]);
+      if (nextIsV && current.length > 1) {
+        // Split: move this consonant to the next syllable
+        syllables.push(current.slice(0, -1));
+        current = current.slice(-1);
+        prevVowel = false;
+        continue;
+      }
+    }
+
+    if (isV && prevVowel && current.length > 2) {
+      // New vowel cluster — split before it
+      syllables.push(current.slice(0, -1));
+      current = current.slice(-1);
+    }
+
+    prevVowel = isV;
+  }
+
+  if (current.length > 0) {
+    if (syllables.length > 0 && current.length === 1 && !vowels.has(current.toLowerCase())) {
+      syllables[syllables.length - 1] += current;
+    } else {
+      syllables.push(current);
+    }
+  }
+
+  return syllables.length > 0 ? syllables : [word];
+}
+
+function lineToSyllables(line: string): string[] {
+  const words = line.split(/\s+/).filter(w => w.length > 0);
+  const syllables: string[] = [];
+  for (const word of words) {
+    syllables.push(...splitIntoSyllables(word));
+  }
+  return syllables;
+}
+
+// ===== Melody Generator =====
+
+interface MelodyNote {
+  midiNote: number;
+  frequency: number;
+  durationBeats: number;
+}
+
+/**
+ * Generate a melodic contour for a line of N syllables.
+ * Uses scale-constrained stepwise motion with occasional leaps.
+ * Section energy influences register and range.
+ */
+function generateLineMelody(
+  numSyllables: number,
+  scaleMidi: number[],
+  energy: number,
+  sectionName: string,
+  tempo: number,
+  lineDurationSec: number,
+  rng: () => number,
+  style: VocalStyleType,
+): MelodyNote[] {
+  if (numSyllables === 0 || scaleMidi.length === 0) return [];
+
+  const isChorus = /chorus|hook|drop/i.test(sectionName);
+  const isBridge = /bridge/i.test(sectionName);
+  const isRap = style === 'rap';
+
+  // Pick starting note — higher energy → higher in scale
+  const rangeStart = Math.floor(scaleMidi.length * 0.2);
+  const rangeEnd = Math.floor(scaleMidi.length * (0.5 + energy * 0.4));
+  let noteIdx = rangeStart + Math.floor(rng() * Math.max(1, rangeEnd - rangeStart));
+  noteIdx = Math.min(noteIdx, scaleMidi.length - 1);
+
+  // Chorus tends to start higher
+  if (isChorus) noteIdx = Math.min(noteIdx + 2, scaleMidi.length - 1);
+  if (isBridge) noteIdx = Math.max(noteIdx - 1, 0);
+
+  const beatDuration = 60 / tempo; // seconds per beat
+  const totalBeats = lineDurationSec / beatDuration;
+  
+  // Distribute beats across syllables with musical rhythm
+  const rhythmPatterns = isRap
+    ? generateRapRhythm(numSyllables, totalBeats, rng)
+    : generateSingingRhythm(numSyllables, totalBeats, isChorus, rng);
+
+  const notes: MelodyNote[] = [];
+
+  for (let i = 0; i < numSyllables; i++) {
+    const midi = scaleMidi[noteIdx];
+    notes.push({
+      midiNote: midi,
+      frequency: midiToFreq(midi),
+      durationBeats: rhythmPatterns[i],
+    });
+
+    // Move to next note — stepwise with occasional leap
+    if (isRap) {
+      // Rap: mostly monotone with small variations
+      const move = rng() < 0.7 ? 0 : (rng() < 0.5 ? 1 : -1);
+      noteIdx = Math.max(0, Math.min(scaleMidi.length - 1, noteIdx + move));
+    } else {
+      // Singing: stepwise motion (±1-2) with occasional leap (±3-4)
+      const leap = rng() < 0.15;
+      const direction = rng() < 0.5 ? 1 : -1;
+      const step = leap ? Math.floor(rng() * 3) + 2 : (rng() < 0.6 ? 1 : 0);
+      noteIdx = Math.max(0, Math.min(scaleMidi.length - 1, noteIdx + direction * step));
+
+      // Tendency to resolve back toward starting note at end of phrase
+      if (i > numSyllables * 0.7) {
+        const target = rangeStart + Math.floor((rangeEnd - rangeStart) * 0.3);
+        if (noteIdx > target) noteIdx = Math.max(target, noteIdx - 1);
+        else if (noteIdx < target) noteIdx = Math.min(target, noteIdx + 1);
+      }
+    }
+  }
+
+  return notes;
+}
+
+function generateSingingRhythm(numSyllables: number, totalBeats: number, isChorus: boolean, rng: () => number): number[] {
+  // Common musical note durations (in beats): 0.5, 0.75, 1, 1.5, 2
+  const weights = isChorus
+    ? [0.15, 0.15, 0.35, 0.2, 0.15]  // Chorus: longer, more sustained
+    : [0.25, 0.2, 0.35, 0.15, 0.05]; // Verse: more eighth notes
+
+  const durationOptions = [0.5, 0.75, 1.0, 1.5, 2.0];
+  const durations: number[] = [];
+
+  for (let i = 0; i < numSyllables; i++) {
+    const r = rng();
+    let cumulative = 0;
+    let chosen = 1.0;
+    for (let j = 0; j < weights.length; j++) {
+      cumulative += weights[j];
+      if (r < cumulative) { chosen = durationOptions[j]; break; }
+    }
+    durations.push(chosen);
+  }
+
+  // Normalize to fit total beats
+  const sum = durations.reduce((a, b) => a + b, 0);
+  const scale = totalBeats / sum;
+  return durations.map(d => Math.max(0.25, d * scale));
+}
+
+function generateRapRhythm(numSyllables: number, totalBeats: number, rng: () => number): number[] {
+  // Rap: fast, mostly sixteenth/eighth notes with occasional longer holds
+  const durations: number[] = [];
+  for (let i = 0; i < numSyllables; i++) {
+    const r = rng();
+    durations.push(r < 0.5 ? 0.25 : r < 0.8 ? 0.5 : 0.75);
+  }
+  const sum = durations.reduce((a, b) => a + b, 0);
+  const scale = totalBeats / sum;
+  return durations.map(d => Math.max(0.15, d * scale));
+}
+
 // ===== Formant Data =====
-// Vowel formant frequencies (F1, F2, F3) for synthesis
+
 const VOWEL_FORMANTS: Record<string, [number, number, number]> = {
   'a': [800, 1200, 2500],
   'e': [400, 2200, 2800],
   'i': [300, 2700, 3300],
   'o': [500, 900, 2500],
   'u': [350, 700, 2500],
+  'y': [300, 2200, 3000],
 };
 
-// Consonant characteristics
 const CONSONANT_TYPES: Record<string, 'plosive' | 'fricative' | 'nasal' | 'liquid' | 'silent'> = {
   'b': 'plosive', 'p': 'plosive', 'd': 'plosive', 't': 'plosive', 'g': 'plosive', 'k': 'plosive',
   'f': 'fricative', 'v': 'fricative', 's': 'fricative', 'z': 'fricative', 'h': 'fricative',
   'th': 'fricative', 'sh': 'fricative', 'ch': 'fricative',
   'm': 'nasal', 'n': 'nasal', 'ng': 'nasal',
-  'l': 'liquid', 'r': 'liquid', 'w': 'liquid', 'y': 'liquid',
+  'l': 'liquid', 'r': 'liquid', 'w': 'liquid',
   ' ': 'silent',
 };
 
@@ -69,60 +250,32 @@ interface StyleParams {
   vibratoRate: number;
   vibratoDepth: number;
   breathiness: number;
-  formantShift: number; // multiplier for formant frequencies
+  formantShift: number;
   attackTime: number;
   releaseTime: number;
   waveform: OscillatorType;
   harmonicRichness: number;
+  pitchGlide: number; // portamento time in seconds between notes
 }
 
 function getStyleParams(style: VocalStyleType, intensity: number): StyleParams {
-  const intensityFactor = intensity / 10;
-  
+  const f = intensity / 10;
   switch (style) {
     case 'female_melodic':
-      return {
-        baseOctave: 4, vibratoRate: 5.5, vibratoDepth: 8 * intensityFactor,
-        breathiness: 0.3, formantShift: 1.15, attackTime: 0.03,
-        releaseTime: 0.08, waveform: 'sine', harmonicRichness: 0.4,
-      };
+      return { baseOctave: 4, vibratoRate: 5.5, vibratoDepth: 8 * f, breathiness: 0.3, formantShift: 1.15, attackTime: 0.03, releaseTime: 0.08, waveform: 'sine', harmonicRichness: 0.4, pitchGlide: 0.04 };
     case 'male_electronic':
-      return {
-        baseOctave: 3, vibratoRate: 4.5, vibratoDepth: 5 * intensityFactor,
-        breathiness: 0.15, formantShift: 0.9, attackTime: 0.02,
-        releaseTime: 0.06, waveform: 'sawtooth', harmonicRichness: 0.6,
-      };
+      return { baseOctave: 3, vibratoRate: 4.5, vibratoDepth: 5 * f, breathiness: 0.15, formantShift: 0.9, attackTime: 0.02, releaseTime: 0.06, waveform: 'sawtooth', harmonicRichness: 0.6, pitchGlide: 0.03 };
     case 'robotic_vocoder':
-      return {
-        baseOctave: 3, vibratoRate: 0, vibratoDepth: 0,
-        breathiness: 0.05, formantShift: 1.0, attackTime: 0.005,
-        releaseTime: 0.01, waveform: 'square', harmonicRichness: 0.9,
-      };
+      return { baseOctave: 3, vibratoRate: 0, vibratoDepth: 0, breathiness: 0.05, formantShift: 1.0, attackTime: 0.005, releaseTime: 0.01, waveform: 'square', harmonicRichness: 0.9, pitchGlide: 0 };
     case 'rap':
-      return {
-        baseOctave: 3, vibratoRate: 0, vibratoDepth: 0,
-        breathiness: 0.25, formantShift: 0.95, attackTime: 0.01,
-        releaseTime: 0.03, waveform: 'sawtooth', harmonicRichness: 0.5,
-      };
+      return { baseOctave: 3, vibratoRate: 0, vibratoDepth: 0, breathiness: 0.25, formantShift: 0.95, attackTime: 0.008, releaseTime: 0.02, waveform: 'sawtooth', harmonicRichness: 0.5, pitchGlide: 0.01 };
     case 'choir':
-      return {
-        baseOctave: 4, vibratoRate: 5, vibratoDepth: 10 * intensityFactor,
-        breathiness: 0.2, formantShift: 1.0, attackTime: 0.08,
-        releaseTime: 0.15, waveform: 'sine', harmonicRichness: 0.3,
-      };
+      return { baseOctave: 4, vibratoRate: 5, vibratoDepth: 10 * f, breathiness: 0.2, formantShift: 1.0, attackTime: 0.08, releaseTime: 0.15, waveform: 'sine', harmonicRichness: 0.3, pitchGlide: 0.06 };
     case 'whisper':
-      return {
-        baseOctave: 4, vibratoRate: 0, vibratoDepth: 0,
-        breathiness: 0.85, formantShift: 1.1, attackTime: 0.02,
-        releaseTime: 0.05, waveform: 'sine', harmonicRichness: 0.1,
-      };
+      return { baseOctave: 4, vibratoRate: 0, vibratoDepth: 0, breathiness: 0.85, formantShift: 1.1, attackTime: 0.02, releaseTime: 0.05, waveform: 'sine', harmonicRichness: 0.1, pitchGlide: 0 };
     case 'melodic_singing':
     default:
-      return {
-        baseOctave: 4, vibratoRate: 5, vibratoDepth: 6 * intensityFactor,
-        breathiness: 0.2, formantShift: 1.0, attackTime: 0.025,
-        releaseTime: 0.07, waveform: 'sine', harmonicRichness: 0.5,
-      };
+      return { baseOctave: 4, vibratoRate: 5, vibratoDepth: 6 * f, breathiness: 0.2, formantShift: 1.0, attackTime: 0.025, releaseTime: 0.07, waveform: 'sine', harmonicRichness: 0.5, pitchGlide: 0.035 };
   }
 }
 
@@ -139,14 +292,13 @@ export function inferVocalStyle(genres: string[], vocalStyle?: string): VocalSty
     if (lower.includes('whisper')) return 'whisper';
     if (lower.includes('melodic') || lower.includes('singing')) return 'melodic_singing';
   }
-  
-  const genreStr = genres.join(' ').toLowerCase();
-  if (genreStr.includes('techno') || genreStr.includes('industrial')) return 'robotic_vocoder';
-  if (genreStr.includes('trap') || genreStr.includes('hip hop') || genreStr.includes('rap')) return 'rap';
-  if (genreStr.includes('pop') || genreStr.includes('r&b')) return 'female_melodic';
-  if (genreStr.includes('choir') || genreStr.includes('gospel')) return 'choir';
-  if (genreStr.includes('ambient') || genreStr.includes('lo-fi')) return 'whisper';
-  if (genreStr.includes('edm') || genreStr.includes('house') || genreStr.includes('electronic')) return 'male_electronic';
+  const g = genres.join(' ').toLowerCase();
+  if (g.includes('techno') || g.includes('industrial')) return 'robotic_vocoder';
+  if (g.includes('trap') || g.includes('hip hop') || g.includes('rap')) return 'rap';
+  if (g.includes('pop') || g.includes('r&b')) return 'female_melodic';
+  if (g.includes('choir') || g.includes('gospel')) return 'choir';
+  if (g.includes('ambient') || g.includes('lo-fi')) return 'whisper';
+  if (g.includes('edm') || g.includes('house') || g.includes('electronic')) return 'male_electronic';
   return 'melodic_singing';
 }
 
@@ -154,39 +306,27 @@ export function inferVocalStyle(genres: string[], vocalStyle?: string): VocalSty
 
 interface LyricLine {
   text: string;
-  section: string; // verse, chorus, bridge, etc.
-  words: string[];
+  section: string;
+  syllables: string[];
 }
 
 function parseLyrics(lyrics: string): LyricLine[] {
   const lines: LyricLine[] = [];
   let currentSection = 'verse';
-  
+
   for (const raw of lyrics.split('\n')) {
     const line = raw.trim();
     if (!line) continue;
-    
-    // Detect section markers
     const sectionMatch = line.match(/^\[?(verse|chorus|bridge|intro|outro|hook|pre-chorus|post-chorus)\s*\d*\]?$/i);
-    if (sectionMatch) {
-      currentSection = sectionMatch[1].toLowerCase();
-      continue;
-    }
-    
-    // Also detect implicit section labels without brackets
+    if (sectionMatch) { currentSection = sectionMatch[1].toLowerCase(); continue; }
     const implicitSection = line.match(/^(verse|chorus|bridge|intro|outro|hook)\s*\d*$/i);
-    if (implicitSection) {
-      currentSection = implicitSection[1].toLowerCase();
-      continue;
+    if (implicitSection) { currentSection = implicitSection[1].toLowerCase(); continue; }
+
+    const syllables = lineToSyllables(line);
+    if (syllables.length > 0) {
+      lines.push({ text: line, section: currentSection, syllables });
     }
-    
-    lines.push({
-      text: line,
-      section: currentSection,
-      words: line.split(/\s+/).filter(w => w.length > 0),
-    });
   }
-  
   return lines;
 }
 
@@ -195,67 +335,58 @@ function parseLyrics(lyrics: string): LyricLine[] {
 function alignLyricsToStructure(
   lyricLines: LyricLine[],
   structure: SectionPlan[],
-  durationSeconds: number,
+  _durationSeconds: number,
 ): VocalSegment[] {
   const segments: VocalSegment[] = [];
-  
-  // Build section timeline
+
   const sectionTimeline: { name: string; start: number; end: number; energy: number }[] = [];
   let t = 0;
   for (const section of structure) {
     sectionTimeline.push({ name: section.name.toLowerCase(), start: t, end: t + section.duration, energy: section.energy });
     t += section.duration;
   }
-  
-  // Map lyric lines to vocal sections (skip intros/outros)
-  const vocalSections = sectionTimeline.filter(s => 
+
+  // Only place vocals in vocal-appropriate sections
+  const vocalSections = sectionTimeline.filter(s =>
     !s.name.includes('intro') && !s.name.includes('outro') && !s.name.includes('break')
   );
-  
+
   if (vocalSections.length === 0 || lyricLines.length === 0) return segments;
-  
-  // Distribute lyrics across vocal sections
+
   let lineIdx = 0;
   for (const section of vocalSections) {
     if (lineIdx >= lyricLines.length) break;
-    
-    // Count lines for this section type
+
     const matchingLines: LyricLine[] = [];
-    while (lineIdx < lyricLines.length) {
+    const maxLines = Math.max(2, Math.floor((section.end - section.start) / 3));
+    while (lineIdx < lyricLines.length && matchingLines.length < maxLines) {
       matchingLines.push(lyricLines[lineIdx]);
       lineIdx++;
-      // Limit lines per section based on duration
-      const maxLines = Math.max(2, Math.floor(section.end - section.start) / 3);
-      if (matchingLines.length >= maxLines) break;
     }
-    
     if (matchingLines.length === 0) continue;
-    
-    // Distribute lines evenly within section, leaving margins
+
     const margin = 0.5;
     const sectionDur = (section.end - section.start) - margin * 2;
     const lineSpacing = sectionDur / matchingLines.length;
-    
+
     for (let i = 0; i < matchingLines.length; i++) {
       const startTime = section.start + margin + i * lineSpacing;
-      const endTime = startTime + lineSpacing * 0.85; // small gap between lines
-      
+      const endTime = Math.min(startTime + lineSpacing * 0.85, section.end - 0.1);
       segments.push({
         text: matchingLines[i].text,
         sectionName: section.name,
         startTime,
-        endTime: Math.min(endTime, section.end - 0.1),
+        endTime,
         energy: section.energy,
       });
     }
   }
-  
-  // If we have leftover lyrics, loop back through sections
+
+  // Wrap leftover lines back into sections
   if (lineIdx < lyricLines.length && vocalSections.length > 0) {
     let sIdx = 0;
     while (lineIdx < lyricLines.length) {
       const section = vocalSections[sIdx % vocalSections.length];
-      // Add to existing section timeline (overlay)
       segments.push({
         text: lyricLines[lineIdx].text,
         sectionName: section.name,
@@ -267,199 +398,195 @@ function alignLyricsToStructure(
       sIdx++;
     }
   }
-  
+
   return segments;
 }
 
-// ===== Phoneme Extraction (Simplified) =====
+// ===== Render a Sung Syllable =====
 
-interface Phoneme {
-  char: string;
-  isVowel: boolean;
-  formants: [number, number, number] | null;
-  duration: number; // relative
-}
+function renderSungSyllable(
+  ctx: OfflineAudioContext,
+  dest: AudioNode,
+  syllable: string,
+  startTime: number,
+  duration: number,
+  frequency: number,
+  prevFreq: number | null,
+  volume: number,
+  style: StyleParams,
+  rng: () => number,
+) {
+  if (duration <= 0.01) return;
 
-function textToPhonemes(text: string): Phoneme[] {
-  const phonemes: Phoneme[] = [];
-  const lower = text.toLowerCase().replace(/[^a-z\s]/g, '');
-  
+  // Extract dominant vowel for formant
+  const lower = syllable.toLowerCase().replace(/[^a-z]/g, '');
+  let vowelFormant: [number, number, number] = VOWEL_FORMANTS['a']; // default
+  let consonantPrefix = '';
+  let vowelFound = false;
   for (let i = 0; i < lower.length; i++) {
-    const ch = lower[i];
-    const vowelFormant = VOWEL_FORMANTS[ch];
-    
-    if (vowelFormant) {
-      phonemes.push({ char: ch, isVowel: true, formants: vowelFormant, duration: 1.5 });
-    } else if (ch === ' ') {
-      phonemes.push({ char: ' ', isVowel: false, formants: null, duration: 0.3 });
-    } else {
-      // Consonant
-      const type = CONSONANT_TYPES[ch] || 'fricative';
-      const dur = type === 'plosive' ? 0.3 : type === 'nasal' ? 0.8 : type === 'liquid' ? 0.7 : 0.4;
-      phonemes.push({ char: ch, isVowel: false, formants: null, duration: dur });
+    if (VOWEL_FORMANTS[lower[i]]) {
+      vowelFormant = VOWEL_FORMANTS[lower[i]];
+      consonantPrefix = lower.slice(0, i);
+      vowelFound = true;
+      break;
     }
   }
-  
-  return phonemes;
+  if (!vowelFound) consonantPrefix = lower;
+
+  const consonantDur = Math.min(0.04 * consonantPrefix.length, duration * 0.2);
+  const vowelStart = startTime + consonantDur;
+  const vowelDur = duration - consonantDur;
+
+  // === Consonant attack ===
+  if (consonantDur > 0.005) {
+    const bufSize = Math.ceil(ctx.sampleRate * consonantDur);
+    if (bufSize > 0) {
+      const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) data[i] = (rng() * 2 - 1);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.value = 2000;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(volume * 0.3, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + consonantDur);
+      src.connect(filter).connect(gain).connect(dest);
+      src.start(startTime);
+      src.stop(startTime + consonantDur + 0.01);
+    }
+  }
+
+  // === Pitched vowel (sung note) ===
+  if (vowelDur < 0.02) return;
+
+  const osc = ctx.createOscillator();
+  osc.type = style.waveform;
+
+  // Pitch glide from previous note (portamento)
+  if (prevFreq && style.pitchGlide > 0) {
+    osc.frequency.setValueAtTime(prevFreq, vowelStart);
+    osc.frequency.exponentialRampToValueAtTime(frequency, vowelStart + Math.min(style.pitchGlide, vowelDur * 0.3));
+  } else {
+    osc.frequency.setValueAtTime(frequency, vowelStart);
+  }
+
+  // Vibrato LFO
+  if (style.vibratoRate > 0 && style.vibratoDepth > 0) {
+    const vibLfo = ctx.createOscillator();
+    const vibGain = ctx.createGain();
+    vibLfo.frequency.value = style.vibratoRate;
+    vibGain.gain.value = style.vibratoDepth;
+    vibLfo.connect(vibGain).connect(osc.frequency);
+    // Delay vibrato onset to mimic natural singing
+    vibGain.gain.setValueAtTime(0, vowelStart);
+    vibGain.gain.linearRampToValueAtTime(style.vibratoDepth, vowelStart + Math.min(vowelDur * 0.3, 0.15));
+    vibLfo.start(vowelStart);
+    vibLfo.stop(vowelStart + vowelDur + 0.01);
+  }
+
+  // Formant filters (3-band parallel)
+  const formants = vowelFormant.map(f => f * style.formantShift);
+
+  for (let fi = 0; fi < 3; fi++) {
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = formants[fi];
+    filter.Q.value = fi === 0 ? 8 : fi === 1 ? 10 : 12;
+
+    const fGain = ctx.createGain();
+    const fLevel = (fi === 0 ? 1.0 : fi === 1 ? 0.7 : 0.4) * volume;
+
+    // ADSR envelope per formant
+    fGain.gain.setValueAtTime(0.001, vowelStart);
+    fGain.gain.linearRampToValueAtTime(fLevel, vowelStart + style.attackTime);
+    fGain.gain.setValueAtTime(fLevel * 0.9, vowelStart + vowelDur - style.releaseTime);
+    fGain.gain.linearRampToValueAtTime(0.001, vowelStart + vowelDur);
+
+    osc.connect(filter).connect(fGain).connect(dest);
+  }
+
+  // Harmonics for richer timbre
+  if (style.harmonicRichness > 0.2) {
+    const harm = ctx.createOscillator();
+    harm.type = 'sawtooth';
+    harm.frequency.value = frequency;
+    if (prevFreq && style.pitchGlide > 0) {
+      harm.frequency.setValueAtTime(prevFreq, vowelStart);
+      harm.frequency.exponentialRampToValueAtTime(frequency, vowelStart + Math.min(style.pitchGlide, vowelDur * 0.3));
+    }
+    const harmGain = ctx.createGain();
+    harmGain.gain.setValueAtTime(volume * style.harmonicRichness * 0.12, vowelStart);
+    harmGain.gain.exponentialRampToValueAtTime(0.001, vowelStart + vowelDur);
+    const harmFilter = ctx.createBiquadFilter();
+    harmFilter.type = 'lowpass';
+    harmFilter.frequency.value = formants[1];
+    harm.connect(harmFilter).connect(harmGain).connect(dest);
+    harm.start(vowelStart);
+    harm.stop(vowelStart + vowelDur + 0.01);
+  }
+
+  // Breathiness (filtered noise)
+  if (style.breathiness > 0.1) {
+    const bufSize = Math.ceil(ctx.sampleRate * vowelDur);
+    if (bufSize > 0) {
+      const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+      const noiseData = noiseBuf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) noiseData[i] = (rng() * 2 - 1);
+      const noiseSrc = ctx.createBufferSource();
+      noiseSrc.buffer = noiseBuf;
+      const noiseFilter = ctx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.value = formants[0];
+      noiseFilter.Q.value = 2;
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(style.breathiness * volume * 0.4, vowelStart);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, vowelStart + vowelDur);
+      noiseSrc.connect(noiseFilter).connect(noiseGain).connect(dest);
+      noiseSrc.start(vowelStart);
+      noiseSrc.stop(vowelStart + vowelDur + 0.01);
+    }
+  }
+
+  osc.start(vowelStart);
+  osc.stop(vowelStart + vowelDur + 0.01);
 }
 
-// ===== Render Single Vocal Segment =====
+// ===== Render Full Vocal Line (syllables mapped to melody) =====
 
-function renderVocalSegment(
+function renderVocalLine(
   ctx: OfflineAudioContext,
   dest: AudioNode,
   segment: VocalSegment,
-  localStartTime: number,
-  localEndTime: number,
+  melody: MelodyNote[],
+  syllables: string[],
   style: StyleParams,
-  scaleMidi: number[],
+  tempo: number,
   rng: () => number,
 ) {
-  const segDuration = localEndTime - localStartTime;
-  if (segDuration <= 0) return;
-  
-  const phonemes = textToPhonemes(segment.text);
-  const totalRelDur = phonemes.reduce((s, p) => s + p.duration, 0);
-  if (totalRelDur === 0) return;
-  
-  const volume = 0.25 * (segment.energy * 0.5 + 0.5);
-  let phonemeTime = localStartTime;
-  
-  for (const phoneme of phonemes) {
-    const phDur = (phoneme.duration / totalRelDur) * segDuration;
-    if (phonemeTime + phDur > localEndTime) break;
-    
-    if (phoneme.isVowel && phoneme.formants) {
-      // Choose a pitch from the scale
-      const noteIdx = Math.floor(rng() * Math.min(5, scaleMidi.length));
-      const basePitch = midiToFreq(scaleMidi[noteIdx]);
-      
-      // Main oscillator (vocal carrier)
-      const osc = ctx.createOscillator();
-      osc.type = style.waveform;
-      osc.frequency.setValueAtTime(basePitch, phonemeTime);
-      
-      // Vibrato
-      if (style.vibratoRate > 0 && style.vibratoDepth > 0) {
-        const vibLfo = ctx.createOscillator();
-        const vibGain = ctx.createGain();
-        vibLfo.frequency.value = style.vibratoRate;
-        vibGain.gain.value = style.vibratoDepth;
-        vibLfo.connect(vibGain).connect(osc.frequency);
-        vibLfo.start(phonemeTime);
-        vibLfo.stop(phonemeTime + phDur + 0.01);
-      }
-      
-      // Formant filters (3-band)
-      const formants = phoneme.formants.map(f => f * style.formantShift);
-      
-      // Create parallel formant filter bank
-      const formantGains: GainNode[] = [];
-      for (let fi = 0; fi < 3; fi++) {
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'bandpass';
-        filter.frequency.value = formants[fi];
-        filter.Q.value = fi === 0 ? 8 : fi === 1 ? 10 : 12;
-        
-        const fGain = ctx.createGain();
-        const fLevel = fi === 0 ? 1.0 : fi === 1 ? 0.7 : 0.4;
-        fGain.gain.value = fLevel * volume;
-        
-        osc.connect(filter).connect(fGain).connect(dest);
-        formantGains.push(fGain);
-      }
-      
-      // Harmonics for richer vocal timbre
-      if (style.harmonicRichness > 0.2) {
-        const harm = ctx.createOscillator();
-        harm.type = 'sawtooth';
-        harm.frequency.value = basePitch;
-        const harmGain = ctx.createGain();
-        harmGain.gain.setValueAtTime(volume * style.harmonicRichness * 0.15, phonemeTime);
-        harmGain.gain.exponentialRampToValueAtTime(0.001, phonemeTime + phDur);
-        const harmFilter = ctx.createBiquadFilter();
-        harmFilter.type = 'lowpass';
-        harmFilter.frequency.value = formants[1];
-        harm.connect(harmFilter).connect(harmGain).connect(dest);
-        harm.start(phonemeTime);
-        harm.stop(phonemeTime + phDur + 0.01);
-      }
-      
-      // Envelope
-      const envGain = ctx.createGain();
-      envGain.gain.setValueAtTime(0.001, phonemeTime);
-      envGain.gain.linearRampToValueAtTime(volume, phonemeTime + style.attackTime);
-      envGain.gain.setValueAtTime(volume * 0.9, phonemeTime + phDur - style.releaseTime);
-      envGain.gain.linearRampToValueAtTime(0.001, phonemeTime + phDur);
-      
-      // Route through envelope
-      for (const fg of formantGains) {
-        fg.connect(envGain);
-      }
-      envGain.connect(dest);
-      
-      // Breathiness (filtered noise)
-      if (style.breathiness > 0.1) {
-        const noiseDur = phDur;
-        const bufSize = Math.ceil(ctx.sampleRate * noiseDur);
-        if (bufSize > 0) {
-          const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-          const noiseData = noiseBuf.getChannelData(0);
-          for (let i = 0; i < bufSize; i++) noiseData[i] = (rng() * 2 - 1);
-          const noiseSrc = ctx.createBufferSource();
-          noiseSrc.buffer = noiseBuf;
-          const noiseFilter = ctx.createBiquadFilter();
-          noiseFilter.type = 'bandpass';
-          noiseFilter.frequency.value = formants[0];
-          noiseFilter.Q.value = 2;
-          const noiseGain = ctx.createGain();
-          noiseGain.gain.setValueAtTime(style.breathiness * volume * 0.5, phonemeTime);
-          noiseGain.gain.exponentialRampToValueAtTime(0.001, phonemeTime + noiseDur);
-          noiseSrc.connect(noiseFilter).connect(noiseGain).connect(dest);
-          noiseSrc.start(phonemeTime);
-          noiseSrc.stop(phonemeTime + noiseDur + 0.01);
-        }
-      }
-      
-      osc.start(phonemeTime);
-      osc.stop(phonemeTime + phDur + 0.01);
-      
-    } else if (phoneme.char !== ' ') {
-      // Consonant: short noise burst
-      const consType = CONSONANT_TYPES[phoneme.char] || 'fricative';
-      const consDur = Math.min(phDur, 0.05);
-      const bufSize = Math.ceil(ctx.sampleRate * consDur);
-      if (bufSize > 0) {
-        const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-        const data = buf.getChannelData(0);
-        for (let i = 0; i < bufSize; i++) data[i] = (rng() * 2 - 1);
-        const src = ctx.createBufferSource();
-        src.buffer = buf;
-        const filter = ctx.createBiquadFilter();
-        
-        if (consType === 'plosive') {
-          filter.type = 'highpass';
-          filter.frequency.value = 2000;
-        } else if (consType === 'nasal') {
-          filter.type = 'bandpass';
-          filter.frequency.value = 300;
-          filter.Q.value = 5;
-        } else {
-          filter.type = 'highpass';
-          filter.frequency.value = 4000;
-        }
-        
-        const gain = ctx.createGain();
-        const consVol = consType === 'plosive' ? volume * 0.4 : volume * 0.2;
-        gain.gain.setValueAtTime(consVol, phonemeTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, phonemeTime + consDur);
-        src.connect(filter).connect(gain).connect(dest);
-        src.start(phonemeTime);
-        src.stop(phonemeTime + consDur + 0.01);
-      }
+  const lineDuration = segment.endTime - segment.startTime;
+  if (lineDuration <= 0) return;
+
+  const beatDuration = 60 / tempo;
+  const volume = 0.3 * (segment.energy * 0.5 + 0.5);
+  let time = segment.startTime;
+  let prevFreq: number | null = null;
+
+  const count = Math.min(syllables.length, melody.length);
+  for (let i = 0; i < count; i++) {
+    const note = melody[i];
+    const sylDuration = note.durationBeats * beatDuration;
+    const endTime = Math.min(time + sylDuration, segment.endTime);
+    const actualDur = endTime - time;
+
+    if (actualDur > 0.02) {
+      renderSungSyllable(ctx, dest, syllables[i], time, actualDur, note.frequency, prevFreq, volume, style, rng);
+      prevFreq = note.frequency;
     }
-    
-    phonemeTime += phDur;
+
+    time = endTime;
+    if (time >= segment.endTime) break;
   }
 }
 
@@ -473,16 +600,16 @@ function applyVocalEffects(
   genres: string[],
 ): AudioNode {
   let current: AudioNode = source;
-  
-  // EQ: cut below 120Hz for vocal clarity
+
+  // HPF: cut below 120Hz
   const hpf = ctx.createBiquadFilter();
   hpf.type = 'highpass';
   hpf.frequency.value = 120;
   hpf.Q.value = 0.7;
   current.connect(hpf);
   current = hpf;
-  
-  // Presence boost around 3kHz
+
+  // Presence boost 3kHz
   const presence = ctx.createBiquadFilter();
   presence.type = 'peaking';
   presence.frequency.value = 3000;
@@ -490,8 +617,8 @@ function applyVocalEffects(
   presence.Q.value = 1.5;
   current.connect(presence);
   current = presence;
-  
-  // Compression for consistent levels
+
+  // Compression
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -24;
   comp.knee.value = 6;
@@ -500,12 +627,11 @@ function applyVocalEffects(
   comp.release.value = 0.1;
   current.connect(comp);
   current = comp;
-  
-  // Genre-specific or user-selected effects
+
   const genreStr = genres.join(' ').toLowerCase();
   const effectSet = new Set(effects.map(e => e.toLowerCase()));
-  
-  // Vocoder effect for electronic/techno
+
+  // Vocoder
   if (effectSet.has('vocoder') || genreStr.includes('techno') || genreStr.includes('industrial')) {
     const vocoderFilter = ctx.createBiquadFilter();
     vocoderFilter.type = 'bandpass';
@@ -514,8 +640,8 @@ function applyVocalEffects(
     current.connect(vocoderFilter);
     current = vocoderFilter;
   }
-  
-  // Reverb (convolution approximation via delay network)
+
+  // Reverb (delay-based approximation)
   if (effectSet.has('reverb') || genreStr.includes('pop') || genreStr.includes('ambient')) {
     const reverbDelay = ctx.createDelay(0.5);
     reverbDelay.delayTime.value = 0.03;
@@ -525,13 +651,12 @@ function applyVocalEffects(
     reverbFilter.type = 'lowpass';
     reverbFilter.frequency.value = 4000;
     current.connect(reverbDelay).connect(reverbFilter).connect(reverbGain).connect(dest);
-    // Also direct signal
   }
-  
+
   // Delay
   if (effectSet.has('delay') || genreStr.includes('techno') || genreStr.includes('dub')) {
     const delay = ctx.createDelay(1.0);
-    delay.delayTime.value = 0.375; // dotted eighth at ~120bpm
+    delay.delayTime.value = 0.375;
     const delayGain = ctx.createGain();
     delayGain.gain.value = 0.15;
     const feedback = ctx.createGain();
@@ -539,8 +664,7 @@ function applyVocalEffects(
     current.connect(delay).connect(feedback).connect(delay);
     delay.connect(delayGain).connect(dest);
   }
-  
-  // Autotune effect (pitch snapping is already inherent in our synthesis)
+
   // Distortion
   if (effectSet.has('distortion')) {
     const distGain = ctx.createGain();
@@ -555,12 +679,12 @@ function applyVocalEffects(
     current.connect(distGain).connect(waveshaper);
     current = waveshaper;
   }
-  
+
   current.connect(dest);
   return dest;
 }
 
-// ===== Main Vocal Generation Function =====
+// ===== Main Generation Function =====
 
 export async function generateVocals(
   config: VocalConfig,
@@ -568,71 +692,88 @@ export async function generateVocals(
   rng: () => number,
 ): Promise<AudioBuffer | null> {
   const { lyrics, tempo, key, scale, structure, durationSeconds, vocalStyle, vocalIntensity, vocalEffects, genres } = config;
-  
+
   if (!lyrics || lyrics.trim().length === 0) return null;
-  
+
   onProgress({ stage: 'parsing', progress: 0 });
-  
-  // Step 1: Parse lyrics
+
+  // 1. Parse lyrics into syllable-segmented lines
   const lyricLines = parseLyrics(lyrics);
   if (lyricLines.length === 0) return null;
-  
-  onProgress({ stage: 'parsing', progress: 0.2 });
-  
-  // Step 2: Align lyrics to structure
+
+  onProgress({ stage: 'parsing', progress: 0.15 });
+
+  // 2. Align lyrics to song structure
   const vocalSegments = alignLyricsToStructure(lyricLines, structure, durationSeconds);
   if (vocalSegments.length === 0) return null;
-  
-  onProgress({ stage: 'aligning', progress: 0.3 });
-  
-  // Step 3: Get style parameters
+
+  onProgress({ stage: 'aligning', progress: 0.2 });
+
+  // 3. Build scale & style
   const styleParams = getStyleParams(vocalStyle, vocalIntensity);
   const { root, scale: parsedScale } = parseKey(`${key} ${scale}`);
-  const scaleMidi = getScaleMidi(root, parsedScale, styleParams.baseOctave, 8);
-  
-  // Step 4: Render vocals
-  onProgress({ stage: 'generating', progress: 0.35 });
-  
+  const scaleMidi = getScaleMidi(root, parsedScale, styleParams.baseOctave, 12);
+
+  // 4. Generate melody for each line
+  onProgress({ stage: 'melody', progress: 0.25 });
+
+  const lineMelodies: MelodyNote[][] = [];
+  for (let i = 0; i < vocalSegments.length; i++) {
+    const seg = vocalSegments[i];
+    const line = lyricLines.find(l => l.text === seg.text) || { text: seg.text, section: seg.sectionName, syllables: lineToSyllables(seg.text) };
+    const melody = generateLineMelody(
+      line.syllables.length,
+      scaleMidi,
+      seg.energy,
+      seg.sectionName,
+      tempo,
+      seg.endTime - seg.startTime,
+      rng,
+      vocalStyle,
+    );
+    lineMelodies.push(melody);
+  }
+
+  onProgress({ stage: 'melody', progress: 0.35 });
+
+  // 5. Render vocals
+  onProgress({ stage: 'generating', progress: 0.4 });
+
   const sampleRate = INTERNAL_SAMPLE_RATE;
   const ctx = new OfflineAudioContext(2, Math.ceil(sampleRate * durationSeconds), sampleRate);
-  
-  // Vocal bus with effects chain
+
   const vocalBus = ctx.createGain();
-  vocalBus.gain.value = 0.6; // Vocal level
-  
-  // Apply effects chain
+  vocalBus.gain.value = 0.65;
+
   const effectsBus = ctx.createGain();
   effectsBus.gain.value = 1.0;
   applyVocalEffects(ctx, vocalBus, effectsBus, vocalEffects, genres);
   effectsBus.connect(ctx.destination);
-  
-  // Render each vocal segment
+
   for (let i = 0; i < vocalSegments.length; i++) {
-    const segment = vocalSegments[i];
-    
-    // Clamp to audio duration
-    const startTime = Math.max(0, segment.startTime);
-    const endTime = Math.min(durationSeconds, segment.endTime);
-    
-    if (endTime > startTime) {
-      renderVocalSegment(ctx, vocalBus, segment, startTime, endTime, styleParams, scaleMidi, rng);
+    const seg = vocalSegments[i];
+    const melody = lineMelodies[i];
+    const line = lyricLines.find(l => l.text === seg.text) || { text: seg.text, section: seg.sectionName, syllables: lineToSyllables(seg.text) };
+
+    const startTime = Math.max(0, seg.startTime);
+    const endTime = Math.min(durationSeconds, seg.endTime);
+
+    if (endTime > startTime && melody.length > 0) {
+      renderVocalLine(ctx, vocalBus, { ...seg, startTime, endTime }, melody, line.syllables, styleParams, tempo, rng);
     }
-    
-    // Progress update
-    const genProgress = 0.35 + (i / vocalSegments.length) * 0.55;
+
+    const genProgress = 0.4 + (i / vocalSegments.length) * 0.5;
     onProgress({ stage: 'generating', progress: genProgress });
-    
-    // Yield to UI
+
     if (i % 4 === 0) await sleep(5);
   }
-  
+
   onProgress({ stage: 'mixing', progress: 0.92 });
-  
-  // Render the vocal buffer
+
   const vocalBuffer = await ctx.startRendering();
-  
+
   onProgress({ stage: 'mixing', progress: 1.0 });
-  
+
   return vocalBuffer;
 }
 
@@ -641,47 +782,43 @@ export async function generateVocals(
 export function mixVocalsIntoInstrumental(
   instrumental: AudioBuffer,
   vocals: AudioBuffer,
-  vocalLevel: number = 0.7, // 0-1, how prominent vocals are
+  vocalLevel: number = 0.7,
 ): AudioBuffer {
   const sampleRate = instrumental.sampleRate;
   const numChannels = instrumental.numberOfChannels;
   const length = instrumental.length;
-  
+
   const mixed = new AudioBuffer({ length, numberOfChannels: numChannels, sampleRate });
-  
+
   for (let ch = 0; ch < numChannels; ch++) {
     const instData = instrumental.getChannelData(ch);
     const vocalData = ch < vocals.numberOfChannels ? vocals.getChannelData(ch) : vocals.getChannelData(0);
     const mixData = mixed.getChannelData(ch);
-    
     const vocalSamples = Math.min(length, vocals.length);
-    
+
     for (let i = 0; i < length; i++) {
       const inst = instData[i];
-      // Slight ducking of instrumental when vocals are present
       const vocal = i < vocalSamples ? vocalData[i] * vocalLevel : 0;
       const vocalPresence = Math.abs(vocal) > 0.01 ? 1 : 0;
-      const instDuck = 1 - vocalPresence * 0.15; // Duck instrumental by 15% when vocals present
-      
+      const instDuck = 1 - vocalPresence * 0.15;
       mixData[i] = inst * instDuck + vocal;
     }
   }
-  
+
   return mixed;
 }
 
 // ===== Auto-generate Lyrics from Prompt =====
 
 export function generateDefaultLyrics(prompt: string, genres: string[], mood: string, structure: SectionPlan[]): string {
-  // Generate simple placeholder lyrics based on sections
   const lines: string[] = [];
   let verseCount = 0;
   let chorusCount = 0;
-  
+
   for (const section of structure) {
     const name = section.name.toLowerCase();
     if (name.includes('intro') || name.includes('outro') || name.includes('break')) continue;
-    
+
     if (name.includes('verse')) {
       verseCount++;
       lines.push(`[Verse ${verseCount}]`);
@@ -704,7 +841,7 @@ export function generateDefaultLyrics(prompt: string, genres: string[], mood: st
       lines.push('');
     }
   }
-  
+
   return lines.join('\n');
 }
 
