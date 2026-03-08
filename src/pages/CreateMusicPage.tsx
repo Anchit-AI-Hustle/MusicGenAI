@@ -156,6 +156,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const getFieldValue = (field: string): string => {
     switch (field) {
       case 'trackName': return title;
+      case 'albumName': return albumName;
+      case 'albumVibe': return albumVibe;
       case 'prompt': return musicPrompt;
       case 'genres': return selectedGenres.join(', ');
       case 'lyrics': return lyrics;
