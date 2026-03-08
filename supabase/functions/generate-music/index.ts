@@ -85,42 +85,66 @@ async function updateProgress(
   console.log(`[${trackId}] Stage: ${stage} | Progress: ${Math.round(progress * 100)}% | ETA: ${estimatedTimeLeft ?? 0}s`);
 }
 
-// ===== REPLICATE: Create prediction and poll =====
-async function replicateGenerate(
+// ===== REPLICATE: Create prediction with rate-limit awareness =====
+async function replicateCreatePrediction(
   apiToken: string,
   prompt: string,
   duration: number,
   modelVersion: string = "large",
+  seed?: number,
 ): Promise<string> {
-  const seed = Math.floor(Math.random() * 2147483647);
+  const actualSeed = seed ?? Math.floor(Math.random() * 2147483647);
+  const maxCreateAttempts = 10; // Handle 429s gracefully
 
-  const createRes = await fetch("https://api.replicate.com/v1/predictions", {
-    method: "POST",
-    headers: {
-      Authorization: `Token ${apiToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      version: "671ac645ce5e552cc63a54a2bbff63fcf798043055f2a26a81582518d03277d4",
-      input: {
-        prompt,
-        duration: Math.min(duration, 30),
-        model_version: modelVersion,
-        output_format: "wav",
-        normalization_strategy: "peak",
-        seed,
+  let predictionId = "";
+
+  for (let attempt = 1; attempt <= maxCreateAttempts; attempt++) {
+    const createRes = await fetch("https://api.replicate.com/v1/predictions", {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${apiToken}`,
+        "Content-Type": "application/json",
       },
-    }),
-  });
+      body: JSON.stringify({
+        version: "671ac645ce5e552cc63a54a2bbff63fcf798043055f2a26a81582518d03277d4",
+        input: {
+          prompt,
+          duration: Math.min(duration, 30),
+          model_version: modelVersion,
+          output_format: "wav",
+          normalization_strategy: "peak",
+          seed: actualSeed,
+        },
+      }),
+    });
 
-  if (!createRes.ok) {
-    const err = await createRes.text();
-    throw new Error(`Replicate create failed [${createRes.status}]: ${err}`);
+    if (createRes.ok) {
+      const prediction = await createRes.json();
+      predictionId = prediction.id;
+      console.log(`[Replicate] Prediction ${predictionId} created (seed=${actualSeed}, attempt=${attempt}) for "${prompt.substring(0, 60)}..."`);
+      break;
+    }
+
+    const errBody = await createRes.text();
+
+    if (createRes.status === 429) {
+      // Parse retry_after from response, default to exponential backoff
+      let waitSec = 10 * attempt;
+      try {
+        const parsed = JSON.parse(errBody);
+        if (parsed.retry_after) waitSec = Math.max(parsed.retry_after + 1, 2);
+      } catch { /* use default */ }
+      console.warn(`[Replicate] Rate limited (attempt ${attempt}/${maxCreateAttempts}). Waiting ${waitSec}s...`);
+      await new Promise(r => setTimeout(r, waitSec * 1000));
+      continue;
+    }
+
+    throw new Error(`Replicate create failed [${createRes.status}]: ${errBody}`);
   }
 
-  const prediction = await createRes.json();
-  const predictionId = prediction.id;
-  console.log(`[Replicate] Prediction ${predictionId} created (seed=${seed}) for "${prompt.substring(0, 60)}..."`);
+  if (!predictionId) {
+    throw new Error("Replicate rate limit: could not create prediction after multiple attempts");
+  }
 
   // Poll for completion (max 5 minutes)
   const maxPolls = 60;
@@ -136,6 +160,9 @@ async function replicateGenerate(
     if (!pollRes.ok) {
       const errBody = await pollRes.text();
       console.error(`[Replicate] Poll error: ${pollRes.status} ${errBody}`);
+      if (pollRes.status === 429) {
+        await new Promise(r => setTimeout(r, 10000));
+      }
       continue;
     }
 
