@@ -823,7 +823,7 @@ Durations MUST sum to exactly ${durationSec}.`,
     } catch (e) {
       const errorMsg = `Segment generation failed: ${e instanceof Error ? e.message : String(e)}`;
       console.error(`[${trackId}] ${errorMsg}`);
-      await supabase.from("tracks").update({ status: "failed", error_message: errorMsg }).eq("id", trackId);
+      await supabase.from("tracks").update({ status: "failed", current_stage: "Failed", estimated_time_left: 0, error_message: errorMsg }).eq("id", trackId);
       await supabase.from("music_creations").update({ status: "failed" }).eq("id", creationId);
       await broadcastProgress(supabase, jobId, -1, "Failed", 100, 0, 0, "0 seconds");
       return new Response(JSON.stringify({ error: errorMsg }), {
