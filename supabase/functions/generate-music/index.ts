@@ -935,14 +935,30 @@ Durations MUST sum to exactly ${durationSec}.`,
 
   } catch (e) {
     console.error("generate-music error:", e);
-    // Broadcast failure
     try {
       const supabaseForBroadcast = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      const { trackId: tid, jobId: jid } = await req.clone().json().catch(() => ({ trackId: "", jobId: "" }));
+      const { trackId: tid, creationId: cid, jobId: jid } = await req.clone().json().catch(() => ({ trackId: "", creationId: "", jobId: "" }));
+
+      if (tid) {
+        await supabaseForBroadcast.from("tracks").update({
+          status: "failed",
+          current_stage: "Failed",
+          estimated_time_left: 0,
+          error_message: e instanceof Error ? e.message : "Unknown error",
+        }).eq("id", tid);
+      }
+
+      if (cid) {
+        await supabaseForBroadcast.from("music_creations").update({ status: "failed" }).eq("id", cid);
+      }
+
       if (jid || tid) {
         await broadcastProgress(supabaseForBroadcast, jid || tid, -1, "Failed", 100, 0, 0, "0 seconds");
       }
-    } catch { /* ignore broadcast errors */ }
+    } catch (innerErr) {
+      console.error("Failure handling error:", innerErr);
+    }
+
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
