@@ -26,6 +26,8 @@ const steps = [
 ];
 
 export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
+  const [showDemo, setShowDemo] = useState(false);
+
   return (
     <div className="min-h-screen overflow-y-auto">
       {/* Hero Section */}
