@@ -332,11 +332,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const PIPELINE_STEPS = [
     { key: 'analyzing', label: 'Analyzing prompt', match: /analyz/i },
     { key: 'planning', label: 'Planning song structure', match: /plan/i },
-    { key: 'generating', label: 'Generating segments', match: /generat.*segment/i },
-    { key: 'vocals', label: 'Synthesizing vocals', match: /synth.*vocal|vocal/i },
-    { key: 'stitching', label: 'Stitching audio', match: /stitch|align/i },
-    { key: 'mastering', label: 'Mastering final track', match: /master/i },
-    { key: 'encoding', label: 'Encoding final track', match: /encod|final/i },
+    { key: 'generating', label: 'Generating segments', match: /generat/i },
+    { key: 'downloading', label: 'Downloading generated audio', match: /download/i },
+    { key: 'stitching', label: 'Stitching segments', match: /stitch/i },
+    { key: 'finalizing', label: 'Finalizing track', match: /final/i },
   ];
 
   const PipelineProgress: React.FC<{

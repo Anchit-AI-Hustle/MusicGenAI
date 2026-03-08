@@ -92,7 +92,8 @@ async function replicateGenerate(
   duration: number,
   modelVersion: string = "large",
 ): Promise<string> {
-  // Create prediction
+  const seed = Math.floor(Math.random() * 2147483647);
+
   const createRes = await fetch("https://api.replicate.com/v1/predictions", {
     method: "POST",
     headers: {
@@ -107,6 +108,7 @@ async function replicateGenerate(
         model_version: modelVersion,
         output_format: "wav",
         normalization_strategy: "peak",
+        seed,
       },
     }),
   });
@@ -118,7 +120,7 @@ async function replicateGenerate(
 
   const prediction = await createRes.json();
   const predictionId = prediction.id;
-  console.log(`[Replicate] Prediction ${predictionId} created for "${prompt.substring(0, 60)}..."`);
+  console.log(`[Replicate] Prediction ${predictionId} created (seed=${seed}) for "${prompt.substring(0, 60)}..."`);
 
   // Poll for completion (max 5 minutes)
   const maxPolls = 60;
@@ -132,7 +134,8 @@ async function replicateGenerate(
     });
 
     if (!pollRes.ok) {
-      console.error(`[Replicate] Poll error: ${pollRes.status}`);
+      const errBody = await pollRes.text();
+      console.error(`[Replicate] Poll error: ${pollRes.status} ${errBody}`);
       continue;
     }
 
@@ -159,7 +162,7 @@ async function downloadAudio(url: string): Promise<ArrayBuffer> {
   return await res.arrayBuffer();
 }
 
-// ===== HELPER: Generate segment with retry =====
+// ===== HELPER: Generate segment with retry (unique seed each attempt) =====
 async function generateSegmentWithRetry(
   apiToken: string,
   prompt: string,
@@ -168,7 +171,6 @@ async function generateSegmentWithRetry(
 ): Promise<{ audioUrl: string; buffer: ArrayBuffer }> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      // For segments > 30s, generate 30s (Replicate/MusicGen max)
       const cappedDuration = Math.min(duration, 30);
       const audioUrl = await replicateGenerate(apiToken, prompt, cappedDuration);
       const buffer = await downloadAudio(audioUrl);
@@ -186,82 +188,181 @@ async function generateSegmentWithRetry(
   throw new Error("Unreachable");
 }
 
-// ===== HELPER: Simple WAV concatenation =====
-// Concatenates WAV files by extracting PCM data and writing a new WAV header
-function concatenateWavBuffers(buffers: ArrayBuffer[]): ArrayBuffer {
-  if (buffers.length === 0) throw new Error("No buffers to concatenate");
-  if (buffers.length === 1) return buffers[0];
+// ===== HELPER: Parse WAV and extract PCM data =====
+interface WavInfo {
+  sampleRate: number;
+  numChannels: number;
+  bitsPerSample: number;
+  pcmData: Uint8Array;
+}
 
-  // Parse each WAV to extract PCM data
-  const pcmChunks: Uint8Array[] = [];
+function parseWav(buf: ArrayBuffer): WavInfo {
+  const view = new DataView(buf);
   let sampleRate = 44100;
   let numChannels = 1;
   let bitsPerSample = 16;
+  let pcmData = new Uint8Array(0);
 
-  for (const buf of buffers) {
-    const view = new DataView(buf);
-    // Read WAV header
-    const chunkSize = view.getUint32(4, true);
-    // Find 'fmt ' chunk
-    let offset = 12;
-    while (offset < buf.byteLength - 8) {
-      const chunkId = String.fromCharCode(
-        view.getUint8(offset), view.getUint8(offset + 1),
-        view.getUint8(offset + 2), view.getUint8(offset + 3)
-      );
-      const chunkLen = view.getUint32(offset + 4, true);
+  let offset = 12;
+  while (offset < buf.byteLength - 8) {
+    const chunkId = String.fromCharCode(
+      view.getUint8(offset), view.getUint8(offset + 1),
+      view.getUint8(offset + 2), view.getUint8(offset + 3)
+    );
+    const chunkLen = view.getUint32(offset + 4, true);
 
-      if (chunkId === "fmt ") {
-        numChannels = view.getUint16(offset + 10, true);
-        sampleRate = view.getUint32(offset + 12, true);
-        bitsPerSample = view.getUint16(offset + 22, true);
-      }
+    if (chunkId === "fmt ") {
+      numChannels = view.getUint16(offset + 10, true);
+      sampleRate = view.getUint32(offset + 12, true);
+      bitsPerSample = view.getUint16(offset + 22, true);
+    }
 
-      if (chunkId === "data") {
-        pcmChunks.push(new Uint8Array(buf, offset + 8, chunkLen));
-        break;
-      }
+    if (chunkId === "data") {
+      pcmData = new Uint8Array(buf, offset + 8, chunkLen);
+      break;
+    }
 
-      offset += 8 + chunkLen;
-      if (chunkLen % 2 !== 0) offset++; // WAV chunks are word-aligned
+    offset += 8 + chunkLen;
+    if (chunkLen % 2 !== 0) offset++; // WAV chunks are word-aligned
+  }
+
+  return { sampleRate, numChannels, bitsPerSample, pcmData };
+}
+
+// ===== HELPER: Concatenate WAV buffers with crossfade and trim =====
+function concatenateWavBuffers(buffers: ArrayBuffer[], targetDurationSec?: number, crossfadeSec: number = 0.5): ArrayBuffer {
+  if (buffers.length === 0) throw new Error("No buffers to concatenate");
+  if (buffers.length === 1) {
+    if (!targetDurationSec) return buffers[0];
+    // Trim single buffer if needed
+    const info = parseWav(buffers[0]);
+    return trimAndBuildWav(info, targetDurationSec);
+  }
+
+  const parsedSegments = buffers.map(buf => parseWav(buf));
+
+  // Use first segment's format for output
+  const { sampleRate, numChannels, bitsPerSample } = parsedSegments[0];
+  const bytesPerSample = bitsPerSample / 8;
+  const blockAlign = numChannels * bytesPerSample;
+  const crossfadeSamples = Math.floor(crossfadeSec * sampleRate);
+  const crossfadeBytes = crossfadeSamples * blockAlign;
+
+  // Calculate total PCM size with crossfade overlap
+  let totalPcmSize = 0;
+  for (let i = 0; i < parsedSegments.length; i++) {
+    totalPcmSize += parsedSegments[i].pcmData.byteLength;
+    if (i > 0) {
+      // Subtract crossfade overlap (only if both segments are long enough)
+      const prevLen = parsedSegments[i - 1].pcmData.byteLength;
+      const currLen = parsedSegments[i].pcmData.byteLength;
+      const actualCrossfade = Math.min(crossfadeBytes, Math.floor(prevLen / 4), Math.floor(currLen / 4));
+      totalPcmSize -= actualCrossfade;
     }
   }
 
-  // Calculate total PCM size
-  let totalPcmSize = 0;
-  for (const chunk of pcmChunks) totalPcmSize += chunk.byteLength;
+  // Allocate output PCM buffer
+  const outputPcm = new Uint8Array(totalPcmSize);
+  let writePos = 0;
 
-  // Build new WAV file
+  for (let segIdx = 0; segIdx < parsedSegments.length; segIdx++) {
+    const seg = parsedSegments[segIdx];
+    const segData = seg.pcmData;
+
+    if (segIdx === 0) {
+      // First segment: write fully
+      outputPcm.set(segData, writePos);
+      writePos += segData.byteLength;
+    } else {
+      const prevLen = parsedSegments[segIdx - 1].pcmData.byteLength;
+      const currLen = segData.byteLength;
+      const actualCrossfadeBytes = Math.min(crossfadeBytes, Math.floor(prevLen / 4), Math.floor(currLen / 4));
+      const actualCrossfadeSamples = Math.floor(actualCrossfadeBytes / blockAlign);
+
+      if (actualCrossfadeSamples > 0 && bitsPerSample === 16) {
+        // Back up write position for crossfade region
+        writePos -= actualCrossfadeBytes;
+
+        // Apply crossfade: blend prev tail with curr head
+        const prevView = new DataView(outputPcm.buffer, writePos, actualCrossfadeBytes);
+        const currView = new DataView(segData.buffer, segData.byteOffset, actualCrossfadeBytes);
+
+        for (let s = 0; s < actualCrossfadeSamples; s++) {
+          const fadeOut = 1.0 - (s / actualCrossfadeSamples); // prev fades out
+          const fadeIn = s / actualCrossfadeSamples; // curr fades in
+          for (let ch = 0; ch < numChannels; ch++) {
+            const byteOff = (s * numChannels + ch) * bytesPerSample;
+            const prevSample = prevView.getInt16(byteOff, true);
+            const currSample = currView.getInt16(byteOff, true);
+            const mixed = Math.round(prevSample * fadeOut + currSample * fadeIn);
+            const clamped = Math.max(-32768, Math.min(32767, mixed));
+            prevView.setInt16(byteOff, clamped, true);
+          }
+        }
+
+        writePos += actualCrossfadeBytes;
+        // Write rest of current segment (after crossfade region)
+        const remaining = new Uint8Array(segData.buffer, segData.byteOffset + actualCrossfadeBytes, segData.byteLength - actualCrossfadeBytes);
+        outputPcm.set(remaining, writePos);
+        writePos += remaining.byteLength;
+      } else {
+        // No crossfade possible, just append
+        outputPcm.set(segData, writePos);
+        writePos += segData.byteLength;
+      }
+    }
+  }
+
+  // Trim to actual written size
+  const finalPcm = outputPcm.slice(0, writePos);
+
+  // Trim to target duration if specified
+  let pcmToWrite = finalPcm;
+  if (targetDurationSec) {
+    const maxBytes = Math.floor(targetDurationSec * sampleRate * blockAlign);
+    if (pcmToWrite.byteLength > maxBytes) {
+      pcmToWrite = pcmToWrite.slice(0, maxBytes);
+    }
+  }
+
+  return buildWavFile(pcmToWrite, sampleRate, numChannels, bitsPerSample);
+}
+
+function trimAndBuildWav(info: WavInfo, targetDurationSec: number): ArrayBuffer {
+  const blockAlign = info.numChannels * (info.bitsPerSample / 8);
+  const maxBytes = Math.floor(targetDurationSec * info.sampleRate * blockAlign);
+  const trimmed = info.pcmData.byteLength > maxBytes
+    ? info.pcmData.slice(0, maxBytes)
+    : info.pcmData;
+  return buildWavFile(trimmed, info.sampleRate, info.numChannels, info.bitsPerSample);
+}
+
+function buildWavFile(pcm: Uint8Array, sampleRate: number, numChannels: number, bitsPerSample: number): ArrayBuffer {
   const headerSize = 44;
-  const wavBuffer = new ArrayBuffer(headerSize + totalPcmSize);
+  const wavBuffer = new ArrayBuffer(headerSize + pcm.byteLength);
   const wavView = new DataView(wavBuffer);
   const wavBytes = new Uint8Array(wavBuffer);
 
   // RIFF header
   wavBytes.set([0x52, 0x49, 0x46, 0x46], 0); // "RIFF"
-  wavView.setUint32(4, 36 + totalPcmSize, true);
+  wavView.setUint32(4, 36 + pcm.byteLength, true);
   wavBytes.set([0x57, 0x41, 0x56, 0x45], 8); // "WAVE"
 
   // fmt chunk
   wavBytes.set([0x66, 0x6D, 0x74, 0x20], 12); // "fmt "
-  wavView.setUint32(16, 16, true); // chunk size
-  wavView.setUint16(20, 1, true); // PCM format
+  wavView.setUint32(16, 16, true);
+  wavView.setUint16(20, 1, true); // PCM
   wavView.setUint16(22, numChannels, true);
   wavView.setUint32(24, sampleRate, true);
-  wavView.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true); // byte rate
-  wavView.setUint16(32, numChannels * (bitsPerSample / 8), true); // block align
+  wavView.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true);
+  wavView.setUint16(32, numChannels * (bitsPerSample / 8), true);
   wavView.setUint16(34, bitsPerSample, true);
 
   // data chunk
   wavBytes.set([0x64, 0x61, 0x74, 0x61], 36); // "data"
-  wavView.setUint32(40, totalPcmSize, true);
+  wavView.setUint32(40, pcm.byteLength, true);
 
-  let writeOffset = headerSize;
-  for (const chunk of pcmChunks) {
-    wavBytes.set(chunk, writeOffset);
-    writeOffset += chunk.byteLength;
-  }
-
+  wavBytes.set(pcm, headerSize);
   return wavBuffer;
 }
 
@@ -285,12 +386,29 @@ async function runParallel<T>(
   return results;
 }
 
+// ===== SECTION VARIATIONS for unique prompts =====
+const SECTION_MODIFIERS: Record<string, string> = {
+  intro: "atmospheric opening, building tension slowly",
+  build: "rising energy, adding layers and percussion",
+  peak: "maximum intensity, full arrangement",
+  drop: "heavy bass drop, distorted elements, powerful rhythm",
+  breakdown: "stripped back, ethereal, breathing space",
+  bridge: "transitional, melodic shift, emotional pivot",
+  climax: "emotional peak, all elements converging",
+  outro: "gradual fade, resolving energy, final atmosphere",
+  verse: "narrative section, melodic foundation",
+  chorus: "catchy hook, elevated energy, memorable melody",
+  extension: "sustained mood, gentle continuation",
+};
+
 // ===== MAIN PIPELINE =====
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const startTime = Date.now();
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -334,10 +452,8 @@ serve(async (req) => {
     await supabase.from("music_creations").update({ status: "processing", progress: 0 }).eq("id", creationId);
 
     const durationSec = frozenInput.durationSeconds;
-    const hasVocals = !!(frozenInput.lyrics && frozenInput.lyrics.trim().length > 0 && frozenInput.vocalStructure !== "Instrumental");
-    // Replicate is much faster than self-hosted: ~15-30s per segment
     const estSegmentTime = 25;
-    const estTotalSec = 20 + Math.ceil(durationSec / 30) * estSegmentTime + (hasVocals ? 40 : 0) + 10;
+    const estTotalSec = 20 + Math.ceil(durationSec / 30) * estSegmentTime + 10;
     let etaRemaining = estTotalSec;
 
     // ================================================================
@@ -406,7 +522,7 @@ Durations MUST sum to exactly ${durationSec}.`,
 
     let songPlan: SongPlan;
     if (planResult?.segments?.length > 0) {
-      // Cap each segment at 30s and fix total duration
+      // Cap each segment at 30s, floor at 5s
       for (const seg of planResult.segments) {
         if (seg.duration > 30) seg.duration = 30;
         if (seg.duration < 5) seg.duration = 10;
@@ -415,10 +531,8 @@ Durations MUST sum to exactly ${durationSec}.`,
       if (totalPlanned !== durationSec) {
         const diff = durationSec - totalPlanned;
         if (diff > 0 && diff <= 30) {
-          // Add extra segment
           planResult.segments.push({ name: "extension", duration: diff, description: "Extended section to match duration" });
         } else if (diff > 30) {
-          // Add multiple segments
           let remaining = diff;
           let extIdx = 1;
           while (remaining > 0) {
@@ -428,7 +542,6 @@ Durations MUST sum to exactly ${durationSec}.`,
             extIdx++;
           }
         } else if (diff < 0) {
-          // Trim last segment
           planResult.segments[planResult.segments.length - 1].duration += diff;
           if (planResult.segments[planResult.segments.length - 1].duration < 5) {
             planResult.segments.pop();
@@ -437,7 +550,7 @@ Durations MUST sum to exactly ${durationSec}.`,
       }
       songPlan = { segments: planResult.segments };
     } else {
-      // Fallback plan: split into 30s segments
+      // Fallback plan
       const numSegments = Math.ceil(durationSec / 30);
       const baseDuration = Math.floor(durationSec / numSegments);
       const remainder = durationSec - baseDuration * numSegments;
@@ -474,15 +587,17 @@ Durations MUST sum to exactly ${durationSec}.`,
 
     const MAX_PARALLEL = 3;
     const segProgressStart = 0.10;
-    const segProgressEnd = hasVocals ? 0.60 : 0.80;
+    const segProgressEnd = 0.70;
     let completedSegments = 0;
 
     const segmentTasks = songPlan.segments.map((seg, idx) => {
       return async (): Promise<ArrayBuffer> => {
+        // Build unique prompt per segment with section-specific modifiers
+        const sectionMod = SECTION_MODIFIERS[seg.name.replace(/_\d+$/, "")] || seg.description;
         const prompt = [
           frozenInput.musicPrompt,
           `${frozenInput.genres.join(", ") || "electronic"} music at ${frozenInput.tempoBpm} BPM.`,
-          `Section: ${seg.name} — ${seg.description}.`,
+          `Section: ${seg.name} — ${sectionMod}.`,
           `Mood: ${sentiment.emotionPolarity}. Energy: ${sentiment.energyIntensity}/10.`,
           frozenInput.artistInspiration ? `Influenced by: ${frozenInput.artistInspiration}.` : "",
           idx > 0 ? "Continue seamlessly from the previous section." : "Begin the track with a clear opening.",
@@ -490,9 +605,9 @@ Durations MUST sum to exactly ${durationSec}.`,
 
         await updateProgress(
           supabase, trackId, creationId,
-          `Generating segment ${idx + 1} of ${totalSegments} (${seg.name})`,
+          `Generating segments`,
           segProgressStart + (completedSegments / totalSegments) * (segProgressEnd - segProgressStart),
-          Math.max(0, (totalSegments - completedSegments) * estSegmentTime + (hasVocals ? 40 : 0) + 10)
+          Math.max(0, (totalSegments - completedSegments) * estSegmentTime + 10)
         );
 
         const { buffer } = await generateSegmentWithRetry(REPLICATE_API_TOKEN!, prompt, seg.duration);
@@ -532,52 +647,33 @@ Durations MUST sum to exactly ${durationSec}.`,
     }
 
     // ================================================================
-    // STEP 4 — VOCAL GENERATION (optional, using Replicate Bark)
+    // STEP 4 — DOWNLOADING GENERATED AUDIO (already done inline above)
     // ================================================================
-    let generatedLyrics = "";
-
-    if (hasVocals) {
-      await updateProgress(supabase, trackId, creationId, "Synthesizing vocals", 0.65, 40);
-
-      // Generate lyrics mapping
-      const lyricsResult = await callAI(
-        LOVABLE_API_KEY,
-        `You are a lyricist. Generate or refine lyrics for a song.`,
-        `Create or refine lyrics for a ${frozenInput.genres[0] || "music"} track:
-Original lyrics/theme: "${frozenInput.lyrics}"
-Segments: ${songPlan.segments.map(s => `${s.name} (${s.duration}s)`).join(", ")}
-Vocal structure: ${frozenInput.vocalStructure}
-Mood: ${sentiment.emotionPolarity}. Return the full lyrics text.`,
-        "generate_lyrics",
-        "Generate song lyrics",
-        {
-          fullText: { type: "string", description: "Complete lyrics text" },
-        },
-        ["fullText"]
-      );
-
-      generatedLyrics = lyricsResult?.fullText || frozenInput.lyrics;
-      console.log(`[${trackId}] Lyrics generated (${generatedLyrics.length} chars)`);
-      // Note: Full vocal synthesis via Replicate Bark can be added as a future enhancement
-    }
+    await updateProgress(supabase, trackId, creationId, "Downloading generated audio", 0.75, 15);
+    console.log(`[${trackId}] All ${totalSegments} segments downloaded`);
 
     // ================================================================
-    // STEP 5 — STITCHING AUDIO
+    // STEP 5 — STITCHING SEGMENTS (with crossfade + trim to exact duration)
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Stitching audio", 0.82, 12);
+    await updateProgress(supabase, trackId, creationId, "Stitching segments", 0.82, 10);
 
     let stitchedBuffer: ArrayBuffer;
     try {
-      stitchedBuffer = concatenateWavBuffers(segmentBuffers);
-      console.log(`[${trackId}] ✅ Stitched (${stitchedBuffer.byteLength} bytes)`);
+      stitchedBuffer = concatenateWavBuffers(segmentBuffers, durationSec, 0.5);
+      console.log(`[${trackId}] ✅ Stitched with crossfade (${stitchedBuffer.byteLength} bytes), trimmed to ${durationSec}s`);
     } catch (e) {
       console.error(`[${trackId}] Stitch error, raw concat fallback:`, e);
-      let totalSize = 0;
-      for (const buf of segmentBuffers) totalSize += buf.byteLength;
-      const raw = new Uint8Array(totalSize);
-      let off = 0;
-      for (const buf of segmentBuffers) { raw.set(new Uint8Array(buf), off); off += buf.byteLength; }
-      stitchedBuffer = raw.buffer;
+      // Fallback: simple concatenation without crossfade
+      try {
+        stitchedBuffer = concatenateWavBuffers(segmentBuffers, durationSec, 0);
+      } catch {
+        let totalSize = 0;
+        for (const buf of segmentBuffers) totalSize += buf.byteLength;
+        const raw = new Uint8Array(totalSize);
+        let off = 0;
+        for (const buf of segmentBuffers) { raw.set(new Uint8Array(buf), off); off += buf.byteLength; }
+        stitchedBuffer = raw.buffer;
+      }
     }
 
     // Save stitched track
@@ -587,24 +683,14 @@ Mood: ${sentiment.emotionPolarity}. Return the full lyrics text.`,
     });
 
     // ================================================================
-    // STEP 6 — MASTERING (lightweight normalization in edge function)
+    // STEP 6 — FINALIZING TRACK
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Mastering final track", 0.90, 6);
-
-    // Replicate outputs are already well-normalized, so we use the stitched output directly.
-    // A future enhancement could call a Replicate mastering model.
-    const masteredBuffer = stitchedBuffer;
-    console.log(`[${trackId}] ✅ Mastering complete (passthrough — Replicate output is pre-normalized)`);
-
-    // ================================================================
-    // STEP 7 — FINAL OUTPUT
-    // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Encoding final track", 0.95, 3);
+    await updateProgress(supabase, trackId, creationId, "Finalizing track", 0.92, 5);
 
     const finalPath = `tracks/${trackId}/final.wav`;
     const { error: uploadError } = await supabase.storage
       .from("music-files")
-      .upload(finalPath, new Uint8Array(masteredBuffer), { contentType: "audio/wav", upsert: true });
+      .upload(finalPath, new Uint8Array(stitchedBuffer), { contentType: "audio/wav", upsert: true });
 
     if (uploadError) {
       console.error("Final upload error:", uploadError);
@@ -617,29 +703,32 @@ Mood: ${sentiment.emotionPolarity}. Return the full lyrics text.`,
     const { data: urlData } = supabase.storage.from("music-files").getPublicUrl(finalPath);
     const audioUrl = urlData.publicUrl;
 
+    const generationTime = Math.round((Date.now() - startTime) / 1000);
+
     // Update DB
     await supabase.from("tracks").update({
       status: "completed", audio_url: audioUrl, progress: 1, duration_seconds: durationSec,
+      current_stage: "Complete",
     }).eq("id", trackId);
 
     await supabase.from("music_creations").update({
       status: "completed", progress: 1,
     }).eq("id", creationId);
 
-    console.log(`[${trackId}] ✅ Complete. Audio: ${audioUrl}`);
+    console.log(`[${trackId}] ✅ Complete in ${generationTime}s. Audio: ${audioUrl}`);
 
     return new Response(JSON.stringify({
       success: true,
       trackId,
       final_audio_url: audioUrl,
       duration: durationSec,
-      segments_used: songPlan.segments.map(s => ({ name: s.name, duration: s.duration, description: s.description })),
+      segments_generated: totalSegments,
       tempo: frozenInput.tempoBpm,
-      generated_lyrics: generatedLyrics || null,
+      generation_time: generationTime,
+      segments_used: songPlan.segments.map(s => ({ name: s.name, duration: s.duration, description: s.description })),
       pipeline: {
         sentiment,
         plan: songPlan,
-        hasVocals,
         engine: "replicate/musicgen (hosted GPU)",
       },
     }), {
