@@ -480,7 +480,8 @@ Create a chord progression, bassline pattern description, main melody motifs, an
     // ================================================================
     // STAGE 6 — RHYTHM GENERATION
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "rhythm-generation", 0.17);
+    etaRemaining -= 10;
+    await updateProgress(supabase, trackId, creationId, "Designing rhythm patterns", 0.17, etaRemaining);
 
     const rhythmResult: RhythmData = await callAI(
       LOVABLE_API_KEY,
