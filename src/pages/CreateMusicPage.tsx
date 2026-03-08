@@ -842,6 +842,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                           {track.status === 'completed' && (
                             <p className="text-sm text-muted-foreground">{formatDuration(track.duration)}</p>
                           )}
+                          {track.status === 'completed' && track.videoUrl && (
+                            <div className="mt-3">
+                              <VideoPlayer videoUrl={track.videoUrl} title={track.title} duration={track.duration} />
+                            </div>
+                          )}
                           {track.status === 'failed' && track.errorMessage && (
                             <p className="text-sm text-destructive mt-1">{track.errorMessage}</p>
                           )}
