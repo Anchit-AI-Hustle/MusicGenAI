@@ -251,45 +251,104 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
 };
 
 const DASH_PIPELINE_STEPS = [
-  { key: 'analyzing', label: 'Analyzing prompt', match: /analyz/i },
-  { key: 'expanding', label: 'Production brief', match: /expand/i },
-  { key: 'planning', label: 'Planning structure', match: /plan/i },
-  { key: 'generating', label: 'Generating music', match: /generat/i },
-  { key: 'downloading', label: 'Downloading audio', match: /download/i },
-  { key: 'stitching', label: 'Stitching track', match: /stitch/i },
-  { key: 'uploading', label: 'Finalizing assets', match: /finaliz|upload/i },
+  { key: 'analyzing', label: 'Analyzing user inputs', icon: '🔍', match: /analyz/i },
+  { key: 'expanding', label: 'Expanding production brief', icon: '📝', match: /expand/i },
+  { key: 'planning', label: 'Planning song structure', icon: '🎼', match: /plan/i },
+  { key: 'generating', label: 'Generating audio segments', icon: '🎵', match: /generat/i },
+  { key: 'downloading', label: 'Downloading audio segments', icon: '⬇️', match: /download/i },
+  { key: 'stitching', label: 'Stitching into final track', icon: '🔗', match: /stitch/i },
+  { key: 'finalizing', label: 'Finalizing audio output', icon: '💾', match: /finaliz|upload/i },
+  { key: 'video', label: 'Generating video', icon: '🎬', match: /video/i },
+  { key: 'complete', label: 'Preparing download', icon: '✅', match: /prepar|complete/i },
 ];
 
 const DashboardTrackProgress: React.FC<{
   currentStage: string; progress: number; estimatedTimeLeft: number;
   completedSegments: number; totalSegments: number;
 }> = ({ currentStage, progress, estimatedTimeLeft, completedSegments, totalSegments }) => {
-  const activeIdx = Math.max(0, DASH_PIPELINE_STEPS.findIndex(s => s.match.test(currentStage)));
-  const segMatch = currentStage.match(/\((\d+) of (\d+)\)/);
+  const currentStepIdx = DASH_PIPELINE_STEPS.findIndex(s => s.match.test(currentStage));
+  const activeIdx = currentStepIdx >= 0 ? currentStepIdx : 0;
+
+  const segmentMatch = currentStage.match(/Generating (\w+) segment \((\d+) of (\d+)\)/);
+  const segmentName = segmentMatch ? segmentMatch[1] : null;
+
+  const formatEta = (secs: number) => {
+    if (secs <= 0) return '';
+    if (secs >= 3600) return `~${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
+    if (secs >= 60) return `~${Math.floor(secs / 60)}m ${secs % 60}s`;
+    return `~${secs}s`;
+  };
 
   return (
-    <div className="mt-2 space-y-1.5">
-      <div className="flex items-center gap-2 text-xs">
-        <Loader2 className="w-3 h-3 text-primary animate-spin flex-shrink-0" />
-        <span className="text-primary font-medium truncate">
-          {DASH_PIPELINE_STEPS[activeIdx]?.label || currentStage}
-          {activeIdx === 3 && segMatch && ` (${segMatch[1]}/${segMatch[2]})`}
-          {activeIdx === 3 && !segMatch && ` (${completedSegments}/${totalSegments})`}
-        </span>
-        {estimatedTimeLeft > 0 && (
-          <span className="text-muted-foreground ml-auto flex-shrink-0">
-            ~{estimatedTimeLeft >= 60 ? `${Math.floor(estimatedTimeLeft / 60)}m ${estimatedTimeLeft % 60}s` : `${estimatedTimeLeft}s`}
-          </span>
-        )}
+    <div className="mt-3 space-y-2.5">
+      {/* Step indicators - full pipeline list */}
+      <div className="space-y-1">
+        {DASH_PIPELINE_STEPS.map((step, idx) => {
+          const isComplete = idx < activeIdx;
+          const isActive = idx === activeIdx;
+          const isPending = idx > activeIdx;
+
+          return (
+            <div key={step.key} className={`flex items-center gap-2 text-xs py-1 px-2 rounded-md transition-all ${
+              isActive ? 'bg-primary/10 border border-primary/20' : ''
+            } ${isPending ? 'opacity-30' : ''}`}>
+              {isComplete ? (
+                <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+              ) : isActive ? (
+                <Loader2 className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" />
+              ) : (
+                <Circle className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" />
+              )}
+              <span className="mr-0.5">{step.icon}</span>
+              <span className={`font-medium ${isActive ? 'text-primary' : isComplete ? 'text-green-400' : 'text-muted-foreground'}`}>
+                {step.label}
+              </span>
+              {isActive && step.key === 'generating' && (
+                <span className="text-primary/70 ml-auto">
+                  {segmentName && <span className="capitalize">{segmentName} · </span>}
+                  {completedSegments}/{totalSegments} segments
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
-      <Progress value={progress * 100} className="h-1.5" />
-      <div className="flex gap-0.5">
-        {DASH_PIPELINE_STEPS.map((step, idx) => (
-          <div key={step.key} className={`h-1 flex-1 rounded-full ${
-            idx < activeIdx ? 'bg-green-400' : idx === activeIdx ? 'bg-primary animate-pulse' : 'bg-muted'
-          }`} />
-        ))}
+
+      {/* Overall progress bar */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span className="font-medium">Step {activeIdx + 1} of {DASH_PIPELINE_STEPS.length}</span>
+          <div className="flex items-center gap-3">
+            {estimatedTimeLeft > 0 && (
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {formatEta(estimatedTimeLeft)} remaining
+              </span>
+            )}
+            <span className="font-mono">{Math.round(progress * 100)}%</span>
+          </div>
+        </div>
+        <Progress value={progress * 100} className="h-2" />
       </div>
+
+      {/* Segment sub-progress during generation */}
+      {activeIdx === 3 && totalSegments > 1 && (
+        <div className="space-y-1">
+          <div className="flex gap-1">
+            {Array.from({ length: totalSegments }).map((_, i) => (
+              <div
+                key={i}
+                className={`h-1.5 flex-1 rounded-full ${
+                  i < completedSegments ? 'bg-primary' : i === completedSegments ? 'bg-primary/50 animate-pulse' : 'bg-muted'
+                }`}
+              />
+            ))}
+          </div>
+          <p className="text-center text-xs text-muted-foreground">
+            {completedSegments} of {totalSegments} segments complete
+          </p>
+        </div>
+      )}
     </div>
   );
 };
