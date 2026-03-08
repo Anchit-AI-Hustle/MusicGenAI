@@ -835,7 +835,7 @@ Durations MUST sum to exactly ${durationSec}.`,
     // ================================================================
     // STEP 4 — DOWNLOADING GENERATED AUDIO (already done inline above)
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Downloading generated audio segments", 0.75, 15);
+    await updateProgress(supabase, trackId, creationId, "Downloading generated audio segments", 0.75, 15, jobId, 5, totalSegments, totalSegments);
     console.log(`[${trackId}] All ${totalSegments} segments downloaded`);
 
     // ================================================================
