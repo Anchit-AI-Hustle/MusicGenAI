@@ -125,84 +125,98 @@ async function updateProgress(supabase: any, trackId: string, creationId: string
   console.log(`[${trackId}] Stage: ${stage} | Progress: ${Math.round(progress * 100)}%`);
 }
 
-// ===== HELPER: Run Replicate prediction (poll-based) =====
-async function runReplicate(
-  apiToken: string,
-  modelVersion: string,
-  input: Record<string, any>,
+// ===== HELPER: Call Music Worker for instrumental generation =====
+async function callMusicWorker(
+  workerUrl: string,
+  prompt: string,
+  duration: number,
+  continuationAudioUrl?: string,
+  continuationStart?: number,
+  tempoBpm?: number,
   timeoutMs: number = 300000
-): Promise<string | null> {
-  // Create prediction
-  const createRes = await fetch("https://api.replicate.com/v1/predictions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ version: modelVersion, input }),
-  });
-
-  if (!createRes.ok) {
-    const errText = await createRes.text();
-    console.error("Replicate create error:", createRes.status, errText);
-    return null;
-  }
-
-  const prediction = await createRes.json();
-  const predictionId = prediction.id;
-  const getUrl = prediction.urls?.get || `https://api.replicate.com/v1/predictions/${predictionId}`;
-
-  console.log(`Replicate prediction created: ${predictionId}`);
-
-  // Poll for completion
-  const startTime = Date.now();
-  while (Date.now() - startTime < timeoutMs) {
-    await new Promise(r => setTimeout(r, 3000));
-
-    const pollRes = await fetch(getUrl, {
-      headers: { Authorization: `Bearer ${apiToken}` },
-    });
-    const pollData = await pollRes.json();
-
-    if (pollData.status === "succeeded") {
-      // MusicGen returns a string URL, Bark returns { audio_out: url }
-      if (typeof pollData.output === "string") return pollData.output;
-      if (pollData.output?.audio_out) return pollData.output.audio_out;
-      // If output is an array, take first element
-      if (Array.isArray(pollData.output) && pollData.output.length > 0) return pollData.output[0];
-      console.error("Unexpected output shape:", JSON.stringify(pollData.output));
-      return null;
-    }
-
-    if (pollData.status === "failed" || pollData.status === "canceled") {
-      console.error(`Replicate prediction ${pollData.status}:`, pollData.error);
-      return null;
-    }
-  }
-
-  console.error("Replicate prediction timed out");
-  return null;
-}
-
-// ===== HELPER: Download audio from URL as ArrayBuffer =====
-async function downloadAudio(url: string): Promise<ArrayBuffer | null> {
+): Promise<ArrayBuffer | null> {
   try {
-    const res = await fetch(url);
+    const body: Record<string, any> = { prompt, duration };
+    if (continuationAudioUrl) body.continuation_audio_url = continuationAudioUrl;
+    if (continuationStart != null) body.continuation_start = continuationStart;
+    if (tempoBpm) body.tempo_bpm = tempoBpm;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    const res = await fetch(`${workerUrl}/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
     if (!res.ok) {
-      console.error("Download failed:", res.status);
+      const errText = await res.text();
+      console.error(`Music worker /generate failed (${res.status}):`, errText);
       return null;
     }
+
     return await res.arrayBuffer();
   } catch (e) {
-    console.error("Download error:", e);
+    console.error("Music worker call error:", e);
     return null;
   }
 }
 
-// MusicGen model version (meta/musicgen latest stable)
-const MUSICGEN_VERSION = "671ac645ce5e552cc63a54a2bbff63fcf798043055d2dac5fc9e36a837eedcfb";
-// Bark model version (suno-ai/bark latest stable)
-const BARK_VERSION = "b76242b40d67c76ab6742e987628a2a9ac019e11d56ab96c4e91ce03b79b2787";
+// ===== HELPER: Call Music Worker for vocal generation =====
+async function callVocalWorker(
+  workerUrl: string,
+  text: string,
+  voicePreset: string,
+  textTemp: number,
+  waveformTemp: number,
+  timeoutMs: number = 180000
+): Promise<ArrayBuffer | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    const res = await fetch(`${workerUrl}/generate-vocals`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text,
+        voice_preset: voicePreset,
+        text_temp: textTemp,
+        waveform_temp: waveformTemp,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`Music worker /generate-vocals failed (${res.status}):`, errText);
+      return null;
+    }
+
+    return await res.arrayBuffer();
+  } catch (e) {
+    console.error("Vocal worker call error:", e);
+    return null;
+  }
+}
+
+// ===== HELPER: Check worker health =====
+async function checkWorkerHealth(workerUrl: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${workerUrl}/health`, { method: "GET" });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data.status === "ok" && data.musicgen_loaded === true;
+  } catch {
+    return false;
+  }
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
