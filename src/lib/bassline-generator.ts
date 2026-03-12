@@ -1,14 +1,15 @@
 /**
  * Bassline Generator
- * Creates genre-specific bass patterns using scales and rhythm templates.
+ * Creates dynamically-styled bass patterns using scales and rhythm templates.
+ * Now supports dynamic style selection from AI-inferred characteristics.
  */
 
 import { getScaleMidi } from './audio-utils';
 
 export interface BassEvent {
-  time: number; // in seconds
+  time: number;
   midi: number;
-  duration: number; // in seconds
+  duration: number;
   velocity: number;
 }
 
@@ -36,7 +37,6 @@ export function generateBassline(
   
   switch (style) {
     case 'rolling': {
-      // Continuous 8th note bass (techno/DnB)
       const step = beatDur / 2;
       while (t < startTime + duration) {
         if (rng() < 0.75 + energy * 0.2) {
@@ -52,9 +52,8 @@ export function generateBassline(
       break;
     }
     case 'offbeat': {
-      // Offbeat bass (reggae, dub)
       const step = beatDur;
-      t += beatDur / 2; // start on offbeat
+      t += beatDur / 2;
       while (t < startTime + duration) {
         events.push({
           time: t, midi: notes[noteIdx % notes.length],
@@ -66,7 +65,6 @@ export function generateBassline(
       break;
     }
     case 'acid': {
-      // 16th note acid bass with slides
       while (t < startTime + duration) {
         if (rng() < 0.6 + energy * 0.3) {
           const isAccent = rng() < 0.3;
@@ -83,8 +81,7 @@ export function generateBassline(
       break;
     }
     case 'syncopated': {
-      // Funk/hip-hop syncopated bass
-      const pattern = [0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1]; // syncopated 16ths
+      const pattern = [0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1];
       let step = 0;
       while (t < startTime + duration) {
         if (pattern[step % 16] || rng() < energy * 0.2) {
@@ -102,13 +99,11 @@ export function generateBassline(
       break;
     }
     case 'walking': {
-      // Jazz walking bass - quarter notes, stepwise motion
       while (t < startTime + duration) {
         events.push({
           time: t, midi: notes[noteIdx % notes.length],
           duration: beatDur * 0.85, velocity: 0.55 + rng() * 0.15,
         });
-        // Mostly stepwise, occasional leap
         const leap = rng();
         if (leap < 0.5) noteIdx += 1;
         else if (leap < 0.7) noteIdx -= 1;
@@ -121,7 +116,6 @@ export function generateBassline(
       break;
     }
     case 'sub': {
-      // Sub bass - long sustained notes (dubstep, trap)
       while (t < startTime + duration) {
         const noteDur = beatDur * (2 + rng() * 2);
         events.push({
@@ -136,7 +130,6 @@ export function generateBassline(
       break;
     }
     case 'slap': {
-      // Slap bass (funk/disco) - rhythmic with dead notes
       const step = sixteenth;
       while (t < startTime + duration) {
         const isHit = rng() < 0.5 + energy * 0.3;
@@ -154,10 +147,9 @@ export function generateBassline(
       break;
     }
     case 'arpeggiated': {
-      // Arpeggiated bass (trance, synthwave)
       const step = sixteenth;
       let patIdx = 0;
-      const arpPattern = [0, 2, 4, 2]; // scale degrees
+      const arpPattern = [0, 2, 4, 2];
       while (t < startTime + duration) {
         const degree = arpPattern[patIdx % arpPattern.length];
         const midi = notes[(noteIdx + degree) % notes.length];
@@ -179,7 +171,35 @@ export function generateBassline(
 }
 
 /**
- * Choose a bass style based on genre characteristics.
+ * Choose bass style dynamically from profile characteristics.
+ * Works with AI-inferred characteristics instead of hardcoded genre names.
+ */
+export function chooseBassStyleDynamic(
+  rhythmStyle: string,
+  characteristics: string[],
+  swing: number,
+): BassStyle {
+  const chars = characteristics.join(' ').toLowerCase();
+
+  // Infer from characteristics
+  if (chars.includes('acid') || chars.includes('squelchy')) return 'acid';
+  if (chars.includes('offbeat') || chars.includes('reggae') || chars.includes('dub')) return 'offbeat';
+  if (chars.includes('improvisational') || chars.includes('walking') || chars.includes('jazz')) return 'walking';
+  if (chars.includes('funky') || chars.includes('slap') || chars.includes('groovy')) return 'slap';
+  if (chars.includes('heavy') || chars.includes('808') || chars.includes('sub')) return 'sub';
+  if (chars.includes('arpeggio') || chars.includes('arpeggiated') || chars.includes('euphoric')) return 'arpeggiated';
+  if (chars.includes('syncopated') || chars.includes('bouncy')) return 'syncopated';
+
+  // Fallback based on rhythm style and swing
+  if (swing > 0.3) return 'walking';
+  if (rhythmStyle === 'halftime') return 'sub';
+  if (rhythmStyle === 'boom-bap') return 'syncopated';
+  if (rhythmStyle === 'breakbeat' || rhythmStyle === 'four-on-floor') return 'rolling';
+  return 'rolling';
+}
+
+/**
+ * Legacy: Choose bass style by genre name (kept for backward compatibility).
  */
 export function chooseBassStyle(rhythmStyle: string, genreName: string): BassStyle {
   const g = genreName.toLowerCase();

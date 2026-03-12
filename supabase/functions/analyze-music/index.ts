@@ -74,73 +74,95 @@ serve(async (req) => {
       musicPrompt = "", genres = [], durationSeconds = 180,
       lyrics = "", artistInspiration = "", tempoBpm = 120,
       vocalStructure = "Instrumental", vocalStyle = "",
-      mood = "", musicalKey = "D minor",
+      mood = "", musicalKey = "",
+      songStructure = "",
     } = input;
 
-    const genreStr = genres.length > 0 ? genres.join(", ") : "electronic";
+    const genreStr = genres.length > 0 ? genres.join(", ") : "not specified — infer from prompt";
 
-    // ===== STEP 1: Sentiment + Production Brief (combined for speed) =====
-    const briefResult = await callAI(
+    // ===== STEP 1: StyleProfile + Production Brief (combined AI call) =====
+    const styleResult = await callAI(
       LOVABLE_API_KEY,
-      `You are an expert music producer and genre specialist. You deeply understand ${genreStr} music.
-Generate a production brief for AI music synthesis. Be specific about instruments, sonic textures, and production techniques appropriate for the genre.
-Consider the full history and conventions of the genre when recommending instruments and structures.`,
-      `User prompt: "${musicPrompt}"
-Genres: ${genreStr}
-Tempo: ${tempoBpm} BPM
-Key: ${musicalKey}
-Artist Inspiration: "${artistInspiration || "None"}"
-Mood: "${mood || "not specified"}"
-Vocal Style: ${vocalStyle || "Instrumental"}
-Lyrics: "${lyrics || "None"}"
+      `You are an expert music producer, composer, and genre specialist who deeply understands ALL music styles worldwide.
+Your job is to infer a complete musical StyleProfile from the user's prompt, even if they don't specify a genre.
+You must dynamically determine ALL musical parameters — tempo tendency, rhythm patterns, instrument palette, harmonic style, groove feel, and song structure.
+NEVER rely on templates. Each output must be uniquely tailored to the prompt.
+If genres are specified, use them as guidance. If not, infer the style entirely from the prompt text.
 
-Generate a production brief with:
-- genre and subgenre classification
-- mood and atmosphere description
-- 4-8 specific instruments that are authentic to this genre
-- energy level 1-10
-- recommended key and scale
-- energy curve type (build-drop, verse-chorus, through-composed, arc, plateau, escalating)`,
-      "create_production_brief",
-      "Create a structured production brief for any music genre",
+For rhythmStyle, choose one of: four-on-floor, breakbeat, boom-bap, swing, straight, shuffle, halftime, polyrhythm
+For grooveTemplate, choose one of: warehouse, berlin, acid, minimal, swing, shuffle
+For harmonicStyle, choose one of: minor, major, dorian, phrygian, mixolydian, harmonic_minor, chromatic, pentatonic, blues, whole_tone, lydian
+For energyCurve, choose one of: build-drop, verse-chorus, through-composed, arc, plateau, escalating
+For each instrument, use descriptive names like: kick, snare, clap, hihat, ride, bass, acid_synth, pad, lead_synth, strings, brass, guitar_clean, guitar_distorted, piano, organ, sax, flute, percussion, shaker, tambourine, tabla, sitar, erhu, koto, steel_drums, marimba, harp, cello, choir, vocal_chop, field_recording, texture, drone, noise, fx`,
+      `User prompt: "${musicPrompt}"
+Genres specified: ${genreStr}
+Tempo hint: ${tempoBpm} BPM (user may override — suggest your own if 120 is default)
+Artist Inspiration: "${artistInspiration || "None"}"
+Mood: "${mood || "infer from prompt"}"
+Vocal Style: ${vocalStyle || "Instrumental"}
+Lyrics: "${lyrics ? lyrics.substring(0, 200) : "None"}"
+Song structure hint: "${songStructure || "generate dynamically"}"
+
+Generate a complete StyleProfile with:
+1. The actual inferred genre and subgenre (even if user didn't specify)
+2. Optimal tempo for this style (vary slightly from defaults, e.g. not always exactly 128 for house)
+3. Musical key root note and scale that fits the mood
+4. Energy level 1-10
+5. Rhythm style, groove template, harmonic style
+6. Density (0.0-1.0 how many layers active), swing amount (0.0-1.0)
+7. 4-10 specific instruments authentic to this style
+8. Energy curve type
+9. Song structure as array of section names
+10. Mood and atmosphere descriptions
+11. Style characteristics (3-5 descriptive words)`,
+      "create_style_profile",
+      "Create a complete dynamic StyleProfile for any music style inferred from the prompt",
       {
-        genre: { type: "string", description: "Primary genre" },
-        subgenre: { type: "string", description: "Subgenre" },
+        genre: { type: "string", description: "Primary genre inferred from prompt" },
+        subgenre: { type: "string", description: "Specific subgenre" },
+        tempo: { type: "number", description: "Optimal BPM for this style (add slight variation, never exact round numbers)" },
+        rootKey: { type: "string", description: "Musical key root note e.g. 'C', 'D#', 'Bb'" },
+        scale: { type: "string", description: "Scale type: minor, major, dorian, phrygian, mixolydian, harmonic_minor, chromatic, pentatonic, blues, whole_tone, lydian" },
+        energyLevel: { type: "number", description: "Energy 1-10" },
+        rhythmStyle: { type: "string", description: "One of: four-on-floor, breakbeat, boom-bap, swing, straight, shuffle, halftime, polyrhythm" },
+        grooveTemplate: { type: "string", description: "One of: warehouse, berlin, acid, minimal, swing, shuffle" },
+        harmonicStyle: { type: "string", description: "Harmonic approach matching the scale choice" },
+        density: { type: "number", description: "Layer density 0.0-1.0" },
+        swing: { type: "number", description: "Swing amount 0.0-1.0" },
+        instruments: { type: "array", items: { type: "string" }, description: "4-10 genre-authentic instruments" },
+        energyCurve: { type: "string", description: "One of: build-drop, verse-chorus, through-composed, arc, plateau, escalating" },
+        structureTemplate: { type: "array", items: { type: "string" }, description: "Section names for song structure e.g. ['intro', 'verse', 'chorus', 'verse', 'chorus', 'bridge', 'chorus', 'outro']" },
         mood: { type: "string", description: "Mood description" },
         atmosphere: { type: "string", description: "Atmospheric quality" },
-        instruments: { type: "array", items: { type: "string" }, description: "4-8 genre-authentic instruments" },
-        energyLevel: { type: "number", description: "Energy 1-10" },
-        recommendedKey: { type: "string", description: "Musical key note e.g. 'D'" },
-        recommendedScale: { type: "string", description: "Scale type e.g. 'minor', 'major', 'dorian'" },
-        energyCurve: { type: "string", description: "One of: build-drop, verse-chorus, through-composed, arc, plateau, escalating" },
+        characteristics: { type: "array", items: { type: "string" }, description: "3-5 style characteristic words" },
       },
-      ["genre", "subgenre", "mood", "atmosphere", "instruments", "energyLevel", "recommendedKey", "recommendedScale", "energyCurve"]
+      ["genre", "subgenre", "tempo", "rootKey", "scale", "energyLevel", "rhythmStyle", "grooveTemplate", "harmonicStyle", "density", "swing", "instruments", "energyCurve", "structureTemplate", "mood", "atmosphere", "characteristics"]
     );
 
     // ===== STEP 2: Song Structure =====
+    const inferredGenre = styleResult?.genre || genres[0] || "electronic";
+    const inferredTempo = styleResult?.tempo || tempoBpm;
+
     const structureResult = await callAI(
       LOVABLE_API_KEY,
-      `You are a professional song structure planner specializing in ${genreStr} music.
-Plan a song with sections. Each section has a name, duration (seconds), and energy level (0.0 to 1.0).
+      `You are a professional song structure planner. You create unique, dynamic song structures.
+NEVER use the same structure twice. Vary section order, duration ratios, and energy curves.
+Plan a song with sections. Each section has a name, duration (seconds), energy (0.0 to 1.0), and description.
 Section durations MUST sum to EXACTLY ${durationSeconds} seconds.
-Use genre-appropriate section names:
-- Electronic: intro, build, drop, breakdown, second_drop, outro
-- Hip Hop: intro, verse, hook, verse, hook, bridge, hook, outro
-- Rock: intro, verse, chorus, verse, chorus, solo, chorus, outro
-- Jazz: intro, theme, solo, theme, outro
-- Classical: exposition, development, recapitulation, coda
-- Pop: intro, verse, pre_chorus, chorus, verse, chorus, bridge, chorus, outro
-Energy should follow a natural arc appropriate for the genre.`,
-      `Plan structure for a ${durationSeconds}-second ${genreStr} track at ${tempoBpm} BPM.
-Mood: ${briefResult?.mood || mood || "neutral"}. Energy: ${briefResult?.energyLevel || 5}/10.
+Use the style's energy curve to guide energy levels across sections.
+Consider the inferred style: ${inferredGenre} at ${inferredTempo} BPM.`,
+      `Plan structure for a ${durationSeconds}-second ${inferredGenre} track at ${inferredTempo} BPM.
+Mood: ${styleResult?.mood || mood || "neutral"}. Energy: ${styleResult?.energyLevel || 5}/10.
 Vocal structure: "${vocalStructure}".
 Artist inspiration: "${artistInspiration || "None"}".
-Energy curve type: ${briefResult?.energyCurve || "verse-chorus"}.
+Energy curve type: ${styleResult?.energyCurve || "verse-chorus"}.
+Structure template hint: ${(styleResult?.structureTemplate || []).join(" → ") || "generate freely"}.
+Song structure request: "${songStructure || "dynamic"}".
 
 Return sections with name, duration (seconds), energy (0.0-1.0), and description.
-Durations MUST sum to exactly ${durationSeconds}.`,
+Durations MUST sum to exactly ${durationSeconds}. Create a UNIQUE structure.`,
       "plan_structure",
-      "Plan genre-appropriate song structure",
+      "Plan genre-appropriate song structure with energy curve",
       {
         sections: {
           type: "array",
@@ -177,50 +199,51 @@ Durations MUST sum to exactly ${durationSeconds}.`,
         sections[sections.length - 1].duration += durationSeconds - currentTotal;
       }
     } else {
-      // Fallback
-      const templates: Record<string, Array<{name: string; pct: number; energy: number}>> = {
-        'build-drop': [
-          { name: "intro", pct: 0.1, energy: 0.2 }, { name: "build", pct: 0.12, energy: 0.5 },
-          { name: "drop", pct: 0.2, energy: 0.9 }, { name: "breakdown", pct: 0.1, energy: 0.25 },
-          { name: "build_2", pct: 0.1, energy: 0.6 }, { name: "second_drop", pct: 0.2, energy: 0.95 },
-          { name: "outro", pct: 0.18, energy: 0.15 },
-        ],
-        'verse-chorus': [
-          { name: "intro", pct: 0.08, energy: 0.2 }, { name: "verse", pct: 0.15, energy: 0.4 },
-          { name: "chorus", pct: 0.15, energy: 0.7 }, { name: "verse", pct: 0.15, energy: 0.45 },
-          { name: "chorus", pct: 0.15, energy: 0.75 }, { name: "bridge", pct: 0.1, energy: 0.5 },
-          { name: "chorus", pct: 0.14, energy: 0.85 }, { name: "outro", pct: 0.08, energy: 0.15 },
-        ],
-      };
-      const curveType = briefResult?.energyCurve || 'verse-chorus';
-      const tmpl = templates[curveType] || templates['verse-chorus'];
+      // Fallback using structureTemplate from style
+      const template = styleResult?.structureTemplate || ["intro", "verse", "chorus", "verse", "chorus", "outro"];
+      const n = template.length;
       let remaining = durationSeconds;
-      sections = tmpl.map((t, i) => {
-        const isLast = i === tmpl.length - 1;
-        const dur = isLast ? remaining : Math.round(durationSeconds * t.pct);
+      sections = template.map((name: string, i: number) => {
+        const isLast = i === n - 1;
+        const dur = isLast ? remaining : Math.round(durationSeconds / n);
         remaining -= dur;
-        return { name: t.name, duration: Math.max(2, dur), energy: t.energy, description: "" };
+        return { name, duration: Math.max(2, dur), energy: 0.3 + (i / n) * 0.5, description: "" };
       });
     }
 
-    // Parse musical key
-    const keyParts = musicalKey.split(/\s+/);
-    const rootKey = briefResult?.recommendedKey || keyParts[0] || "D";
-    const scaleType = briefResult?.recommendedScale || keyParts.slice(1).join(" ") || "minor";
+    // Build the StyleProfile that will be used directly by the browser engine
+    const styleProfile = {
+      tempoRange: [Math.max(60, (styleResult?.tempo || inferredTempo) - 5), (styleResult?.tempo || inferredTempo) + 5] as [number, number],
+      instruments: styleResult?.instruments || ["kick", "bass", "synth", "pad"],
+      rhythmStyle: styleResult?.rhythmStyle || "straight",
+      grooveTemplate: styleResult?.grooveTemplate || "minimal",
+      structureTemplate: styleResult?.structureTemplate || sections.map((s: any) => s.name),
+      harmonicStyle: styleResult?.harmonicStyle || "minor",
+      energyCurve: styleResult?.energyCurve || "verse-chorus",
+      density: Math.max(0, Math.min(1, styleResult?.density ?? 0.6)),
+      swing: Math.max(0, Math.min(1, styleResult?.swing ?? 0.0)),
+      characteristics: styleResult?.characteristics || ["dynamic"],
+    };
+
+    // Determine key
+    const rootKey = styleResult?.rootKey || (musicalKey ? musicalKey.split(/\s+/)[0] : "D");
+    const scaleType = styleResult?.scale || (musicalKey ? musicalKey.split(/\s+/).slice(1).join(" ") || "minor" : "minor");
 
     const musicIntent = {
-      genre: briefResult?.genre || genres[0] || "electronic",
-      subgenre: briefResult?.subgenre || "",
-      tempo: tempoBpm,
+      genre: inferredGenre,
+      subgenre: styleResult?.subgenre || "",
+      tempo: inferredTempo,
       key: rootKey,
       scale: scaleType,
-      mood: briefResult?.mood || mood || "neutral",
-      energy: briefResult?.energyLevel || 5,
+      mood: styleResult?.mood || mood || "neutral",
+      energy: styleResult?.energyLevel || 5,
       structure: sections,
-      instruments: briefResult?.instruments || ["kick", "bass", "synth", "pad"],
-      atmosphere: briefResult?.atmosphere || "immersive",
+      instruments: styleProfile.instruments,
+      atmosphere: styleResult?.atmosphere || "immersive",
       durationSeconds,
-      genres: genres,
+      genres: genres.length > 0 ? genres : [inferredGenre],
+      // NEW: full StyleProfile for the browser engine
+      styleProfile,
     };
 
     return new Response(JSON.stringify({ musicIntent }), {

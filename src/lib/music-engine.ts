@@ -1,19 +1,25 @@
 /**
  * Browser-based music generation engine using Web Audio API OfflineAudioContext.
- * Genre-aware: adapts synthesis, patterns, and arrangements to any music style.
- * Uses genre ontology, groove engine, drum patterns, bassline generator,
- * melody generator, arrangement engine, and transition engine.
+ * 
+ * UPGRADED: Now uses AI-inferred StyleProfile as primary input.
+ * Falls back to hardcoded genre profiles only when StyleProfile is unavailable.
+ * 
+ * Features:
+ * - Dynamic style inference (any genre, any style)
+ * - Motif-based melody generation with hook engine
+ * - Section-based rendering with smooth transitions
+ * - Professional mastering pipeline
  */
 
 import {
   midiToFreq, getScaleMidi, parseKey,
   masterAudio, INTERNAL_SAMPLE_RATE,
 } from './audio-utils';
-import { getGenreProfile, blendGenreProfiles, type GenreProfile } from './genre-ontology';
+import { createProfileFromAI, blendGenreProfiles, type GenreProfile } from './genre-ontology';
 import { getGrooveTemplate, applyGrooveTiming, getGrooveVelocity } from './groove-engine';
 import { getDrumPattern, getDrumFill, type DrumHit } from './drum-patterns';
-import { generateBassline, chooseBassStyle, type BassStyle } from './bassline-generator';
-import { generateMelody, generateChords, chooseMelodyStyle } from './melody-generator';
+import { generateBassline, chooseBassStyleDynamic, type BassStyle } from './bassline-generator';
+import { generateMelody, generateChords, chooseMelodyStyle, generateMotif, generateHook, type Motif } from './melody-generator';
 import { generateArrangement, getTransitionType } from './arrangement-engine';
 import { renderTransition } from './transition-engine';
 
@@ -32,6 +38,19 @@ export interface MusicIntent {
   atmosphere: string;
   durationSeconds: number;
   genres?: string[]; // multiple genres for blending
+  // NEW: AI-inferred style profile
+  styleProfile?: {
+    tempoRange?: [number, number];
+    instruments?: string[];
+    rhythmStyle?: string;
+    grooveTemplate?: string;
+    structureTemplate?: string[];
+    harmonicStyle?: string;
+    energyCurve?: string;
+    density?: number;
+    swing?: number;
+    characteristics?: string[];
+  };
 }
 
 export interface SectionPlan {
@@ -72,7 +91,6 @@ function renderKick(
   osc.start(time);
   osc.stop(time + decay + 0.1);
 
-  // Transient click for hard kicks
   if (style === 'hard' && velocity > 0.5) {
     const click = ctx.createOscillator();
     const clickGain = ctx.createGain();
@@ -90,7 +108,6 @@ function renderSnare(
   ctx: OfflineAudioContext, dest: AudioNode,
   time: number, velocity: number, style: string = 'default'
 ) {
-  // Noise component
   const dur = style === 'brush' ? 0.08 : 0.15;
   const bufSize = Math.ceil(ctx.sampleRate * dur);
   const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
@@ -109,7 +126,6 @@ function renderSnare(
   src.start(time);
   src.stop(time + dur + 0.01);
 
-  // Tonal body (not for brush)
   if (style !== 'brush') {
     const osc = ctx.createOscillator();
     const oscGain = ctx.createGain();
@@ -128,7 +144,6 @@ function renderClap(
   ctx: OfflineAudioContext, dest: AudioNode,
   time: number, velocity: number
 ) {
-  // Multi-layer clap
   for (let layer = 0; layer < 3; layer++) {
     const delay = layer * 0.008;
     const bufSize = Math.ceil(ctx.sampleRate * 0.12);
@@ -252,7 +267,6 @@ function renderDrumHit(
   }
 }
 
-/** Render a bass note */
 function renderBassNote(
   ctx: OfflineAudioContext, dest: AudioNode,
   time: number, freq: number, duration: number, velocity: number,
@@ -275,7 +289,6 @@ function renderBassNote(
   osc.stop(time + duration + 0.01);
 }
 
-/** Render an acid/lead synth note */
 function renderLeadNote(
   ctx: OfflineAudioContext, dest: AudioNode,
   time: number, freq: number, duration: number, velocity: number,
@@ -299,7 +312,6 @@ function renderLeadNote(
   osc.stop(time + duration + 0.01);
 }
 
-/** Render a pad chord */
 function renderPadChord(
   ctx: OfflineAudioContext, dest: AudioNode,
   time: number, freqs: number[], duration: number, velocity: number
@@ -324,17 +336,13 @@ function renderPadChord(
 
 // ===== Segment-based Generation =====
 
-const SEGMENT_DURATION = 20; // seconds per segment
+const SEGMENT_DURATION = 20;
 
 export interface SegmentProgress {
   segmentIndex: number;
   totalSegments: number;
 }
 
-/**
- * Render a single audio segment (startTime..endTime) from the full intent.
- * Returns a small AudioBuffer for just that segment.
- */
 async function renderSegment(
   intent: MusicIntent,
   segmentIndex: number,
@@ -348,43 +356,40 @@ async function renderSegment(
   beatDuration: number,
   sixteenthDur: number,
   bassStyle: BassStyle,
-  melodyStyle: 'lead' | 'arp' | 'riff' | 'ambient',
+  melodyStyle: 'lead' | 'arp' | 'riff' | 'ambient' | 'hook',
   leadWaveform: OscillatorType,
   bassWaveform: OscillatorType,
   rng: () => number,
+  trackMotif: Motif,
+  trackHook: Motif,
 ): Promise<AudioBuffer> {
   const segDuration = endTime - startTime;
   const sampleRate = INTERNAL_SAMPLE_RATE;
   const numChannels = 2;
   const ctx = new OfflineAudioContext(numChannels, Math.ceil(sampleRate * segDuration), sampleRate);
 
-  // Master compressor with safe gain staging
   const compressor = ctx.createDynamicsCompressor();
-  compressor.threshold.value = -18; // Lower threshold for safer headroom
+  compressor.threshold.value = -18;
   compressor.knee.value = 8;
   compressor.ratio.value = 4;
   compressor.attack.value = 0.003;
   compressor.release.value = 0.15;
   
-  // Master gain for headroom control (-6dB target)
   const masterGain = ctx.createGain();
-  masterGain.gain.value = 0.5; // -6dB headroom
+  masterGain.gain.value = 0.5;
   compressor.connect(masterGain).connect(ctx.destination);
 
-  // Channel buses with conservative gain staging
   const drumBus = ctx.createGain(); drumBus.gain.value = 0.65; drumBus.connect(compressor);
   const bassBus = ctx.createGain(); bassBus.gain.value = 0.55; bassBus.connect(compressor);
   const synthBus = ctx.createGain(); synthBus.gain.value = 0.40; synthBus.connect(compressor);
   const padBus = ctx.createGain(); padBus.gain.value = 0.30; padBus.connect(compressor);
   const fxBus = ctx.createGain(); fxBus.gain.value = 0.45; fxBus.connect(compressor);
 
-  // Find which sections overlap this segment
   let sectionStart = 0;
   for (let sIdx = 0; sIdx < sections.length; sIdx++) {
     const section = sections[sIdx];
     const sectionEnd = sectionStart + section.duration;
 
-    // Skip sections that don't overlap this segment
     if (sectionEnd <= startTime || sectionStart >= endTime) {
       sectionStart = sectionEnd;
       continue;
@@ -400,15 +405,12 @@ async function renderSegment(
     const isVerse = name.includes('verse');
     const isChorus = name.includes('chorus') || name.includes('hook');
 
-    // Overlap bounds in global time
     const overlapStart = Math.max(sectionStart, startTime);
     const overlapEnd = Math.min(sectionEnd, endTime);
-
-    // Convert to local segment time (0-based)
     const localStart = overlapStart - startTime;
     const localEnd = overlapEnd - startTime;
 
-    // Transitions at section start (if within this segment)
+    // Transitions
     if (sIdx > 0 && sectionStart >= startTime && sectionStart < endTime) {
       const prevEnergy = sections[sIdx - 1].energy;
       const transType = getTransitionType(prevEnergy, energy, rng);
@@ -420,12 +422,11 @@ async function renderSegment(
     if (energy > 0.1 && !isBreakdown) {
       const pattern = getDrumPattern(profile.rhythmStyle, energy, rng);
       let barStartGlobal = isIntro ? sectionStart + section.duration * 0.3 : sectionStart;
-      // Align to bar boundaries
       const barLen = beatDuration * 4;
       if (barStartGlobal < overlapStart) {
         barStartGlobal = overlapStart - ((overlapStart - barStartGlobal) % barLen);
         if (barStartGlobal < overlapStart) barStartGlobal += barLen;
-        barStartGlobal -= barLen; // include partial bar
+        barStartGlobal -= barLen;
       }
 
       while (barStartGlobal < overlapEnd) {
@@ -481,11 +482,20 @@ async function renderSegment(
       }
     }
 
-    // MELODY / LEAD
+    // MELODY / LEAD / HOOK
     if ((isDrop || isBuild || isChorus || isVerse) && energy > 0.3) {
       const effStart = Math.max(sectionStart, overlapStart);
       const effEnd = Math.min(sectionEnd, overlapEnd);
-      const melEvents = generateMelody(root, parsedScale, effStart, effEnd - effStart, beatDuration, energy, isDrop || isChorus ? melodyStyle : 'lead', rng);
+
+      // Use hook style for high-energy sections (drops, choruses), motif-lead for verses
+      const sectionMelodyStyle = (isDrop || isChorus) && energy > 0.65 ? 'hook' as const : melodyStyle;
+
+      const melEvents = generateMelody(
+        root, parsedScale, effStart, effEnd - effStart, beatDuration, energy,
+        sectionMelodyStyle, rng,
+        trackMotif, // pass the track's motif for coherence
+        trackHook,  // pass the track's hook for high-energy sections
+      );
       for (const evt of melEvents) {
         const groovedGlobal = applyGrooveTiming(evt.time, sixteenthDur, groove, rng);
         if (groovedGlobal >= overlapStart && groovedGlobal < overlapEnd) {
@@ -518,12 +528,9 @@ async function renderSegment(
   return await ctx.startRendering();
 }
 
-/** Concatenate multiple AudioBuffers into one */
 function concatenateBuffers(buffers: AudioBuffer[], sampleRate: number): AudioBuffer {
   const totalLength = buffers.reduce((acc, b) => acc + b.length, 0);
   const numChannels = buffers[0]?.numberOfChannels || 2;
-  const result = new OfflineAudioContext(numChannels, totalLength, sampleRate);
-  // We can't use OfflineAudioContext for simple concatenation, use manual copy
   const finalBuffer = new AudioBuffer({ length: totalLength, numberOfChannels: numChannels, sampleRate });
   
   let offset = 0;
@@ -559,24 +566,40 @@ export async function generateTrack(
   onProgress('composing_music', 0.12);
   await sleep(30);
 
-  // Get genre profile
-  const genres = intent.genres?.length ? intent.genres : [intent.genre];
-  const profile = blendGenreProfiles(genres);
+  // ===== Get profile: AI-inferred (primary) or hardcoded fallback =====
+  let profile: GenreProfile;
+  if (intent.styleProfile) {
+    // PRIMARY PATH: Use AI-inferred StyleProfile
+    profile = createProfileFromAI(intent.styleProfile);
+    console.log('[Engine] Using AI-inferred StyleProfile:', intent.styleProfile.characteristics?.join(', '));
+  } else {
+    // FALLBACK: Use hardcoded genre profiles
+    const genres = intent.genres?.length ? intent.genres : [intent.genre];
+    profile = blendGenreProfiles(genres);
+    console.log('[Engine] Using fallback genre profiles for:', genres.join(', '));
+  }
+
   const groove = getGrooveTemplate(profile.grooveTemplate);
 
-  // Parse key
   const { root, scale: parsedScale } = parseKey(`${key} ${scale}`);
   const beatDuration = 60 / tempo;
   const sixteenthDur = beatDuration / 4;
 
-  // Use AI structure or generate from genre profile
   const sections = structure.length > 0 ? structure : generateArrangement(profile, durationSeconds, rng);
 
-  // Choose genre-appropriate styles
-  const bassStyle = chooseBassStyle(profile.rhythmStyle, intent.genre);
-  const melodyStyle = chooseMelodyStyle(intent.genre, globalEnergy / 10);
-  const leadWaveform: OscillatorType = profile.harmonicStyle === 'chromatic' ? 'sawtooth' : 'square';
+  // Choose styles dynamically based on profile characteristics
+  const bassStyle = chooseBassStyleDynamic(profile.rhythmStyle, profile.characteristics, profile.swing);
+  const melodyStyle = chooseMelodyStyle(intent.genre, globalEnergy / 10, profile.characteristics);
+
+  // Waveform selection based on harmonic style
+  const harmonicStr = (profile.harmonicStyle || '').toLowerCase();
+  const leadWaveform: OscillatorType = 
+    harmonicStr.includes('chromatic') || harmonicStr.includes('blues') ? 'sawtooth' : 'square';
   const bassWaveform: OscillatorType = profile.swing > 0.2 ? 'sine' : 'sawtooth';
+
+  // ===== Generate track-wide motif and hook for coherence =====
+  const trackMotif = generateMotif(rng, globalEnergy / 10);
+  const trackHook = generateHook(rng);
 
   onProgress('generating_instrumental', 0.18);
 
@@ -588,7 +611,6 @@ export async function generateTrack(
     const segStart = i * SEGMENT_DURATION;
     const segEnd = Math.min((i + 1) * SEGMENT_DURATION, durationSeconds);
 
-    // Progress: generating_instrumental stage, range 0.20 to 0.55
     const segProgress = 0.20 + (i / totalSegments) * 0.35;
     onProgress('generating_instrumental', segProgress);
 
@@ -597,11 +619,10 @@ export async function generateTrack(
       profile, groove, sections,
       root, parsedScale, beatDuration, sixteenthDur,
       bassStyle, melodyStyle, leadWaveform, bassWaveform, rng,
+      trackMotif, trackHook,
     );
 
     segmentBuffers.push(segBuffer);
-
-    // Yield to UI between segments
     await sleep(10);
   }
 
@@ -611,7 +632,6 @@ export async function generateTrack(
   onProgress('mixing_mastering', 0.58);
   const fullBuffer = concatenateBuffers(segmentBuffers, sampleRate);
 
-  // Keep a copy of the instrumental for separate export/vocal mixing
   const instrumentalBuffer = copyAudioBuffer(fullBuffer);
 
   // ===== Professional mastering pipeline =====
@@ -629,7 +649,6 @@ export async function generateTrack(
   return { blob: masterResult.blob, instrumentalBuffer, rngState: seedVal };
 }
 
-/** Copy an AudioBuffer */
 function copyAudioBuffer(buffer: AudioBuffer): AudioBuffer {
   const copy = new AudioBuffer({
     length: buffer.length,
