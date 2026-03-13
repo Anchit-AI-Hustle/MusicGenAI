@@ -145,14 +145,27 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'albumVibe': setAlbumVibe(value); break;
       case 'prompt': setMusicPrompt(value); break;
       case 'genres':
-        const suggested = value.split(',').map(g => g.trim()).filter(g => GENRES.includes(g));
-        if (suggested.length > 0) setSelectedGenres(suggested);
+        // MERGE AI-suggested genres into existing selection instead of replacing
+        const suggested = value.split(',').map(g => g.trim()).filter(Boolean);
+        const validSuggested = suggested.filter(g => GENRES.includes(g));
+        if (validSuggested.length > 0) {
+          setSelectedGenres(prev => {
+            const merged = new Set([...prev, ...validSuggested]);
+            return Array.from(merged);
+          });
+        }
         break;
       case 'lyrics': setLyrics(value); break;
       case 'artistInspiration': setArtistInspiration(value); break;
       case 'vocalLanguage':
+        // MERGE languages instead of replacing
         const langs = value.split(',').map(l => l.trim()).filter(l => LANGUAGES.includes(l));
-        if (langs.length > 0) setSelectedLanguages(langs);
+        if (langs.length > 0) {
+          setSelectedLanguages(prev => {
+            const merged = new Set([...prev, ...langs]);
+            return Array.from(merged);
+          });
+        }
         break;
       case 'videoStyle': setVideoStyle(value); break;
       case 'tempoBpm': { const p = parseInt(value); if (!isNaN(p)) setTempoBpm(Math.max(60, Math.min(200, p))); break; }
@@ -161,7 +174,14 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'vocalStructure': setVocalStructure(value); break;
       case 'vocalStyle': setVocalStyle(value); break;
       case 'vocalIntensity': { const p = parseInt(value); if (!isNaN(p)) setVocalIntensity(Math.max(1, Math.min(10, p))); break; }
-      case 'vocalEffects': setSelectedVocalEffects(value.split(',').map(e => e.trim()).filter(Boolean)); break;
+      case 'vocalEffects':
+        // MERGE effects instead of replacing
+        const newEffects = value.split(',').map(e => e.trim()).filter(Boolean);
+        setSelectedVocalEffects(prev => {
+          const merged = new Set([...prev, ...newEffects]);
+          return Array.from(merged);
+        });
+        break;
       case 'duration': { const p = parseInt(value); if (!isNaN(p)) { const clamped = Math.max(30, Math.min(600, p)); setDurationSeconds(clamped); setHours(Math.floor(clamped / 3600)); setMinutes(Math.floor((clamped % 3600) / 60)); setSeconds(clamped % 60); } break; }
     }
   };
