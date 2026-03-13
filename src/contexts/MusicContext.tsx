@@ -756,7 +756,12 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const result = aiSuggestQueueRef.current.then(async () => {
       const maxRetries = 2;
       const history = suggestionHistoryRef.current[field] || [];
-      const randomSeed = Math.floor(Math.random() * 100000);
+      // Use crypto-grade random seed for each suggestion request
+      const randomSeed = (Date.now() & 0x7fffffff) ^ Math.floor(
+        (typeof crypto !== 'undefined' && crypto.getRandomValues
+          ? crypto.getRandomValues(new Uint32Array(1))[0] / 0xffffffff
+          : Math.random()) * 1000000
+      );
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
