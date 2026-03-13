@@ -1,14 +1,18 @@
 /**
- * Browser-based music generation engine using Web Audio API OfflineAudioContext.
- * 
- * UPGRADED: Now uses AI-inferred StyleProfile as primary input.
- * Falls back to hardcoded genre profiles only when StyleProfile is unavailable.
- * 
- * Features:
- * - Dynamic style inference (any genre, any style)
- * - Motif-based melody generation with hook engine
- * - Section-based rendering with smooth transitions
- * - Professional mastering pipeline
+ * MuseVibeStudio Hub — Internal Music Production Engine
+ * Browser-based generation using Web Audio API OfflineAudioContext.
+ *
+ * Implements the full production pipeline:
+ * - GenerationSeed (timestamp + entropy) → unique songs per generation
+ * - Style Inference Engine → AI-inferred StyleProfile from user prompt
+ * - Tempo Engine → BPM variation from DNA within profile range
+ * - Melody Engine → motif-based with hook repetition and evolution
+ * - Harmony Engine → dynamic chord progressions (no fixed templates)
+ * - Arrangement Engine → dynamic section order and duration
+ * - Hook Engine → strong hooks in chorus/drop sections
+ * - Instrument Orchestration → DNA-driven palette variation
+ * - Variation System → RNG seeded by DNA for all creative decisions
+ * - Mixing/Mastering → -14 LUFS target, stem buses, stereo enhancement
  */
 
 import {
@@ -25,26 +29,40 @@ import { renderTransition } from './transition-engine';
 
 // ===== Types =====
 
-/** GenerationDNA — unique fingerprint per generation ensuring no two outputs are alike */
+/**
+ * GenerationDNA — unique fingerprint per generation ensuring no two outputs are alike.
+ * GenerationSeed = timestamp + random entropy. Drives all creative decisions.
+ */
 export interface GenerationDNA {
+  /** Combined timestamp + entropy; used as RNG seed */
   seed: number;
-  motifShape: number;      // 0-1, controls melodic contour bias
-  grooveBias: number;      // 0-1, swing vs straight feel
-  harmonicMood: number;    // 0-1, bright vs dark harmonic choices
-  textureDensity: number;  // 0-1, sparse vs dense layering
-  visualEnergy: number;    // 0-1, calm vs intense visuals
+  /** Unix timestamp (ms) at creation — explicit per spec */
+  timestamp: number;
+  /** 0-1, controls melodic contour bias */
+  motifShape: number;
+  /** 0-1, swing vs straight feel */
+  grooveBias: number;
+  /** 0-1, bright vs dark harmonic choices */
+  harmonicMood: number;
+  /** 0-1, sparse vs dense layering */
+  textureDensity: number;
+  /** 0-1, calm vs intense visuals */
+  visualEnergy: number;
 }
 
-/** Create a fresh GenerationDNA with high-entropy randomness */
+/** Create a fresh GenerationDNA with timestamp + high-entropy randomness */
 export function createGenerationDNA(): GenerationDNA {
+  const timestamp = Date.now();
   const cryptoRand = () => {
     if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
       return crypto.getRandomValues(new Uint32Array(1))[0] / 0xffffffff;
     }
     return Math.random();
   };
+  const entropy = Math.floor(cryptoRand() * 2147483647);
   return {
-    seed: (Date.now() & 0x7fffffff) ^ Math.floor(cryptoRand() * 2147483647),
+    seed: (timestamp & 0x7fffffff) ^ entropy,
+    timestamp,
     motifShape: cryptoRand(),
     grooveBias: cryptoRand(),
     harmonicMood: cryptoRand(),
@@ -605,7 +623,7 @@ export async function generateTrack(
     for (let i = 0; i < burnCount; i++) rng();
   }
   
-  const { tempo, key, scale, structure, durationSeconds, energy: globalEnergy } = intent;
+  const { tempo: baseTempo, key, scale, structure, durationSeconds, energy: globalEnergy } = intent;
   const sampleRate = INTERNAL_SAMPLE_RATE;
 
   console.log(`[Engine] GenerationDNA seed=${seedVal}, motif=${dna?.motifShape?.toFixed(3)}, groove=${dna?.grooveBias?.toFixed(3)}, harmonic=${dna?.harmonicMood?.toFixed(3)}`);
@@ -626,10 +644,25 @@ export async function generateTrack(
     console.log('[Engine] Using fallback genre profiles for:', genres.join(', '));
   }
 
+  // ===== Tempo Engine: BPM variation from GenerationSeed (identical prompts → different songs) =====
+  const [tempoMin, tempoMax] = profile.tempoRange;
+  const effectiveTempo = dna
+    ? Math.max(60, Math.min(200, Math.round(tempoMin + dna.grooveBias * (tempoMax - tempoMin))))
+    : baseTempo;
+
+  // ===== Instrument Orchestration: vary combinations every generation via DNA =====
+  if (dna && profile.instruments.length > 4) {
+    const rngBurn = createRng(dna.seed);
+    for (let i = 0; i < 20; i++) rngBurn();
+    const shuffled = [...profile.instruments].sort(() => rngBurn() - 0.5);
+    const count = Math.max(4, Math.min(profile.instruments.length, Math.floor(4 + dna.textureDensity * (profile.instruments.length - 3))));
+    profile = { ...profile, instruments: shuffled.slice(0, count) };
+  }
+
   const groove = getGrooveTemplate(profile.grooveTemplate);
 
   const { root, scale: parsedScale } = parseKey(`${key} ${scale}`);
-  const beatDuration = 60 / tempo;
+  const beatDuration = 60 / effectiveTempo;
   const sixteenthDur = beatDuration / 4;
 
   const sections = structure.length > 0 ? structure : generateArrangement(profile, durationSeconds, rng);

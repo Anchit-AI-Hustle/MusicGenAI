@@ -69,14 +69,15 @@ serve(async (req) => {
       });
     }
 
-    const { input } = await req.json();
+    const body = await req.json();
+    const { input, generationDNA } = body;
     const {
       musicPrompt = "", genres = [], durationSeconds = 180,
       lyrics = "", artistInspiration = "", tempoBpm = 120,
       vocalStructure = "Instrumental", vocalStyle = "",
       mood = "", musicalKey = "",
       songStructure = "",
-    } = input;
+    } = input || {};
 
     const genreStr = genres.length > 0 ? genres.join(", ") : "not specified — infer from prompt";
 
@@ -141,6 +142,7 @@ Generate a complete StyleProfile with:
 
     // ===== STEP 2: Song Structure =====
     const inferredGenre = styleResult?.genre || genres[0] || "electronic";
+    // Use raw AI tempo here; music-engine applies DNA-based variation within tempoRange
     const inferredTempo = styleResult?.tempo || tempoBpm;
 
     const structureResult = await callAI(
@@ -225,8 +227,18 @@ Durations MUST sum to exactly ${durationSeconds}. Create a UNIQUE structure.`,
       characteristics: styleResult?.characteristics || ["dynamic"],
     };
 
-    // Determine key
-    const rootKey = styleResult?.rootKey || (musicalKey ? musicalKey.split(/\s+/)[0] : "D");
+    // Determine key (with optional GenerationSeed nudge for uniqueness)
+    const ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const FLAT_TO_SHARP: Record<string, string> = { Db: "C#", Eb: "D#", Gb: "F#", Ab: "G#", Bb: "A#" };
+    let rootKey = styleResult?.rootKey || (musicalKey ? musicalKey.split(/\s+/)[0] : "D");
+    const rootNorm = FLAT_TO_SHARP[rootKey] || rootKey;
+    if (generationDNA?.harmonicMood != null) {
+      const idx = ROOTS.indexOf(rootNorm);
+      if (idx >= 0) {
+        const nudge = Math.floor(generationDNA.harmonicMood * 3) - 1;
+        rootKey = ROOTS[(idx + nudge + 12) % 12] || rootKey;
+      }
+    }
     const scaleType = styleResult?.scale || (musicalKey ? musicalKey.split(/\s+/).slice(1).join(" ") || "minor" : "minor");
 
     const musicIntent = {
