@@ -587,8 +587,9 @@ export async function generateTrack(
   onProgress: ProgressCallback,
   seed?: number,
 ): Promise<GenerateTrackResult> {
-  // Use high-entropy seed combining timestamp + crypto random to guarantee uniqueness
-  const seedVal = seed ?? (
+  // Use GenerationDNA seed if available, otherwise create high-entropy seed
+  const dna = intent.generationDNA;
+  const seedVal = seed ?? dna?.seed ?? (
     (Date.now() & 0x7fffffff) ^ 
     Math.floor(Math.random() * 2147483647) ^ 
     (typeof crypto !== 'undefined' && crypto.getRandomValues 
@@ -596,8 +597,18 @@ export async function generateTrack(
       : Math.floor(Math.random() * 2147483647))
   );
   const rng = createRng(seedVal);
+  
+  // Apply DNA biases to the RNG to further differentiate outputs
+  if (dna) {
+    // Burn through some RNG iterations based on DNA values to shift the sequence
+    const burnCount = Math.floor(dna.motifShape * 50) + Math.floor(dna.grooveBias * 30);
+    for (let i = 0; i < burnCount; i++) rng();
+  }
+  
   const { tempo, key, scale, structure, durationSeconds, energy: globalEnergy } = intent;
   const sampleRate = INTERNAL_SAMPLE_RATE;
+
+  console.log(`[Engine] GenerationDNA seed=${seedVal}, motif=${dna?.motifShape?.toFixed(3)}, groove=${dna?.grooveBias?.toFixed(3)}, harmonic=${dna?.harmonicMood?.toFixed(3)}`);
 
   onProgress('composing_music', 0.12);
   await sleep(30);
