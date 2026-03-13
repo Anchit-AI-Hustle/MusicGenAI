@@ -185,29 +185,30 @@ CRITICAL RULES:
         model: "google/gemini-3-flash-preview",
         temperature,
         top_p: 0.95,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userContent },
-      ],
-      tools: [
-        {
-          type: "function",
-          function: {
-            name: "provide_suggestion",
-            description: "Return the suggestion or enhanced value for the music creation field",
-            parameters: {
-              type: "object",
-              properties: {
-                suggestion: { type: "string", description: "The suggested or enhanced value for the field" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: freshUserContent },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "provide_suggestion",
+              description: "Return the suggestion or enhanced value for the music creation field",
+              parameters: {
+                type: "object",
+                properties: {
+                  suggestion: { type: "string", description: "The suggested or enhanced value for the field" },
+                },
+                required: ["suggestion"],
+                additionalProperties: false,
               },
-              required: ["suggestion"],
-              additionalProperties: false,
             },
           },
-        },
-      ],
-      tool_choice: { type: "function", function: { name: "provide_suggestion" } },
-    });
+        ],
+        tool_choice: { type: "function", function: { name: "provide_suggestion" } },
+      });
+    };
 
     // Retry with exponential backoff for rate limits
     const MAX_RETRIES = 2;
@@ -217,6 +218,9 @@ CRITICAL RULES:
         const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 8000);
         await new Promise(r => setTimeout(r, delay));
       }
+
+      // Build fresh request body per attempt for unique entropy
+      const requestBody = buildRequestBody();
 
       const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
