@@ -281,10 +281,18 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     try {
       trackLastUpdateRef.current[trackId] = Date.now();
 
+      // Step 0: Generate unique DNA for this generation
+      const dna = createGenerationDNA();
+      console.log(`[${trackId}] GenerationDNA created: seed=${dna.seed}`);
+
       // Step 1: Analyze with AI
-      updateTrackLocal(creationId, trackId, { status: 'analyzing', currentStage: 'Analyzing your musical vision', progress: 0.05 });
-      await updateTrackDB(trackId, creationId, 'Analyzing your musical vision', 0.05, 'analyzing');
+      updateTrackLocal(creationId, trackId, { status: 'analyzing', currentStage: 'Analyzing prompt', progress: 0.03 });
+      await updateTrackDB(trackId, creationId, 'Analyzing prompt', 0.03, 'analyzing');
       trackLastUpdateRef.current[trackId] = Date.now();
+
+      // Step 1b: Preparing generation seed
+      updateTrackLocal(creationId, trackId, { status: 'seeding', currentStage: 'Preparing generation seed', progress: 0.05 });
+      await updateTrackDB(trackId, creationId, 'Preparing generation seed', 0.05, 'seeding');
 
       const analyzeResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-music`, {
         method: 'POST',
@@ -307,6 +315,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             musicalKey: input.musicalKey || 'D minor',
             songStructure: input.songStructure || '',
           },
+          generationDNA: dna,
         }),
       });
 
@@ -318,10 +327,17 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
 
       const { musicIntent } = await analyzeResponse.json() as { musicIntent: MusicIntent };
+      
+      // Inject DNA into intent for downstream engines
+      musicIntent.generationDNA = dna;
 
-      // Step 2: Planning
-      updateTrackLocal(creationId, trackId, { status: 'planning_structure', currentStage: 'Planning song structure', progress: 0.10 });
-      await updateTrackDB(trackId, creationId, 'Planning song structure', 0.10, 'planning_structure');
+      // Step 2: Inferring style
+      updateTrackLocal(creationId, trackId, { status: 'inferring', currentStage: 'Inferring musical style', progress: 0.08 });
+      await updateTrackDB(trackId, creationId, 'Inferring musical style', 0.08, 'inferring');
+
+      // Step 3: Planning
+      updateTrackLocal(creationId, trackId, { status: 'planning_structure', currentStage: 'Planning arrangement', progress: 0.10 });
+      await updateTrackDB(trackId, creationId, 'Planning arrangement', 0.10, 'planning_structure');
       trackLastUpdateRef.current[trackId] = Date.now();
 
       // Step 3-5: Generate instrumental audio (segmented rendering)
