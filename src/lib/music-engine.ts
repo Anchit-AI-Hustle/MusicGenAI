@@ -25,6 +25,34 @@ import { renderTransition } from './transition-engine';
 
 // ===== Types =====
 
+/** GenerationDNA — unique fingerprint per generation ensuring no two outputs are alike */
+export interface GenerationDNA {
+  seed: number;
+  motifShape: number;      // 0-1, controls melodic contour bias
+  grooveBias: number;      // 0-1, swing vs straight feel
+  harmonicMood: number;    // 0-1, bright vs dark harmonic choices
+  textureDensity: number;  // 0-1, sparse vs dense layering
+  visualEnergy: number;    // 0-1, calm vs intense visuals
+}
+
+/** Create a fresh GenerationDNA with high-entropy randomness */
+export function createGenerationDNA(): GenerationDNA {
+  const cryptoRand = () => {
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      return crypto.getRandomValues(new Uint32Array(1))[0] / 0xffffffff;
+    }
+    return Math.random();
+  };
+  return {
+    seed: (Date.now() & 0x7fffffff) ^ Math.floor(cryptoRand() * 2147483647),
+    motifShape: cryptoRand(),
+    grooveBias: cryptoRand(),
+    harmonicMood: cryptoRand(),
+    textureDensity: cryptoRand(),
+    visualEnergy: cryptoRand(),
+  };
+}
+
 export interface MusicIntent {
   genre: string;
   subgenre: string;
@@ -38,7 +66,8 @@ export interface MusicIntent {
   atmosphere: string;
   durationSeconds: number;
   genres?: string[]; // multiple genres for blending
-  // NEW: AI-inferred style profile
+  generationDNA?: GenerationDNA;
+  // AI-inferred style profile
   styleProfile?: {
     tempoRange?: [number, number];
     instruments?: string[];
