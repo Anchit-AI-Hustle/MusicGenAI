@@ -1,7 +1,13 @@
 /**
  * Browser-based video generator using Canvas + MediaRecorder.
  * Creates audio-reactive visualizations synced to the final audio.
+ * Uses GenerationDNA when provided for reproducible, unique visuals per track.
  */
+
+export interface VideoGenerationDNA {
+  seed: number;
+  visualEnergy?: number;
+}
 
 export interface VideoStyle {
   name: string;
@@ -79,9 +85,19 @@ const VIDEO_STYLES: Record<string, VideoStyle> = {
   },
 };
 
-/** Randomize a style so each generation looks unique */
-function randomizeStyle(base: VideoStyle): VideoStyle {
-  const r = () => Math.random();
+/** Seeded RNG for reproducible variation from GenerationDNA */
+function createSeededRng(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return (s >>> 0) / 0xffffffff;
+  };
+}
+
+/** Randomize a style so each generation looks unique (uses DNA seed when provided) */
+function randomizeStyle(base: VideoStyle, dna?: VideoGenerationDNA): VideoStyle {
+  const rng = dna ? createSeededRng(dna.seed) : () => Math.random();
+  const r = rng;
   // Shift hue of colors randomly
   const shiftColor = (hex: string): string => {
     const hueShift = Math.floor(r() * 60 - 30);
@@ -103,17 +119,18 @@ function randomizeStyle(base: VideoStyle): VideoStyle {
 
   const waveformStyles: Array<'bars' | 'circle' | 'line' | 'spiral'> = ['bars', 'circle', 'line', 'spiral'];
 
+  const visualMult = dna?.visualEnergy != null ? 0.6 + dna.visualEnergy * 0.8 : 1;
   return {
     ...base,
     colors: base.colors.map(shiftColor),
-    particleCount: Math.floor(base.particleCount * (0.7 + r() * 0.6)),
+    particleCount: Math.floor(base.particleCount * (0.7 + r() * 0.6) * visualMult),
     waveformStyle: r() < 0.3 ? waveformStyles[Math.floor(r() * waveformStyles.length)] : base.waveformStyle,
-    glowIntensity: base.glowIntensity * (0.7 + r() * 0.6),
+    glowIntensity: base.glowIntensity * (0.7 + r() * 0.6) * visualMult,
     motionSpeed: base.motionSpeed * (0.7 + r() * 0.6),
   };
 }
 
-function getStyleFromMetadata(genres: string[], mood: string, videoStyleName?: string): VideoStyle {
+function getStyleFromMetadata(genres: string[], mood: string, videoStyleName?: string, dna?: VideoGenerationDNA): VideoStyle {
   let base: VideoStyle;
 
   // Direct match
@@ -139,8 +156,8 @@ function getStyleFromMetadata(genres: string[], mood: string, videoStyleName?: s
     }
   }
 
-  // Always randomize to ensure unique visuals per generation
-  return randomizeStyle(base);
+  // Always randomize to ensure unique visuals per generation (DNA-driven when available)
+  return randomizeStyle(base, dna);
 }
 
 interface Particle {
@@ -294,6 +311,7 @@ export async function ensureUniversalMp4Blob(
 
 /**
  * Generate a video from an audio blob using Canvas-based visualization + MediaRecorder.
+ * Pass generationDNA for reproducible, unique visuals driven by the track's GenerationSeed.
  */
 export async function generateVideoFromAudio(
   audioUrl: string,
@@ -302,8 +320,9 @@ export async function generateVideoFromAudio(
   mood: string,
   videoStyleName?: string,
   onProgress?: (p: VideoGenerationProgress) => void,
+  generationDNA?: VideoGenerationDNA,
 ): Promise<Blob> {
-  const style = getStyleFromMetadata(genres, mood, videoStyleName);
+  const style = getStyleFromMetadata(genres, mood, videoStyleName, generationDNA);
 
   onProgress?.({ stage: 'generating_video', progress: 0.02 });
 

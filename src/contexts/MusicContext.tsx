@@ -501,6 +501,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 updateTrackDB(trackId, creationId, stageLabel, 0.84 + p.progress * 0.12, p.stage).catch(console.warn);
               trackLastUpdateRef.current[trackId] = Date.now();
             },
+            dna ? { seed: dna.seed, visualEnergy: dna.visualEnergy } : undefined,
           );
 
           // Upload video

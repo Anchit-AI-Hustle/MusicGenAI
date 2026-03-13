@@ -31,6 +31,15 @@ const STYLE_PATTERNS = [
   "genre + environment + mood + rhythm",
 ];
 
+const CREATIVE_ANGLES = [
+  "unexpected instrument combinations",
+  "hybrid musical styles (fusion of two genres)",
+  "creative arrangement ideas",
+  "unconventional structure or pacing",
+  "surprising rhythmic patterns",
+  "atmospheric or textural focus",
+];
+
 function pickRandom<T>(arr: T[], seed: number, count = 1): T[] {
   const shuffled = [...arr].sort(() => Math.sin(seed++) - 0.5);
   return shuffled.slice(0, count);
@@ -102,9 +111,11 @@ function buildEntropyDirective(seed: number, previousSuggestions: string[]): str
   const envs = pickRandom(ENVIRONMENT_DESCRIPTORS, seed + 100, 2);
   const energies = pickRandom(ENERGY_DESCRIPTORS, seed + 200, 1);
   const pattern = pickRandom(STYLE_PATTERNS, seed + 300, 1)[0];
+  const angle = pickRandom(CREATIVE_ANGLES, seed + 400, 1)[0];
 
   let directive = `\n\n--- VARIATION DIRECTIVE (seed: ${seed}) ---`;
   directive += `\nStyle pattern to follow: ${pattern}`;
+  directive += `\nCreative angle: Introduce ${angle}`;
   directive += `\nDraw inspiration from these descriptors: ${[...moods, ...envs, ...energies].join(", ")}`;
 
   if (previousSuggestions.length > 0) {
