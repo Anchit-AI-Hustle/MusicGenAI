@@ -165,13 +165,26 @@ CRITICAL RULES:
 - For "vocalEffects": return ONLY a comma-separated list of effect names.
 - For "songStructure": return ONLY section names connected by " → ".`;
 
-    // High temperature + top_p for maximum creativity
-    const temperature = 0.95 + Math.random() * 0.15;
-
-    const requestBody = JSON.stringify({
-      model: "google/gemini-3-flash-preview",
-      temperature,
-      top_p: 0.95,
+    // High temperature + top_p for maximum creativity — rebuild per attempt for unique seeds
+    const buildRequestBody = () => {
+      const temperature = 0.92 + Math.random() * 0.08; // 0.92-1.0 range (safe for all models)
+      const attemptSeed = Math.floor(Math.random() * 1000000);
+      const entropyRefresh = buildEntropyDirective(attemptSeed, previousSuggestions || []);
+      
+      let freshUserContent: string;
+      if (isEnhance) {
+        freshUserContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}${entropyRefresh}`;
+      } else {
+        const currentValueNote = value
+          ? `\n\nThe user has already entered: "${value}". Generate a completely NEW and DIFFERENT suggestion. Do NOT repeat or slightly modify their input.`
+          : "\n\nThe field is empty. Suggest a creative starting point.";
+        freshUserContent = `${fieldPrompt}${contextStr}${currentValueNote}${entropyRefresh}`;
+      }
+      
+      return JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        temperature,
+        top_p: 0.95,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userContent },

@@ -79,28 +79,68 @@ const VIDEO_STYLES: Record<string, VideoStyle> = {
   },
 };
 
+/** Randomize a style so each generation looks unique */
+function randomizeStyle(base: VideoStyle): VideoStyle {
+  const r = () => Math.random();
+  // Shift hue of colors randomly
+  const shiftColor = (hex: string): string => {
+    const hueShift = Math.floor(r() * 60 - 30);
+    // Parse hex to RGB, rotate hue, return hex
+    const match = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+    if (!match) return hex;
+    let red = parseInt(match[1], 16);
+    let green = parseInt(match[2], 16);
+    let blue = parseInt(match[3], 16);
+    // Simple hue rotation via channel shifting
+    const shift = hueShift / 360;
+    const rotated = [
+      Math.min(255, Math.max(0, red + Math.floor(shift * 128))),
+      Math.min(255, Math.max(0, green + Math.floor(shift * 64))),
+      Math.min(255, Math.max(0, blue - Math.floor(shift * 64))),
+    ];
+    return `#${rotated.map(c => c.toString(16).padStart(2, '0')).join('')}`;
+  };
+
+  const waveformStyles: Array<'bars' | 'circle' | 'line' | 'spiral'> = ['bars', 'circle', 'line', 'spiral'];
+
+  return {
+    ...base,
+    colors: base.colors.map(shiftColor),
+    particleCount: Math.floor(base.particleCount * (0.7 + r() * 0.6)),
+    waveformStyle: r() < 0.3 ? waveformStyles[Math.floor(r() * waveformStyles.length)] : base.waveformStyle,
+    glowIntensity: base.glowIntensity * (0.7 + r() * 0.6),
+    motionSpeed: base.motionSpeed * (0.7 + r() * 0.6),
+  };
+}
+
 function getStyleFromMetadata(genres: string[], mood: string, videoStyleName?: string): VideoStyle {
+  let base: VideoStyle;
+
   // Direct match
   if (videoStyleName) {
     const key = videoStyleName.toLowerCase();
+    let found: VideoStyle | null = null;
     for (const [k, v] of Object.entries(VIDEO_STYLES)) {
-      if (key.includes(k) || k.includes(key)) return v;
+      if (key.includes(k) || k.includes(key)) { found = v; break; }
+    }
+    base = found || VIDEO_STYLES['music visualizer'];
+  } else {
+    // Genre-based inference
+    const genreStr = genres.join(' ').toLowerCase();
+    if (genreStr.includes('techno') || genreStr.includes('industrial')) base = VIDEO_STYLES['dark techno industrial'];
+    else if (genreStr.includes('synthwave') || genreStr.includes('retro')) base = VIDEO_STYLES['neon synthwave'];
+    else if (genreStr.includes('psych') || genreStr.includes('trance')) base = VIDEO_STYLES['psychedelic abstract'];
+    else if (genreStr.includes('ambient') || genreStr.includes('cinematic')) base = VIDEO_STYLES['space cinematic'];
+    else {
+      const moodStr = (mood || '').toLowerCase();
+      if (moodStr.includes('dark') || moodStr.includes('aggressive')) base = VIDEO_STYLES['dark techno industrial'];
+      else if (moodStr.includes('euphori') || moodStr.includes('bright')) base = VIDEO_STYLES['neon synthwave'];
+      else base = VIDEO_STYLES['music visualizer'];
     }
   }
 
-  // Genre-based inference
-  const genreStr = genres.join(' ').toLowerCase();
-  if (genreStr.includes('techno') || genreStr.includes('industrial')) return VIDEO_STYLES['dark techno industrial'];
-  if (genreStr.includes('synthwave') || genreStr.includes('retro')) return VIDEO_STYLES['neon synthwave'];
-  if (genreStr.includes('psych') || genreStr.includes('trance')) return VIDEO_STYLES['psychedelic abstract'];
-  if (genreStr.includes('ambient') || genreStr.includes('cinematic')) return VIDEO_STYLES['space cinematic'];
-
-  // Mood-based
-  const moodStr = (mood || '').toLowerCase();
-  if (moodStr.includes('dark') || moodStr.includes('aggressive')) return VIDEO_STYLES['dark techno industrial'];
-  if (moodStr.includes('euphori') || moodStr.includes('bright')) return VIDEO_STYLES['neon synthwave'];
-
-  return VIDEO_STYLES['music visualizer'];
+  // Always randomize to ensure unique visuals per generation
+  return randomizeStyle(base);
 }
 
 interface Particle {

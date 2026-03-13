@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -26,6 +26,7 @@ export const PortalDropdown: React.FC<PortalDropdownProps> = ({
   matchTriggerWidth = false,
 }) => {
   const [pos, setPos] = useState<{ top: number; left: number; width?: number }>({ top: 0, left: 0 });
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const updatePosition = useCallback(() => {
     if (!triggerRef.current) return;
@@ -46,29 +47,43 @@ export const PortalDropdown: React.FC<PortalDropdownProps> = ({
     };
   }, [open, updatePosition]);
 
+  // Close on outside mousedown — does NOT block clicks from reaching other elements
+  useEffect(() => {
+    if (!open) return;
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      // Don't close if clicking inside the dropdown itself
+      if (dropdownRef.current?.contains(target)) return;
+      // Don't close if clicking inside the trigger
+      if (triggerRef.current?.contains(target)) return;
+      onClose();
+    };
+    // Use mousedown so the click still propagates to the target element
+    document.addEventListener('mousedown', handleMouseDown, true);
+    return () => document.removeEventListener('mousedown', handleMouseDown, true);
+  }, [open, onClose, triggerRef]);
+
   return ReactDOM.createPortal(
     <AnimatePresence>
       {open && (
-        <>
-          <div className="fixed inset-0 z-[9998]" onClick={onClose} />
-          <motion.div
-            initial={{ opacity: 0, y: direction === 'down' ? 8 : -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: direction === 'down' ? 8 : -8 }}
-            transition={{ duration: 0.15 }}
-            className={`fixed z-[9999] bg-popover border border-border rounded-lg shadow-lg py-1 max-h-60 overflow-y-auto ${className}`}
-            style={{
-              top: direction === 'down' ? pos.top : undefined,
-              bottom: direction === 'up' ? window.innerHeight - pos.top : undefined,
-              left: align === 'left' ? pos.left : undefined,
-              right: align === 'right' ? window.innerWidth - pos.left : undefined,
-              minWidth,
-              width: pos.width,
-            }}
-          >
-            {children}
-          </motion.div>
-        </>
+        <motion.div
+          ref={dropdownRef}
+          initial={{ opacity: 0, y: direction === 'down' ? 8 : -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: direction === 'down' ? 8 : -8 }}
+          transition={{ duration: 0.15 }}
+          className={`fixed z-[9999] bg-popover border border-border rounded-lg shadow-lg py-1 max-h-60 overflow-y-auto ${className}`}
+          style={{
+            top: direction === 'down' ? pos.top : undefined,
+            bottom: direction === 'up' ? window.innerHeight - pos.top : undefined,
+            left: align === 'left' ? pos.left : undefined,
+            right: align === 'right' ? window.innerWidth - pos.left : undefined,
+            minWidth,
+            width: pos.width,
+          }}
+        >
+          {children}
+        </motion.div>
       )}
     </AnimatePresence>,
     document.body

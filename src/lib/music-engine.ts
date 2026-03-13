@@ -558,7 +558,14 @@ export async function generateTrack(
   onProgress: ProgressCallback,
   seed?: number,
 ): Promise<GenerateTrackResult> {
-  const seedVal = seed ?? Math.floor(Math.random() * 2147483647);
+  // Use high-entropy seed combining timestamp + crypto random to guarantee uniqueness
+  const seedVal = seed ?? (
+    (Date.now() & 0x7fffffff) ^ 
+    Math.floor(Math.random() * 2147483647) ^ 
+    (typeof crypto !== 'undefined' && crypto.getRandomValues 
+      ? crypto.getRandomValues(new Uint32Array(1))[0] 
+      : Math.floor(Math.random() * 2147483647))
+  );
   const rng = createRng(seedVal);
   const { tempo, key, scale, structure, durationSeconds, energy: globalEnergy } = intent;
   const sampleRate = INTERNAL_SAMPLE_RATE;
