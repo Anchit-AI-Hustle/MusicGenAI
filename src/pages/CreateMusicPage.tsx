@@ -367,14 +367,17 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   // Pipeline Progress
   const PIPELINE_STEPS = [
-    { key: 'analyzing', label: 'Analyzing musical vision', icon: '🔍', match: /analyz/i },
-    { key: 'planning', label: 'Planning song structure', icon: '🎼', match: /plan/i },
-    { key: 'composing', label: 'Composing musical patterns', icon: '🎹', match: /compos/i },
-    { key: 'instrumental', label: 'Generating instrumental', icon: '🎵', match: /instrumental|render.*audio|generat.*segment/i },
+    { key: 'analyzing', label: 'Analyzing prompt', icon: '🔍', match: /analyz/i },
+    { key: 'seeding', label: 'Preparing generation seed', icon: '🧬', match: /seed|dna|prepar/i },
+    { key: 'inferring', label: 'Inferring musical style', icon: '🎯', match: /infer|style/i },
+    { key: 'planning', label: 'Planning arrangement', icon: '🎼', match: /plan|arrang/i },
+    { key: 'composing', label: 'Generating melody', icon: '🎹', match: /compos|melody/i },
+    { key: 'instrumental', label: 'Generating sections', icon: '🎵', match: /instrumental|render.*audio|generat.*segment|section/i },
     { key: 'vocals', label: 'Generating vocals', icon: '🎤', match: /vocal|lyric|singing|synthe/i },
     { key: 'vocal_align', label: 'Aligning & mixing vocals', icon: '🎙️', match: /align.*vocal|mix.*vocal/i },
-    { key: 'mixing', label: 'Mixing & mastering', icon: '🎚️', match: /mix|master/i },
-    { key: 'video_gen', label: 'Generating video visuals', icon: '🎬', match: /generat.*video/i },
+    { key: 'mixing', label: 'Mixing', icon: '🎚️', match: /mix(?!.*vocal)/i },
+    { key: 'mastering', label: 'Mastering', icon: '💿', match: /master/i },
+    { key: 'video_gen', label: 'Rendering video', icon: '🎬', match: /generat.*video/i },
     { key: 'video_enc', label: 'Encoding video', icon: '📹', match: /encod.*video/i },
     { key: 'finalizing', label: 'Finalizing & uploading', icon: '💾', match: /finaliz|upload/i },
     { key: 'complete', label: 'Complete', icon: '✅', match: /complete/i },
