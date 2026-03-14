@@ -1,5 +1,6 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { usePlayer } from '@/contexts/PlayerContext';
+import { audioEngine } from '@/lib/audio-engine';
 
 interface AudioVisualizerProps {
   className?: string;
@@ -9,37 +10,8 @@ interface AudioVisualizerProps {
 
 export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ className = '', barCount = 48, mode = 'bars' }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
-  const ctxRef = useRef<AudioContext | null>(null);
   const rafRef = useRef<number>(0);
-  const { audioRef, isPlaying } = usePlayer();
-
-  const setupAnalyser = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio || analyserRef.current) return;
-
-    try {
-      const audioCtx = new AudioContext();
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.8;
-
-      const source = audioCtx.createMediaElementSource(audio);
-      source.connect(analyser);
-      analyser.connect(audioCtx.destination);
-
-      ctxRef.current = audioCtx;
-      analyserRef.current = analyser;
-      sourceRef.current = source;
-    } catch {
-      // Already connected or CORS issue — use fake data
-    }
-  }, [audioRef]);
-
-  useEffect(() => {
-    if (isPlaying && !analyserRef.current) setupAnalyser();
-  }, [isPlaying, setupAnalyser]);
+  const { isPlaying } = usePlayer();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -51,13 +23,10 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ className = ''
       const { width, height } = canvas;
       ctx.clearRect(0, 0, width, height);
 
-      const analyser = analyserRef.current;
-      let dataArray: Uint8Array<ArrayBuffer>;
+      let dataArray = new Uint8Array(256); // Matches fftSize/2
+      const hasData = audioEngine.getByteFrequencyData(dataArray);
 
-      if (analyser) {
-        dataArray = new Uint8Array(analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>;
-        analyser.getByteFrequencyData(dataArray);
-      } else {
+      if (!hasData) {
         // Fake visualization when analyser unavailable
         dataArray = new Uint8Array(barCount);
         if (isPlaying) {

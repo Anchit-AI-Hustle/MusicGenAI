@@ -16,6 +16,9 @@ export interface AudioState {
 class AudioEngine {
   private static instance: AudioEngine;
   private audio: HTMLAudioElement;
+  private ctx: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private source: MediaElementAudioSourceNode | null = null;
   private listeners: Set<(state: AudioState) => void> = new Set();
 
   private constructor() {
@@ -23,13 +26,36 @@ class AudioEngine {
     this.audio.crossOrigin = 'anonymous';
 
     // Sync state on audio events
-    this.audio.addEventListener('play', () => this.notify());
+    this.audio.addEventListener('play', () => {
+      this.ensureContext();
+      this.notify();
+    });
     this.audio.addEventListener('pause', () => this.notify());
     this.audio.addEventListener('timeupdate', () => this.notify());
     this.audio.addEventListener('durationchange', () => this.notify());
     this.audio.addEventListener('volumechange', () => this.notify());
     this.audio.addEventListener('ratechange', () => this.notify());
     this.audio.addEventListener('ended', () => this.notify());
+  }
+
+  private ensureContext() {
+    if (this.ctx) {
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      return;
+    }
+
+    try {
+      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      this.analyser = this.ctx.createAnalyser();
+      this.analyser.fftSize = 256;
+      this.analyser.smoothingTimeConstant = 0.8;
+
+      this.source = this.ctx.createMediaElementSource(this.audio);
+      this.source.connect(this.analyser);
+      this.analyser.connect(this.ctx.destination);
+    } catch (e) {
+      console.warn('[AudioEngine] Could not initialize web audio context:', e);
+    }
   }
 
   public static getInstance(): AudioEngine {
@@ -41,6 +67,19 @@ class AudioEngine {
 
   public get audioInstance(): HTMLAudioElement {
     return this.audio;
+  }
+
+  public getAnalyser(): AnalyserNode | null {
+    this.ensureContext();
+    return this.analyser;
+  }
+
+  public getByteFrequencyData(dataArray: Uint8Array) {
+    if (this.analyser) {
+      this.analyser.getByteFrequencyData(dataArray as any);
+      return true;
+    }
+    return false;
   }
 
   public getState(): AudioState {
