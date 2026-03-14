@@ -11,7 +11,17 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
-import { GENRE_OPTIONS, LANGUAGES, normalizeGenreOptions, genreOptionsToLabels, type GenreOption } from '@/data/genres';
+import { GENRE_OPTIONS, normalizeGenreOptions, genreOptionsToLabels, type GenreOption } from '@/data/genres';
+import { SmartSearchInput } from '@/components/ui/smart-search-input';
+import { 
+  LANGUAGES, 
+  PRESET_MOODS, 
+  PRESET_VOCAL_STYLES, 
+  PRESET_VIDEO_STYLES, 
+  VOCAL_STRUCTURE_PRESETS,
+  SONG_STRUCTURE_PRESETS,
+  VOCAL_EFFECTS_OPTIONS
+} from '@/data/form-presets';
 import type { AiSuggestionResult } from '@/contexts/MusicContext';
 
 export interface TrackConfig {
@@ -52,24 +62,6 @@ export const defaultTrackConfig = (index: number): TrackConfig => ({
   videoStyle: '',
 });
 
-const VOCAL_STRUCTURE_PRESETS = [
-  'Verse – Chorus – Verse – Chorus',
-  'Verse – Chorus – Bridge – Chorus',
-  'Build – Drop – Build – Drop',
-  'Continuous Vocal Flow',
-  'Instrumental',
-];
-
-const VOCAL_STYLE_PRESETS = ['Male Vocal', 'Female Vocal', 'Robotic Vocal', 'Rap Vocal', 'Choir Vocal', 'Whisper Vocal'];
-const VOCAL_EFFECTS_OPTIONS = ['Reverb', 'Delay', 'Chorus', 'Distortion', 'Autotune', 'Vocoder'];
-
-const SONG_STRUCTURE_PRESETS = [
-  'Intro → Build → Drop → Breakdown → Drop → Outro',
-  'Intro → Verse → Chorus → Verse → Chorus → Bridge → Chorus → Outro',
-  'Intro → Verse → Hook → Verse → Hook → Outro',
-  'Intro → Theme → Solo → Theme → Outro',
-];
-
 interface AlbumTrackFormProps {
   index: number;
   config: TrackConfig;
@@ -81,13 +73,6 @@ interface AlbumTrackFormProps {
 export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, onChange, albumVibe, aiSuggest }) => {
   const [expanded, setExpanded] = useState(index === 0);
   const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
-  const [showGenreDropdown, setShowGenreDropdown] = useState(false);
-  const [genreSearch, setGenreSearch] = useState('');
-  const [showLangDropdown, setShowLangDropdown] = useState(false);
-  const [showVocalStructDD, setShowVocalStructDD] = useState(false);
-  const [showVocalStyleDD, setShowVocalStyleDD] = useState(false);
-  const [showVocalEffectsDD, setShowVocalEffectsDD] = useState(false);
-
   const update = (partial: Partial<TrackConfig>) => onChange({ ...config, ...partial });
 
   const startLoading = (key: string) => setLoadingActions(prev => new Set(prev).add(key));
@@ -231,8 +216,6 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
     if (albumVibe) update({ musicPrompt: albumVibe });
   };
 
-  const filteredGenres = GENRE_OPTIONS.filter(g => g.label.toLowerCase().includes(genreSearch.toLowerCase()));
-
   const formatDuration = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -288,26 +271,13 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   <Label className="text-foreground font-medium text-sm">Genres</Label>
                   <AiToolbar field="genres" />
                 </div>
-                {config.genres.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {config.genres.map(g => (
-                      <Badge key={g.value} variant="secondary" className="bg-primary/20 text-primary border-primary/30 cursor-pointer text-xs" onClick={() => update({ genres: config.genres.filter(x => x.value !== g.value) })}>{g.label} ×</Badge>
-                    ))}
-                  </div>
-                )}
-                <div className="relative">
-                  <Input placeholder="Search genres..." value={genreSearch} onChange={e => setGenreSearch(e.target.value)} onFocus={() => setShowGenreDropdown(true)} className="bg-input border-border" />
-                  <AnimatePresence>
-                    {showGenreDropdown && (
-                       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
-                        {filteredGenres.slice(0, 30).map(g => (
-                          <button key={g.value} onClick={() => update({ genres: config.genres.some(x => x.value === g.value) ? config.genres.filter(x => x.value !== g.value) : [...config.genres, g] })} className={`w-full text-left px-3 py-1.5 text-sm hover:bg-secondary ${config.genres.some(x => x.value === g.value) ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{g.label}</button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-                {showGenreDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowGenreDropdown(false)} />}
+                <SmartSearchInput
+                  value={config.genres.map(g => g.label)}
+                  onChange={(val: string[]) => update({ genres: normalizeGenreOptions(val) })}
+                  options={GENRE_OPTIONS.map(g => g.label)}
+                  placeholder="Type or select genres..."
+                  multiSelect
+                />
               </div>
 
               {/* Mood */}
@@ -316,7 +286,12 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   <Label className="text-foreground font-medium text-sm">Mood</Label>
                   <AiToolbar field="mood" />
                 </div>
-                <Input value={config.mood} onChange={e => update({ mood: e.target.value })} className="bg-input border-border" placeholder="e.g., Dark, euphoric, melancholic..." />
+                <SmartSearchInput
+                  value={config.mood}
+                  onChange={(val: string) => update({ mood: val })}
+                  options={PRESET_MOODS}
+                  placeholder="e.g., Dark, euphoric, melancholic..."
+                />
               </div>
 
               {/* Tempo */}
@@ -356,38 +331,24 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                     <Label className="text-foreground font-medium text-sm">Vocal Structure</Label>
                     <AiToolbar field="vocalStructure" />
                   </div>
-                  <div className="relative">
-                    <Input value={config.vocalStructure} onChange={e => update({ vocalStructure: e.target.value })} onFocus={() => setShowVocalStructDD(true)} className="bg-input border-border" />
-                    <AnimatePresence>
-                      {showVocalStructDD && (
-                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
-                          {VOCAL_STRUCTURE_PRESETS.map(p => (
-                            <button key={p} onClick={() => { update({ vocalStructure: p }); setShowVocalStructDD(false); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-secondary text-foreground">{p}</button>
-                          ))}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                    {showVocalStructDD && <div className="fixed inset-0 z-40" onClick={() => setShowVocalStructDD(false)} />}
-                  </div>
+                  <SmartSearchInput
+                    value={config.vocalStructure}
+                    onChange={(val: string) => update({ vocalStructure: val })}
+                    options={VOCAL_STRUCTURE_PRESETS}
+                    placeholder="e.g., Verse - Chorus"
+                  />
                 </div>
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <Label className="text-foreground font-medium text-sm">Vocal Style / Delivery</Label>
                     <AiToolbar field="vocalStyle" />
                   </div>
-                  <div className="relative">
-                    <Input value={config.vocalStyle} onChange={e => update({ vocalStyle: e.target.value })} onFocus={() => setShowVocalStyleDD(true)} className="bg-input border-border" />
-                    <AnimatePresence>
-                      {showVocalStyleDD && (
-                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
-                          {VOCAL_STYLE_PRESETS.map(p => (
-                            <button key={p} onClick={() => { update({ vocalStyle: p }); setShowVocalStyleDD(false); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-secondary text-foreground">{p}</button>
-                          ))}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                    {showVocalStyleDD && <div className="fixed inset-0 z-40" onClick={() => setShowVocalStyleDD(false)} />}
-                  </div>
+                  <SmartSearchInput
+                    value={config.vocalStyle}
+                    onChange={(val: string) => update({ vocalStyle: val })}
+                    options={PRESET_VOCAL_STYLES}
+                    placeholder="e.g., Male Vocal, Rap"
+                  />
                 </div>
               </div>
 
@@ -415,29 +376,13 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   </div>
                   <AiToolbar field="vocalEffects" />
                 </div>
-                {config.vocalEffects.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {config.vocalEffects.map(e => (
-                      <Badge key={e} variant="secondary" className="bg-accent/20 text-accent border-accent/30 cursor-pointer text-xs" onClick={() => update({ vocalEffects: config.vocalEffects.filter(x => x !== e) })}>{e} ×</Badge>
-                    ))}
-                  </div>
-                )}
-                <div className="relative">
-                  <button onClick={() => setShowVocalEffectsDD(!showVocalEffectsDD)} className="w-full flex items-center justify-between px-3 py-2 bg-input border border-border rounded-lg text-left text-sm">
-                    <span className="text-muted-foreground">{config.vocalEffects.length === 0 ? 'Select effects...' : 'Add more'}</span>
-                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                  <AnimatePresence>
-                    {showVocalEffectsDD && (
-                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
-                        {VOCAL_EFFECTS_OPTIONS.map(ef => (
-                          <button key={ef} onClick={() => update({ vocalEffects: config.vocalEffects.includes(ef) ? config.vocalEffects.filter(x => x !== ef) : [...config.vocalEffects, ef] })} className={`w-full text-left px-3 py-1.5 text-sm hover:bg-secondary ${config.vocalEffects.includes(ef) ? 'bg-accent/10 text-accent' : 'text-foreground'}`}>{ef}</button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  {showVocalEffectsDD && <div className="fixed inset-0 z-40" onClick={() => setShowVocalEffectsDD(false)} />}
-                </div>
+                <SmartSearchInput
+                  value={config.vocalEffects}
+                  onChange={(val: string[]) => update({ vocalEffects: val })}
+                  options={VOCAL_EFFECTS_OPTIONS}
+                  placeholder="Select or type effects..."
+                  multiSelect
+                />
               </div>
 
               {/* Languages */}
@@ -449,29 +394,13 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   </div>
                   <AiToolbar field="vocalLanguage" />
                 </div>
-                {config.vocalLanguages.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {config.vocalLanguages.map(l => (
-                      <Badge key={l} variant="secondary" className="bg-accent/20 text-accent border-accent/30 cursor-pointer text-xs" onClick={() => update({ vocalLanguages: config.vocalLanguages.filter(x => x !== l) })}>{l} ×</Badge>
-                    ))}
-                  </div>
-                )}
-                <div className="relative">
-                  <button onClick={() => setShowLangDropdown(!showLangDropdown)} className="w-full flex items-center justify-between px-3 py-2 bg-input border border-border rounded-lg text-left text-sm">
-                    <span className="text-muted-foreground">{config.vocalLanguages.length === 0 ? 'Select languages...' : 'Add more'}</span>
-                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                  <AnimatePresence>
-                    {showLangDropdown && (
-                       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
-                        {LANGUAGES.map(l => (
-                          <button key={l} onClick={() => update({ vocalLanguages: config.vocalLanguages.includes(l) ? config.vocalLanguages.filter(x => x !== l) : [...config.vocalLanguages, l] })} className={`w-full text-left px-3 py-1.5 text-sm hover:bg-secondary ${config.vocalLanguages.includes(l) ? 'bg-accent/10 text-accent' : 'text-foreground'}`}>{l}</button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  {showLangDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowLangDropdown(false)} />}
-                </div>
+                <SmartSearchInput
+                  value={config.vocalLanguages}
+                  onChange={(val: string[]) => update({ vocalLanguages: val })}
+                  options={LANGUAGES}
+                  placeholder="Select or type languages..."
+                  multiSelect
+                />
               </div>
 
               {/* Lyrics */}
@@ -498,12 +427,12 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   <Label className="text-foreground font-medium text-sm">Song Structure</Label>
                   <AiToolbar field="songStructure" />
                 </div>
-                <Input value={config.songStructure} onChange={e => update({ songStructure: e.target.value })} className="bg-input border-border" placeholder="e.g., Intro → Verse → Chorus → Outro" />
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {SONG_STRUCTURE_PRESETS.map(p => (
-                    <button key={p} onClick={() => update({ songStructure: p })} className={`px-2 py-1 text-xs rounded-md border transition-smooth ${config.songStructure === p ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>{p.length > 40 ? p.slice(0, 40) + '...' : p}</button>
-                  ))}
-                </div>
+                <SmartSearchInput
+                  value={config.songStructure}
+                  onChange={(val: string) => update({ songStructure: val })}
+                  options={SONG_STRUCTURE_PRESETS}
+                  placeholder="e.g., Intro → Verse → Chorus → Outro"
+                />
               </div>
 
               {/* Video */}
@@ -520,7 +449,12 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                     <Label className="text-foreground font-medium text-sm">Video Style</Label>
                     <AiToolbar field="videoStyle" />
                   </div>
-                  <Input value={config.videoStyle} onChange={e => update({ videoStyle: e.target.value })} className="bg-input border-border" placeholder="e.g., Abstract geometric, neon colors..." />
+                  <SmartSearchInput
+                    value={config.videoStyle}
+                    onChange={(val: string) => update({ videoStyle: val })}
+                    options={PRESET_VIDEO_STYLES}
+                    placeholder="e.g., Abstract geometric visuals..."
+                  />
                 </div>
               )}
             </div>

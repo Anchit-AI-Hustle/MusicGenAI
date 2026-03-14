@@ -18,9 +18,19 @@ import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMusic, type AiSuggestionResult } from '@/contexts/MusicContext';
 import { usePlayer, PlayerTrack } from '@/contexts/PlayerContext';
-import { GENRE_OPTIONS, LANGUAGES, normalizeGenreOptions, genreOptionsToLabels, type GenreOption } from '@/data/genres';
-import { toast } from 'sonner';
 import { AlbumTrackForm, defaultTrackConfig, type TrackConfig } from '@/components/AlbumTrackForm';
+import { SmartSearchInput } from '@/components/ui/smart-search-input';
+import { 
+  LANGUAGES, 
+  PRESET_MOODS, 
+  PRESET_VOCAL_STYLES, 
+  PRESET_VIDEO_STYLES, 
+  VOCAL_STRUCTURE_PRESETS,
+  SONG_STRUCTURE_PRESETS,
+  VOCAL_EFFECTS_OPTIONS
+} from '@/data/form-presets';
+import { GENRE_OPTIONS, normalizeGenreOptions, genreOptionsToLabels, type GenreOption } from '@/data/genres';
+import { toast } from 'sonner';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Waiting to start',
@@ -50,17 +60,6 @@ const ACTIVE_STATUSES = ['analyzing', 'seeding', 'inferring', 'planning_structur
 interface CreateMusicPageProps {
   onAuthClick: () => void;
 }
-
-const VOCAL_STRUCTURE_PRESETS = [
-  'Verse – Chorus – Verse – Chorus',
-  'Verse – Chorus – Bridge – Chorus',
-  'Build – Drop – Build – Drop',
-  'Continuous Vocal Flow',
-  'Instrumental',
-];
-
-const VOCAL_STYLE_PRESETS = ['Male Vocal', 'Female Vocal', 'Robotic Vocal', 'Rap Vocal', 'Choir Vocal', 'Whisper Vocal'];
-const VOCAL_EFFECTS_OPTIONS = ['Reverb', 'Delay', 'Chorus', 'Distortion', 'Autotune', 'Vocoder'];
 
 interface SongPromptState {
   genre: GenreOption[];
@@ -113,22 +112,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const [mood, setMood] = useState('');
   
   const [vocalStructure, setVocalStructure] = useState('Instrumental');
-  const [showVocalStructureDropdown, setShowVocalStructureDropdown] = useState(false);
   const [vocalStyle, setVocalStyle] = useState('');
-  const [showVocalStyleDropdown, setShowVocalStyleDropdown] = useState(false);
   const [vocalIntensity, setVocalIntensity] = useState(5);
   const [selectedVocalEffects, setSelectedVocalEffects] = useState<string[]>([]);
   const [showVocalEffectsDropdown, setShowVocalEffectsDropdown] = useState(false);
   const [songStructure, setSongStructure] = useState('');
-
-  const SONG_STRUCTURE_PRESETS = [
-    'Intro → Build → Drop → Breakdown → Drop → Outro',
-    'Intro → Verse → Chorus → Verse → Chorus → Bridge → Chorus → Outro',
-    'Intro → Verse → Hook → Verse → Hook → Outro',
-    'Intro → Theme → Solo → Theme → Outro',
-    'Exposition → Development → Recapitulation → Coda',
-    'Intro → Build → Climax → Resolution → Outro',
-  ];
 
   const genreInputRef = useRef<HTMLDivElement>(null);
   const vocalStructureRef = useRef<HTMLDivElement>(null);
@@ -406,12 +394,18 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   React.useEffect(() => { updateFromInputs(); }, [hours, minutes, seconds, updateFromInputs]);
 
-  const toggleGenre = (genre: GenreOption) => updateSongPrompt(prev => ({
-    ...prev,
-    genre: prev.genre.some(g => g.value === genre.value)
-      ? prev.genre.filter(g => g.value !== genre.value)
-      : [...prev.genre, genre],
-  }));
+  const toggleGenre = (genre: GenreOption | string) => {
+    const genreObj = typeof genre === 'string' 
+      ? { label: genre, value: genre.toLowerCase().replace(/\s+/g, '-') }
+      : genre;
+      
+    updateSongPrompt(prev => ({
+      ...prev,
+      genre: prev.genre.some(g => g.value === genreObj.value)
+        ? prev.genre.filter(g => g.value !== genreObj.value)
+        : [...prev.genre, genreObj],
+    }));
+  };
   const toggleLanguage = (lang: string) => updateSongPrompt(prev => ({
     ...prev,
     vocalLanguages: prev.vocalLanguages.includes(lang) ? prev.vocalLanguages.filter(l => l !== lang) : [...prev.vocalLanguages, lang],
@@ -679,38 +673,15 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <Label className="text-foreground font-medium">Genres</Label>
                   <AiToolbar field="genres" />
                 </div>
-                {selectedGenres.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {selectedGenres.map(genre => (
-                      <Badge key={genre.value} variant="secondary" className="bg-primary/20 text-primary border-primary/30 cursor-pointer hover:bg-primary/30" onClick={() => toggleGenre(genre)}>{genre.label} ×</Badge>
-                    ))}
-                  </div>
-                )}
-                <div className="relative" ref={genreInputRef}>
-                  <Input 
-                    placeholder="Search or type custom genre..." 
-                    value={genreSearch} 
-                    onChange={e => setGenreSearch(e.target.value)} 
-                    onFocus={() => setShowGenreDropdown(true)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && genreSearch.trim()) {
-                        e.preventDefault();
-                        const newGenre = { label: genreSearch.trim(), value: genreSearch.trim().toLowerCase().replace(/\s+/g, '-') };
-                        if (!selectedGenres.some(g => g.value === newGenre.value)) {
-                          toggleGenre(newGenre);
-                          setGenreSearch('');
-                        }
-                      }
-                    }}
-                    className="bg-input border-border" 
-                  />
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <PortalDropdown open={showGenreDropdown} onClose={() => setShowGenreDropdown(false)} triggerRef={genreInputRef as React.RefObject<HTMLElement>} matchTriggerWidth>
-                    {filteredGenres.slice(0, 50).map(genre => (
-                      <button key={genre.value} onClick={() => toggleGenre(genre)} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${selectedGenres.some(selected => selected.value === genre.value) ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{genre.label}</button>
-                    ))}
-                  </PortalDropdown>
-                </div>
+                <SmartSearchInput
+                  value={selectedGenres.map(g => g.label)}
+                  onChange={(val: string[]) => {
+                    setSelectedGenres(normalizeGenreOptions(val));
+                  }}
+                  options={GENRE_OPTIONS.map(g => g.label)}
+                  placeholder="Type or select genres..."
+                  multiSelect
+                />
               </motion.div>
 
               {/* Tempo */}
@@ -764,7 +735,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <Label className="text-foreground font-medium">Mood</Label>
                   <AiToolbar field="mood" />
                 </div>
-                <Input placeholder="e.g., Dark, euphoric, melancholic, aggressive..." value={mood} onChange={e => updateSongPrompt({ mood: e.target.value, energy: e.target.value })} className="bg-input border-border" />
+                <SmartSearchInput
+                  value={mood}
+                  onChange={(val: string) => updateSongPrompt({ mood: val, energy: val })}
+                  options={PRESET_MOODS}
+                  placeholder="e.g., Dark, euphoric, melancholic..."
+                />
               </motion.div>
 
               {/* Song Structure */}
@@ -773,12 +749,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <Label className="text-foreground font-medium">Song Structure</Label>
                   <AiToolbar field="songStructure" />
                 </div>
-                <Input placeholder="e.g., Intro → Verse → Chorus → Outro" value={songStructure} onChange={e => updateSongPrompt({ songStructure: e.target.value })} className="bg-input border-border" />
-                <div className="flex flex-wrap gap-1.5 mt-3">
-                  {SONG_STRUCTURE_PRESETS.map(p => (
-                    <button key={p} onClick={() => updateSongPrompt({ songStructure: p })} className={`px-2 py-1 text-xs rounded-md border transition-smooth ${songStructure === p ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>{p.length > 40 ? p.slice(0, 40) + '...' : p}</button>
-                  ))}
-                </div>
+                <SmartSearchInput
+                  value={songStructure}
+                  onChange={(val: string) => updateSongPrompt({ songStructure: val })}
+                  options={SONG_STRUCTURE_PRESETS}
+                  placeholder="e.g., Intro → Verse → Chorus → Outro"
+                />
               </motion.div>
 
               {/* Vocal Structure */}
@@ -790,15 +766,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                   <AiToolbar field="vocalStructure" />
                 </div>
-                <div className="relative" ref={vocalStructureRef}>
-                  <Input placeholder="Type or select..." value={vocalStructure} onChange={e => updateSongPrompt({ vocalStructure: e.target.value })} onFocus={() => setShowVocalStructureDropdown(true)} className="bg-input border-border" />
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <PortalDropdown open={showVocalStructureDropdown} onClose={() => setShowVocalStructureDropdown(false)} triggerRef={vocalStructureRef as React.RefObject<HTMLElement>} matchTriggerWidth>
-                    {VOCAL_STRUCTURE_PRESETS.map(preset => (
-                      <button key={preset} onClick={() => { updateSongPrompt({ vocalStructure: preset }); setShowVocalStructureDropdown(false); }} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${vocalStructure === preset ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{preset}</button>
-                    ))}
-                  </PortalDropdown>
-                </div>
+                <SmartSearchInput
+                  value={vocalStructure}
+                  onChange={(val: string) => updateSongPrompt({ vocalStructure: val })}
+                  options={VOCAL_STRUCTURE_PRESETS}
+                  placeholder="e.g., Verse - Chorus - Verse"
+                />
               </motion.div>
 
               {/* Vocal Style */}
@@ -810,15 +783,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                   <AiToolbar field="vocalStyle" />
                 </div>
-                <div className="relative" ref={vocalStyleRef}>
-                  <Input placeholder="Type or select..." value={vocalStyle} onChange={e => updateSongPrompt({ vocalStyle: e.target.value })} onFocus={() => setShowVocalStyleDropdown(true)} className="bg-input border-border" />
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <PortalDropdown open={showVocalStyleDropdown} onClose={() => setShowVocalStyleDropdown(false)} triggerRef={vocalStyleRef as React.RefObject<HTMLElement>} matchTriggerWidth>
-                    {VOCAL_STYLE_PRESETS.map(preset => (
-                      <button key={preset} onClick={() => { updateSongPrompt({ vocalStyle: preset }); setShowVocalStyleDropdown(false); }} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${vocalStyle === preset ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{preset}</button>
-                    ))}
-                  </PortalDropdown>
-                </div>
+                <SmartSearchInput
+                  value={vocalStyle}
+                  onChange={(val: string) => updateSongPrompt({ vocalStyle: val })}
+                  options={PRESET_VOCAL_STYLES}
+                  placeholder="e.g., Male Vocal, Rap, Ethereal..."
+                />
               </motion.div>
 
               {/* Vocal Intensity */}
@@ -846,24 +816,13 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                   <AiToolbar field="vocalEffects" />
                 </div>
-                {selectedVocalEffects.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {selectedVocalEffects.map(effect => (
-                      <Badge key={effect} variant="secondary" className="bg-accent/20 text-accent border-accent/30 cursor-pointer hover:bg-accent/30" onClick={() => toggleVocalEffect(effect)}>{effect} ×</Badge>
-                    ))}
-                  </div>
-                )}
-                <div className="relative" ref={vocalEffectsRef}>
-                  <button onClick={() => setShowVocalEffectsDropdown(!showVocalEffectsDropdown)} className="w-full flex items-center justify-between px-4 py-3 bg-input border border-border rounded-lg text-left">
-                    <span className="text-muted-foreground">{selectedVocalEffects.length === 0 ? 'Select effects...' : 'Add more effects'}</span>
-                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                  <PortalDropdown open={showVocalEffectsDropdown} onClose={() => setShowVocalEffectsDropdown(false)} triggerRef={vocalEffectsRef as React.RefObject<HTMLElement>} matchTriggerWidth>
-                    {VOCAL_EFFECTS_OPTIONS.map(effect => (
-                      <button key={effect} onClick={() => toggleVocalEffect(effect)} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${selectedVocalEffects.includes(effect) ? 'bg-accent/10 text-accent' : 'text-foreground'}`}>{effect}</button>
-                    ))}
-                  </PortalDropdown>
-                </div>
+                <SmartSearchInput
+                  value={selectedVocalEffects}
+                  onChange={(val: string[]) => setSelectedVocalEffects(val)}
+                  options={VOCAL_EFFECTS_OPTIONS}
+                  placeholder="Select or type effects..."
+                  multiSelect
+                />
               </motion.div>
 
               {/* Vocal Language */}
@@ -875,24 +834,13 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                   <AiToolbar field="vocalLanguage" />
                 </div>
-                {selectedLanguages.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {selectedLanguages.map(lang => (
-                      <Badge key={lang} variant="secondary" className="bg-accent/20 text-accent border-accent/30 cursor-pointer hover:bg-accent/30" onClick={() => toggleLanguage(lang)}>{lang} ×</Badge>
-                    ))}
-                  </div>
-                )}
-                <div className="relative" ref={languageRef}>
-                  <button onClick={() => setShowLanguageDropdown(!showLanguageDropdown)} className="w-full flex items-center justify-between px-4 py-3 bg-input border border-border rounded-lg text-left">
-                    <span className="text-muted-foreground">{selectedLanguages.length === 0 ? 'Select languages...' : 'Add more languages'}</span>
-                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                  <PortalDropdown open={showLanguageDropdown} onClose={() => setShowLanguageDropdown(false)} triggerRef={languageRef as React.RefObject<HTMLElement>} matchTriggerWidth>
-                    {LANGUAGES.map(lang => (
-                      <button key={lang} onClick={() => toggleLanguage(lang)} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${selectedLanguages.includes(lang) ? 'bg-accent/10 text-accent' : 'text-foreground'}`}>{lang}</button>
-                    ))}
-                  </PortalDropdown>
-                </div>
+                <SmartSearchInput
+                  value={selectedLanguages}
+                  onChange={(val: string[]) => setSelectedLanguages(val)}
+                  options={LANGUAGES}
+                  placeholder="Select or type languages..."
+                  multiSelect
+                />
               </motion.div>
 
               {/* Lyrics */}
@@ -937,14 +885,19 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                 <AnimatePresence>
                   {generateVideo && (
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-6">
-                      <div className="flex flex-col gap-2 mb-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
                         <div className="flex items-center gap-2">
                           <Palette className="w-5 h-5 text-muted-foreground" />
                           <Label className="text-foreground font-medium">Video Style</Label>
                         </div>
                         <AiToolbar field="videoStyle" />
                       </div>
-                      <Input placeholder="e.g., Abstract geometric visuals, neon colors..." value={videoStyle} onChange={e => updateSongPrompt({ videoStyle: e.target.value })} className="bg-input border-border" />
+                      <SmartSearchInput
+                        value={videoStyle}
+                        onChange={(val: string) => updateSongPrompt({ videoStyle: val })}
+                        options={PRESET_VIDEO_STYLES}
+                        placeholder="e.g., Abstract geometric visuals..."
+                      />
                     </motion.div>
                   )}
                 </AnimatePresence>
