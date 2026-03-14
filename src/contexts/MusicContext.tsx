@@ -444,8 +444,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const genres = input.genres.join(', ');
     const mood = input.mood || 'balanced';
     const tempo = input.tempoBpm || 120;
+    const duration = input.durationSeconds || 180;
     
-    let prompt = `A professional recording of ${genres}. `;
+    let prompt = `A professional ${duration}s recording of ${genres}. `;
     prompt += `Context: ${mood} mood, tight ${tempo} BPM rhythmic grid. `;
     
     if (isInstrumental) {
@@ -455,6 +456,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const lang = input.vocalLanguages[0] || "English";
       prompt += `Structure: Vocal-led song featuring ${style} vocals in ${lang}. `;
       if (input.vocalIntensity) prompt += `Vocal energy level: ${input.vocalIntensity}/10. `;
+      if (input.vocalEffects?.length) prompt += `Effects: ${input.vocalEffects.join(', ')}. `;
+    }
+
+    if (input.songStructure) {
+      prompt += `Musical Form: ${input.songStructure}. `;
     }
     
     if (input.musicPrompt) {
@@ -466,9 +472,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
 
     if (input.lyrics) {
-      // For Suno-like models, we often repeat a few keywords from lyrics in the prompt
-      const lyricGist = input.lyrics.split('\n').slice(0, 2).join(' ').substring(0, 60);
-      prompt += `Thematic gist: ${lyricGist}... `;
+      const lyricGist = input.lyrics.split('\n').slice(0, 3).join(' ').substring(0, 100);
+      prompt += `Thematic core: ${lyricGist}... `;
     }
     
     return prompt.trim();
@@ -481,7 +486,15 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     try {
       trackLastUpdateRef.current[trackId] = Date.now();
 
-      // Step 0: Generate unique DNA for this generation
+      // Step 0: Pre-flight Diagnostic
+      const configCheck = aiMusicClient.validateConfig();
+      if (!configCheck.valid) {
+        console.error(`[Senior Engine] Neural configuration error: ${configCheck.error}`);
+        toast.error(`Neural Bridge Config Error: ${configCheck.error}`);
+        throw new Error(configCheck.error);
+      }
+
+      // Step 1: Generate unique DNA
       const dna = createGenerationDNA();
       console.log(`[${trackId}] Senior Engine DNA generated: seed=${dna.seed}`);
 

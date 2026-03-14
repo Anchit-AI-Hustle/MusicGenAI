@@ -41,6 +41,19 @@ export class AiMusicClient {
   }
 
   /**
+   * Validates the client configuration.
+   */
+  public validateConfig(): { valid: boolean; error?: string } {
+    if (!this.apiKey && !this.apiEndpoint.includes('musevibe.ai')) {
+       return { valid: false, error: 'VITE_AI_MUSIC_API_KEY is missing.' };
+    }
+    if (!this.apiEndpoint) {
+      return { valid: false, error: 'VITE_AI_MUSIC_API_URL is not configured.' };
+    }
+    return { valid: true };
+  }
+
+  /**
    * Triggers a new music generation request.
    */
   async triggerGeneration(options: GenerationOptions): Promise<string> {
@@ -71,33 +84,36 @@ export class AiMusicClient {
    */
   async pollStatus(id: string, onProgress?: (p: number) => void): Promise<GenerationStatus> {
     let status: GenerationStatus = { id, status: 'pending', progress: 0 };
-    const maxAttempts = 60; // 5 minutes at 5s interval
+    const maxAttempts = 120; // 10 minutes at 5s interval
     let attempts = 0;
 
     while (attempts < maxAttempts) {
       attempts++;
       
-      const response = await fetch(`${this.apiEndpoint}/${id}`, {
-        headers: { 'Authorization': `Bearer ${this.apiKey}` }
-      });
+      try {
+        const response = await fetch(`${this.apiEndpoint}/${id}`, {
+          headers: { 'Authorization': `Bearer ${this.apiKey}` }
+        });
 
-      if (!response.ok) {
-        throw new Error(`Failed to poll status for ${id}`);
-      }
+        if (!response.ok) {
+          console.warn(`[AiMusicClient] Polling attempt ${attempts} failed: ${response.status}`);
+        } else {
+          status = await response.json();
+          if (onProgress) onProgress(status.progress);
 
-      status = await response.json();
-      
-      if (onProgress) onProgress(status.progress);
-
-      if (status.status === 'completed' || status.status === 'failed') {
-        return status;
+          if (status.status === 'completed' || status.status === 'failed') {
+            return status;
+          }
+        }
+      } catch (e) {
+        console.warn(`[AiMusicClient] Network error during poll:`, e);
       }
 
       // Wait 5 seconds before next poll
       await new Promise(resolve => setTimeout(resolve, 5000));
     }
 
-    throw new Error('Generation timed out after 5 minutes.');
+    throw new Error('Neural generation timed out after 10 minutes (Cold Start or Queue Depth issue).');
   }
 
   /**
