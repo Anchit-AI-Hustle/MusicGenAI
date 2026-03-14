@@ -128,15 +128,17 @@ export function createGenerationSeed(): GenerationSeed {
 export const createGenerationDNA = createGenerationSeed;
 
 export interface StyleProfile {
+  genreFamily: string;
+  subStyle: string;
+  tempoRange: [number, number];
+  rhythmComplexity: 'minimal' | 'steady' | 'driving' | 'syncopated' | 'polyrhythmic' | string;
+  instrumentPalette: string[];
+  energyLevel: number; // 1-10
+  vocalStyle: string;
   tempoTendency?: 'very slow' | 'slow' | 'midtempo' | 'fast' | 'very fast';
-  rhythmComplexity?: 'minimal' | 'steady' | 'driving' | 'syncopated' | 'polyrhythmic';
   groovePattern?: string;
-  energyLevel?: number; // 1-10
-  instrumentPalette?: string[];
-  vocalStyle?: string;
   textureDensity?: number; // 0-1
   atmosphere?: string;
-  tempoRange?: [number, number];
   instruments?: string[];
   rhythmStyle?: string;
   grooveTemplate?: string;
@@ -171,6 +173,18 @@ export interface SectionPlan {
   duration: number;
   energy: number; // 0-1
   description: string;
+}
+
+export interface CompositionGraph {
+  tempo: number;
+  scale: string;
+  chordProgression: string[];
+  motif: number[];
+  songStructure: SectionPlan[];
+  barGrid: {
+    totalBars: number;
+    barsPerSection: { [sectionKey: string]: number };
+  };
 }
 
 type ProgressCallback = (stage: string, progress: number) => void;
@@ -684,6 +698,7 @@ export interface GenerateTrackResult {
   blob: Blob;
   instrumentalBuffer: AudioBuffer;
   rngState: number;
+  compositionGraph: CompositionGraph;
   diagnostics: {
     stemFamilies: string[];
     arrangementSignature: string;
@@ -756,6 +771,21 @@ export async function generateTrack(
 
   const sections = structure.length > 0 ? structure : generateArrangement(profile, durationSeconds, rng);
 
+  // ===== CompositionGraph: Bar Grid Calculation =====
+  const beatsPerBar = 4; // standard 4/4
+  const totalBars = Math.floor(durationSeconds / (60 / effectiveTempo) / beatsPerBar);
+  const barsPerSection: { [key: string]: number } = {};
+  
+  let accumulatedBars = 0;
+  sections.forEach((sec, i) => {
+    let bars = Math.round(sec.duration / (60 / effectiveTempo) / beatsPerBar);
+    if (i === sections.length - 1) {
+      bars = Math.max(1, totalBars - accumulatedBars); // Fit remainder
+    }
+    barsPerSection[`${sec.name}_${i}`] = bars;
+    accumulatedBars += bars;
+  });
+
   // Choose styles dynamically based on profile characteristics
   const bassStyle = chooseBassStyleDynamic(profile.rhythmStyle, profile.characteristics, profile.swing);
   const melodyStyle = chooseMelodyStyle(intent.genre, globalEnergy / 10, profile.characteristics);
@@ -769,6 +799,18 @@ export async function generateTrack(
   // ===== Generate track-wide motif and hook for coherence =====
   const trackMotif = generateMotif(rng, globalEnergy / 10);
   const trackHook = generateHook(rng);
+
+  const compositionGraph: CompositionGraph = {
+    tempo: effectiveTempo,
+    scale: parsedScale,
+    chordProgression: [root], // Basic root for now, expands dynamically in sub-renderers
+    motif: trackMotif.intervals,
+    songStructure: sections,
+    barGrid: {
+      totalBars,
+      barsPerSection
+    }
+  };
 
   onProgress('synthesizing_instruments', 0.18);
 
@@ -819,6 +861,7 @@ export async function generateTrack(
     blob: masterResult.blob,
     instrumentalBuffer,
     rngState: seedVal,
+    compositionGraph,
     diagnostics: {
       stemFamilies: ['drums', 'bass', 'melody', 'effects', ...(profile.instruments.some((instrument) => /pad|strings|keys|organ/i.test(instrument)) ? ['pads'] : [])],
       arrangementSignature: sections.map((section) => `${section.name}:${section.duration.toFixed(2)}:${section.energy.toFixed(2)}`).join('|'),

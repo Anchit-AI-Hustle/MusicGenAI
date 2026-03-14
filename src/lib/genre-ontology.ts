@@ -22,6 +22,8 @@ export interface GenreProfile {
 }
 
 type AIStyleProfile = {
+  genreFamily?: string;
+  subStyle?: string;
   tempoTendency?: string;
   rhythmComplexity?: string;
   groovePattern?: string;

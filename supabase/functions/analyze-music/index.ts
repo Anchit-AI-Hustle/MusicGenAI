@@ -123,6 +123,8 @@ ${universalKnowledgePrompt}
 
 Return both:
 1. A user-facing StyleProfile using these semantic fields:
+- genreFamily
+- subStyle
 - tempoTendency
 - rhythmComplexity
 - groovePattern
@@ -148,6 +150,7 @@ Return both:
 When the GenerationDNA includes arrangementStyle or colorSignature, use them as creative nudges for structure and atmosphere without repeating prior patterns.
 
 Allowed values:
+- genreFamily: Choose dynamically from Electronic, Hip Hop, Rock, Pop, Jazz, Classical, Ambient, R&B, Latin, Metal, Folk, World, Cinematic, Experimental, etc. ROTATE through these families across different prompts to ensure high genre diversity. DO NOT always default to electronic/techno.
 - tempoTendency: very slow, slow, midtempo, fast, very fast
 - rhythmComplexity: minimal, steady, driving, syncopated, polyrhythmic
 - rhythmStyle: four-on-floor, breakbeat, boom-bap, swing, straight, shuffle, halftime, polyrhythm
@@ -168,8 +171,8 @@ ${seedSummary}
 ${universalKnowledgePrompt}
 
 Generate a complete StyleProfile with:
-1. The actual inferred genre and subgenre (even if user didn't specify)
-2. Semantic style fields: tempoTendency, rhythmComplexity, groovePattern, energyLevel, instrumentPalette, vocalStyle, textureDensity, atmosphere
+1. The actual inferred genre family and subgenre/substyle (even if user didn't specify)
+2. Semantic style fields: genreFamily, subStyle, tempoTendency, rhythmComplexity, groovePattern, energyLevel, instrumentPalette, vocalStyle, textureDensity, atmosphere
 3. Optimal tempo for this style (vary slightly from defaults, e.g. not always exactly 128 for house)
 4. Musical key root note and scale that fits the mood
 5. Rhythm style, groove template, harmonic style
@@ -182,8 +185,8 @@ Generate a complete StyleProfile with:
       "create_style_profile",
       "Create a complete dynamic StyleProfile for any music style inferred from the prompt",
       {
-        genre: { type: "string", description: "Primary genre inferred from prompt" },
-        subgenre: { type: "string", description: "Specific subgenre" },
+        genreFamily: { type: "string", description: "Primary genre family (e.g. Electronic, Rock, Jazz, Classical, Hip Hop, Pop etc.)" },
+        subStyle: { type: "string", description: "Specific subgenre or substyle" },
         tempoTendency: { type: "string", description: "One of: very slow, slow, midtempo, fast, very fast" },
         rhythmComplexity: { type: "string", description: "One of: minimal, steady, driving, syncopated, polyrhythmic" },
         groovePattern: { type: "string", description: "Descriptive groove pattern such as stomping pulse, rolling shuffle, broken-step swing" },
@@ -206,12 +209,12 @@ Generate a complete StyleProfile with:
         mood: { type: "string", description: "Mood description" },
         characteristics: { type: "array", items: { type: "string" }, description: "3-5 style characteristic words" },
       },
-      ["genre", "subgenre", "tempoTendency", "rhythmComplexity", "groovePattern", "instrumentPalette", "vocalStyleSemantic", "textureDensity", "atmosphere", "tempo", "rootKey", "scale", "energyLevel", "rhythmStyle", "grooveTemplate", "harmonicStyle", "density", "swing", "instruments", "energyCurve", "structureTemplate", "mood", "characteristics"],
+      ["genreFamily", "subStyle", "tempoTendency", "rhythmComplexity", "groovePattern", "instrumentPalette", "vocalStyleSemantic", "textureDensity", "atmosphere", "tempo", "rootKey", "scale", "energyLevel", "rhythmStyle", "grooveTemplate", "harmonicStyle", "density", "swing", "instruments", "energyCurve", "structureTemplate", "mood", "characteristics"],
       `${aiSeed}:style`
     );
 
     // ===== STEP 2: Song Structure =====
-    const inferredGenre = styleResult?.genre || genres[0] || "electronic";
+    const inferredGenre = styleResult?.genreFamily || genres[0] || "electronic";
     // Use raw AI tempo here; music-engine applies DNA-based variation within tempoRange
     const inferredTempo = styleResult?.tempo || tempoBpm;
 
@@ -289,6 +292,8 @@ Durations MUST sum to exactly ${durationSeconds}. Create a UNIQUE structure.`,
 
     // Build the StyleProfile that will be used directly by the browser engine
     const styleProfile = {
+      genreFamily: styleResult?.genreFamily || (genres.length > 0 ? genres[0] : "Electronic"),
+      subStyle: styleResult?.subStyle || styleResult?.subgenre || "unknown",
       tempoTendency: styleResult?.tempoTendency || (inferredTempo < 85 ? "slow" : inferredTempo > 145 ? "fast" : "midtempo"),
       rhythmComplexity: styleResult?.rhythmComplexity || "steady",
       groovePattern: styleResult?.groovePattern || styleResult?.grooveTemplate || "dynamic pulse",
@@ -332,7 +337,7 @@ Durations MUST sum to exactly ${durationSeconds}. Create a UNIQUE structure.`,
 
     const musicIntent = {
       genre: inferredGenre,
-      subgenre: styleResult?.subgenre || "",
+      subgenre: styleResult?.subStyle || styleResult?.subgenre || "",
       tempo: inferredTempo,
       key: rootKey,
       scale: scaleType,
