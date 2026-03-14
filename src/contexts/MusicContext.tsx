@@ -8,7 +8,7 @@ import {
 } from '@/lib/audio-utils';
 import { generateTrack, type AudioStems, type GenerateTrackResult, MusicIntent, createRng, createGenerationDNA, getGenerationSeedNumber, mixStems, type GenerationDNA } from '@/lib/music-engine';
 import { generateVideoFromAudio } from '@/lib/video-generator';
-import { generateVocals, generateLyricCues, inferVocalStyle, generateDefaultLyrics, type LyricCue, type VocalConfig } from '@/lib/vocal-engine';
+import { generateVocals, generateLyricCues, inferVocalStyle, generateDefaultLyrics, mixVocalsIntoInstrumental, type LyricCue, type VocalConfig, type VocalStyleType } from '@/lib/vocal-engine';
 import { aiMusicClient } from '@/lib/ai-music-client';
 import type { TrackConfig } from '@/components/AlbumTrackForm';
 import { genreOptionsToLabels } from '@/data/genres';
@@ -610,14 +610,53 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       if (!isInstrumental) {
         updateTrackLocal(creationId, trackId, { status: 'vocals', currentStage: '[8/12] Synthesizing & aligning vocal synthesis', progress: 0.65 });
         const tempo = input.tempoBpm || 120;
-        const totalBars = calculateBars(input.durationSeconds, tempo);
-        console.log(`[Vocal Synthesis] Estimated bars: ${totalBars} for ${input.durationSeconds}s at ${tempo} BPM`);
         
-        lyricCues = generateLyricCues(input.lyrics || '', musicIntent.structure, input.durationSeconds, {
+        // 8a. Generate lyrics if missing
+        let activeLyrics = input.lyrics || '';
+        if (!activeLyrics) {
+          activeLyrics = generateDefaultLyrics(neuralPrompt, input.genres, input.mood, musicIntent.structure, {
+            tempo,
+            vocalStyle: input.vocalStyle as VocalStyleType,
+            vocalIntensity: input.vocalIntensity,
+            language: input.vocalLanguages[0] || 'English',
+          });
+        }
+
+        // 8b. Generate lyric cues for visualizer
+        lyricCues = generateLyricCues(activeLyrics, musicIntent.structure, input.durationSeconds, {
           tempo: tempo,
           vocalStyle: inferVocalStyle(input.genres, input.vocalStyle),
           vocalIntensity: input.vocalIntensity || 5,
+          language: input.vocalLanguages[0] || 'English',
         });
+
+        // 8c. Synthesize Vocals
+        const vocalConfig: VocalConfig = {
+          lyrics: activeLyrics,
+          tempo,
+          key: musicIntent.key || 'C',
+          scale: musicIntent.scale || 'major',
+          structure: musicIntent.structure,
+          durationSeconds: input.durationSeconds,
+          vocalStyle: inferVocalStyle(input.genres, input.vocalStyle),
+          vocalIntensity: input.vocalIntensity || 5,
+          vocalEffects: input.vocalEffects,
+          genres: input.genres,
+          mood: input.mood,
+          language: input.vocalLanguages[0] || 'English',
+        };
+
+        const vocalBuffer = await generateVocals(vocalConfig, (prog) => {
+          updateTrackLocal(creationId, trackId, { 
+            currentStage: `[8/12] Vocal synthesis: ${prog.stage}`, 
+            progress: 0.65 + (prog.progress * 0.08) 
+          });
+        }, createRng(dna.numericSeed));
+
+        // 8d. Mix Vocals
+        if (vocalBuffer && finalBuffer) {
+          finalBuffer = mixVocalsIntoInstrumental(finalBuffer, vocalBuffer, 1.15);
+        }
       }
 
       // Step 9: Stem Mixing & Separation

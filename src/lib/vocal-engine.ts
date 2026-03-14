@@ -40,6 +40,7 @@ export interface VocalSegment {
   startTime: number;
   endTime: number;
   energy: number;
+  language: string;
 }
 
 export interface LyricCue {
@@ -47,6 +48,7 @@ export interface LyricCue {
   sectionName: string;
   startTime: number;
   endTime: number;
+  language: string;
 }
 
 interface LyricTimingSyllable {
@@ -68,6 +70,7 @@ interface LyricTimingOptions {
   tempo: number;
   vocalStyle: VocalStyleType;
   vocalIntensity: number;
+  language?: string;
 }
 
 interface DefaultLyricOptions extends LyricTimingOptions {
@@ -268,6 +271,29 @@ const VOWEL_FORMANTS: Record<string, [number, number, number]> = {
   'y': [300, 2200, 3000],
 };
 
+const LANGUAGE_VOWEL_MODS: Record<string, Record<string, [number, number, number]>> = {
+  'punjabi': {
+    'a': [850, 1150, 2400], // Deeper, more open
+    'u': [380, 720, 2400],
+  },
+  'french': {
+    'e': [450, 2100, 2700], // More nasal/closed
+    'u': [320, 1600, 2300], // Fronted 'u'
+  },
+  'spanish': {
+    'a': [750, 1300, 2500],
+    'e': [450, 1900, 2600],
+  },
+  'hindi': {
+    'a': [820, 1180, 2450],
+    'i': [320, 2600, 3200],
+  },
+  'korean': {
+    'o': [480, 850, 2400],
+    'e': [420, 2150, 2750],
+  },
+};
+
 const CONSONANT_TYPES: Record<string, 'plosive' | 'fricative' | 'nasal' | 'liquid' | 'silent'> = {
   'b': 'plosive', 'p': 'plosive', 'd': 'plosive', 't': 'plosive', 'g': 'plosive', 'k': 'plosive',
   'f': 'fricative', 'v': 'fricative', 's': 'fricative', 'z': 'fricative', 'h': 'fricative',
@@ -347,19 +373,31 @@ interface LyricLine {
   section: string;
   syllables: string[];
   explicitStartTime?: number;
+  language: string;
 }
 
 function parseLyrics(lyrics: string): LyricLine[] {
   const lines: LyricLine[] = [];
   let currentSection = 'verse';
+  let currentLanguage = 'english';
 
   for (const raw of lyrics.split('\n')) {
     const line = raw.trim();
     if (!line) continue;
-    const sectionMatch = line.match(/^\[?(verse|chorus|bridge|intro|outro|hook|pre-chorus|post-chorus|drop|break|instrumental break)\s*\d*\]?$/i);
-    if (sectionMatch) { currentSection = sectionMatch[1].toLowerCase(); continue; }
-    const implicitSection = line.match(/^(verse|chorus|bridge|intro|outro|hook|drop|break)\s*\d*$/i);
-    if (implicitSection) { currentSection = implicitSection[1].toLowerCase(); continue; }
+
+    // Detect section or language tags: [Chorus] or [Spanish]
+    // Require brackets to distinguish from song text
+    const tagMatch = line.match(/^\[(verse|chorus|bridge|intro|outro|hook|pre-chorus|post-chorus|drop|break|instrumental break|punjabi|spanish|hindi|french|yoruba|korean|english)\s*\d*\]$/i);
+    if (tagMatch) {
+      const tag = tagMatch[1].toLowerCase();
+      const languages = ['punjabi', 'spanish', 'hindi', 'french', 'yoruba', 'korean', 'english'];
+      if (languages.includes(tag)) {
+        currentLanguage = tag;
+      } else {
+        currentSection = tag;
+      }
+      continue;
+    }
 
     // Check for [MM:SS] timestamp
     let explicitStartTime: number | undefined;
@@ -373,9 +411,17 @@ function parseLyrics(lyrics: string): LyricLine[] {
       textToProcess = timeMatch[3];
     }
 
+    // Inline language override: "Hola [Spanish]"
+    let lineLanguage = currentLanguage;
+    const inlineLangMatch = textToProcess.match(/\[(punjabi|spanish|hindi|french|yoruba|korean|english)\]/i);
+    if (inlineLangMatch) {
+      lineLanguage = inlineLangMatch[1].toLowerCase();
+      textToProcess = textToProcess.replace(inlineLangMatch[0], '').trim();
+    }
+
     const syllables = lineToSyllables(textToProcess);
     if (syllables.length > 0) {
-      lines.push({ text: textToProcess, section: currentSection, syllables, explicitStartTime });
+      lines.push({ text: textToProcess, section: currentSection, syllables, explicitStartTime, language: lineLanguage });
     }
   }
   return lines;
@@ -489,10 +535,94 @@ function fitLineToSyllableTarget(base: string, targetSyllables: number, fillerWo
   return current;
 }
 
+interface CulturalContext {
+  primaryLanguage: string;
+  secondaryLanguage?: string;
+  region?: string;
+  tradition?: string;
+  artistInspirations: string[];
+}
+
+interface LanguageDistribution {
+  primaryWeight: number; // 0.7 - 0.85
+  secondaryWeight: number; // 0.1 - 0.25
+  adLibWeight: number; // 0.05 - 0.1
+}
+
+function detectCulturalContext(prompt: string, genres: string[]): CulturalContext {
+  const lower = prompt.toLowerCase();
+  const allContext = [...genres.map(g => g.toLowerCase()), lower].join(' ');
+
+  let primary = 'english';
+  let secondary: string | undefined;
+  let region: string | undefined;
+  let tradition: string | undefined;
+
+  // Language & Region Detection
+  if (allContext.includes('punjabi') || allContext.includes('bhangra') || allContext.includes('punjab')) {
+    primary = 'punjabi';
+    secondary = 'english';
+    region = 'punjab';
+  } else if (allContext.includes('spanish') || allContext.includes('latin') || allContext.includes('reggaeton') || allContext.includes('espanol')) {
+    primary = 'spanish';
+    secondary = 'english';
+    region = 'latin america';
+  } else if (allContext.includes('hindi') || allContext.includes('bollywood') || allContext.includes('indian')) {
+    primary = 'hindi';
+    secondary = 'english';
+    region = 'india';
+  } else if (allContext.includes('french') || allContext.includes('paris') || allContext.includes('france')) {
+    primary = 'french';
+    secondary = 'english';
+    region = 'france';
+  } else if (allContext.includes('afro') || allContext.includes('nigeria') || allContext.includes('yoruba')) {
+    primary = 'english';
+    secondary = 'yoruba';
+    region = 'west africa';
+  } else if (allContext.includes('k-pop') || allContext.includes('korean') || allContext.includes('seoul')) {
+    primary = 'korean';
+    secondary = 'english';
+    region = 'south korea';
+  }
+
+  return {
+    primaryLanguage: primary,
+    secondaryLanguage: secondary,
+    region,
+    tradition,
+    artistInspirations: [], // Could be parsed further if needed
+  };
+}
+
+function calculateLanguageDistribution(genres: string[], context: CulturalContext): LanguageDistribution {
+  const genreStr = genres.join(' ').toLowerCase();
+  
+  // Default distribution
+  let dist: LanguageDistribution = {
+    primaryWeight: 0.8,
+    secondaryWeight: 0.15,
+    adLibWeight: 0.05
+  };
+
+  if (genreStr.includes('rap') || genreStr.includes('drill') || genreStr.includes('trap')) {
+    dist.primaryWeight = 0.75;
+    dist.secondaryWeight = 0.2;
+  } else if (genreStr.includes('pop') || genreStr.includes('dance')) {
+    dist.primaryWeight = 0.85;
+    dist.secondaryWeight = 0.1;
+  }
+
+  return dist;
+}
+
 function detectLanguage(language?: string) {
   const lower = (language || 'english').toLowerCase();
   if (lower.includes('spanish') || lower.includes('espanol')) return 'spanish';
   if (lower.includes('hindi')) return 'hindi';
+  if (lower.includes('punjabi')) return 'punjabi';
+  if (lower.includes('french')) return 'french';
+  if (lower.includes('korean')) return 'korean';
+  if (lower.includes('yoruba')) return 'yoruba';
   return 'english';
 }
 
@@ -516,6 +646,18 @@ function buildHookSeed(prompt: string, mood: string, genres: string[], language:
   if (detectedLanguage === 'hindi') {
     return promptLead || `${mood || 'raat'} ki dhadkan`;
   }
+  if (detectedLanguage === 'punjabi') {
+    return promptLead || `${mood || 'shaan'} vakhri`;
+  }
+  if (detectedLanguage === 'french') {
+    return promptLead || `${mood || 'danse'} sous la pluie`;
+  }
+  if (detectedLanguage === 'yoruba') {
+    return promptLead || `${mood || 'ayo'} ninu orin`;
+  }
+  if (detectedLanguage === 'korean') {
+    return promptLead || `${mood || 'nolae'}leul bulleo`;
+  }
   return promptLead || `${mood || genres[0] || 'midnight'} in motion`;
 }
 
@@ -537,6 +679,42 @@ function buildLanguageLexicon(language?: string) {
       chorusOpeners: ['Saath utho', 'Yeh dhadkan', 'Roshni bolo', 'Aaj ki raat'],
       bridgeOpeners: ['Saans rukti hai', 'Khamoshi tode', 'Pal badalta hai'],
       imagery: ['raat', 'shehar', 'saans', 'dhadkan', 'roshni', 'dhuaan'],
+    };
+  }
+  if (detectedLanguage === 'punjabi') {
+    return {
+      fillers: ['aithe', 'uthe', 'hor', 'vi', 'saddi', 'gall'],
+      verseOpeners: ['Sadda vakhra style', 'Pind diyan raahan', 'Dil vich zor', 'Sheran wargi tor'],
+      chorusOpeners: ['Sadda haq aithe rakh', 'Duniya hila do', 'Bhangra pao', 'Dil sacha'],
+      bridgeOpeners: ['Rasta saaf hai', 'Manzil door nahi', 'Yaaran de naal'],
+      imagery: ['sher', 'pind', 'shaan', 'zor', 'darru', 'bhagra'],
+    };
+  }
+  if (detectedLanguage === 'french') {
+    return {
+      fillers: ['encore', 'toujours', 'enfin', 'peut-être', 'ici', 'là'],
+      verseOpeners: ['Dans la brume', 'Le silence tombe', 'Les ombres bougent', 'Rue déserte'],
+      chorusOpeners: ['Bruite de la ville', 'Cœur de néon', 'Ciel d\'argent', 'Nous brillons'],
+      bridgeOpeners: ['Le vent tourne', 'Le temps s\'arrête', 'Un nouveau jour'],
+      imagery: ['nuit', 'ville', 'rêve', 'pluie', 'lumière', 'étoile'],
+    };
+  }
+  if (detectedLanguage === 'yoruba') {
+    return {
+      fillers: ['pẹlu', 'bayi', 'titi', 'onikaluku', 'wa', 'ni'],
+      verseOpeners: ['Orin titun ni', 'Ijo n bẹ nibẹ', 'Ọmọ Yoruba', 'Ilẹ̀ wa lẹwa'],
+      chorusOpeners: ['Ẹ jẹ k’a jọ gbe', 'Irin ajo yi', 'Ibùkún Ọlọ́run', 'Ayo n bẹ'],
+      bridgeOpeners: ['Agbára n bẹ', 'Irora dopin', 'Ìwájú l’ao lọ'],
+      imagery: ['orin', 'ijo', 'ife', 'agbara', 'ayo', 'ibukun'],
+    };
+  }
+  if (detectedLanguage === 'korean') {
+    return {
+      fillers: ['jigeum', 'dasi', 'hamkke', 'neomu', 'uri', 'geu'],
+      verseOpeners: ['Seoul-ui bam', 'Heundeullinun bit', 'Gireul ilhneunda', 'Sumi chaonda'],
+      chorusOpeners: ['Kkum-eul kkwoyo', 'Dalligo isseo', 'Uriui nolae', 'Saranghaeyo'],
+      bridgeOpeners: ['Baram-i bul-eo', 'Meomchuji ma', 'Saeloun sijak'],
+      imagery: ['bam', 'kkum', 'bit', 'sarang', 'achime', 'naneun'],
     };
   }
   return {
@@ -733,6 +911,7 @@ function buildLyricTimingMap(
         startTime: lineStart,
         endTime: lineEnd,
         energy: section.energy,
+        language: line.language || options.language || 'english',
         syllables: line.syllables,
         syllableTimings,
       });
@@ -754,6 +933,7 @@ function alignLyricsToStructure(
     startTime: line.startTime,
     endTime: line.endTime,
     energy: line.energy,
+    language: line.language,
   }));
 }
 
@@ -774,6 +954,7 @@ export function generateLyricCues(
     sectionName: line.sectionName,
     startTime: line.startTime,
     endTime: line.endTime,
+    language: line.language,
   }));
 }
 
@@ -790,23 +971,34 @@ function renderSungSyllable(
   volume: number,
   style: StyleParams,
   rng: () => number,
+  language: string = 'english',
 ) {
   if (duration <= 0.01) return;
 
   // Extract dominant vowel for formant
   const lower = syllable.toLowerCase().replace(/[^a-z]/g, '');
-  let vowelFormant: [number, number, number] = VOWEL_FORMANTS['a']; // default
+  let baseFormant: [number, number, number] = VOWEL_FORMANTS['a']; // default
   let consonantPrefix = '';
+  let vowelChar = 'a';
   let vowelFound = false;
+
   for (let i = 0; i < lower.length; i++) {
     if (VOWEL_FORMANTS[lower[i]]) {
-      vowelFormant = VOWEL_FORMANTS[lower[i]];
+      baseFormant = VOWEL_FORMANTS[lower[i]];
+      vowelChar = lower[i];
       consonantPrefix = lower.slice(0, i);
       vowelFound = true;
       break;
     }
   }
   if (!vowelFound) consonantPrefix = lower;
+
+  // Apply language-specific mods
+  let vowelFormant = [...baseFormant] as [number, number, number];
+  const langMods = LANGUAGE_VOWEL_MODS[language.toLowerCase()];
+  if (langMods && langMods[vowelChar]) {
+    vowelFormant = langMods[vowelChar];
+  }
 
   const consonantDur = Math.min(0.04 * consonantPrefix.length, duration * 0.2);
   const vowelStart = startTime + consonantDur;
@@ -964,7 +1156,7 @@ function renderVocalLine(
     const actualDur = endTime - startTime;
 
     if (actualDur > 0.02) {
-      renderSungSyllable(ctx, dest, segment.syllables[i], startTime, actualDur, note.frequency, prevFreq, volume, style, rng);
+      renderSungSyllable(ctx, dest, segment.syllables[i], startTime, actualDur, note.frequency, prevFreq, volume, style, rng, segment.language);
       prevFreq = note.frequency;
     }
   }
@@ -1088,6 +1280,7 @@ export async function generateVocals(
     tempo,
     vocalStyle,
     vocalIntensity,
+    language: config.language,
   });
   const vocalSegments = lyricTimingMap.lines;
   if (vocalSegments.length === 0) return null;
@@ -1224,7 +1417,6 @@ export function generateDefaultLyrics(
     durationSeconds: structure.reduce((sum, section) => sum + section.duration, 0),
     vocalStyle: 'melodic_singing',
     vocalIntensity: 5,
-    language: 'English',
     ...options,
   });
 }
@@ -1237,9 +1429,20 @@ function generateDefaultLyricsInternal(
   options: DefaultLyricOptions,
 ): string {
   const lines: string[] = [];
-  const hookSeed = buildHookSeed(prompt, mood, genres, options.language || 'English');
+  
+  // Detect Cultural Context
+  const culturalContext = detectCulturalContext(prompt, genres);
+  const distribution = calculateLanguageDistribution(genres, culturalContext);
+  
+  const primaryLang = options.language || culturalContext.primaryLanguage;
+  const secondaryLang = culturalContext.secondaryLanguage || 'english';
+
+  const hookSeed = buildHookSeed(prompt, mood, genres, primaryLang);
   const promptWords = sanitizePromptWords(prompt);
-  const lexicon = buildLanguageLexicon(options.language);
+  
+  const primaryLexicon = buildLanguageLexicon(primaryLang);
+  const secondaryLexicon = buildLanguageLexicon(secondaryLang);
+  
   const styleTokens = getStyleVoiceTokens(options.vocalStyle);
   const chorusMemory: string[] = [];
 
@@ -1251,6 +1454,7 @@ function generateDefaultLyricsInternal(
 
   let currentGlobalTimeSeconds = 0;
   let previousHeader = '';
+  let lastInjectedLanguage = '';
 
   for (const section of structure) {
     const isVocal = isVocalSection(section.name);
@@ -1261,10 +1465,7 @@ function generateDefaultLyricsInternal(
       continue;
     }
 
-    // Capture start time AFTER non-vocal sections have already advanced the clock
-    // so timestamps are correct for every vocal section's position in the song
     const sectionStartTime = currentGlobalTimeSeconds;
-
     const normalizedName = normalizeSectionName(section.name);
     const header = normalizedName.charAt(0).toUpperCase() + normalizedName.slice(1);
 
@@ -1273,50 +1474,61 @@ function generateDefaultLyricsInternal(
       previousHeader = header;
     }
 
-    // Syllable Constraint Engine (Strict per-bar targets)
+    // Syllable Constraint Engine
     let targetSyllablesPerBar = 8;
     const isRap = options.vocalStyle === 'rap' || options.vocalStyle === 'spoken_word';
     const isAmbient = options.vocalStyle === 'whisper';
 
     if (isRap) {
-      targetSyllablesPerBar = 14; // Center of 12-16
+      targetSyllablesPerBar = 14;
     } else if (isAmbient) {
-      targetSyllablesPerBar = 5; // Center of 4-6
+      targetSyllablesPerBar = 5;
     } else {
-      targetSyllablesPerBar = 8; // Center of 6-10 for melodic
+      targetSyllablesPerBar = 8;
     }
 
-    // Allocate lyric lines
-    // RAP: 1 line per 1 bar
-    // MELODIC/AMBIENT: 1 line per 2 bars
     const stepsPerLine = isRap ? 1 : 2;
 
     for (let barIdx = 0; barIdx < sectionBars; barIdx += stepsPerLine) {
       const barsToUse = Math.min(stepsPerLine, sectionBars - barIdx);
       const syllablesTarget = targetSyllablesPerBar * barsToUse;
-
       const lineTimeSeconds = sectionStartTime + (barIdx * secondsPerBar);
-
+      
       const minutes = Math.floor(lineTimeSeconds / 60);
       const seconds = Math.floor(lineTimeSeconds % 60);
       const timeStr = `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}]`;
 
       const memoryIdx = Math.floor(barIdx / stepsPerLine);
 
+      // Determine language for this specific line based on distribution
+      const roll = Math.random();
+      let activeLang = primaryLang;
+      let activeLexicon = primaryLexicon;
+
+      if (roll > distribution.primaryWeight) {
+        activeLang = secondaryLang;
+        activeLexicon = secondaryLexicon;
+      }
+
+      // Inject language marker if it changed
+      if (activeLang !== lastInjectedLanguage) {
+        lines.push(`[${activeLang.charAt(0).toUpperCase() + activeLang.slice(1)}]`);
+        lastInjectedLanguage = activeLang;
+      }
+
       let baseLine: string;
       if ((normalizedName === 'chorus' || normalizedName === 'hook' || normalizedName === 'drop') && chorusMemory[memoryIdx]) {
         baseLine = (barIdx + stepsPerLine >= sectionBars)
-          ? `${chorusMemory[memoryIdx]} ${lexicon.fillers[memoryIdx % lexicon.fillers.length]}`
+          ? `${chorusMemory[memoryIdx]} ${activeLexicon.fillers[memoryIdx % activeLexicon.fillers.length]}`
           : chorusMemory[memoryIdx];
       } else {
-        baseLine = buildSectionLine(normalizedName, memoryIdx, hookSeed, promptWords, mood, lexicon, styleTokens, genres);
+        baseLine = buildSectionLine(normalizedName, memoryIdx, hookSeed, promptWords, mood, activeLexicon, styleTokens, genres);
         if (normalizedName === 'chorus' || normalizedName === 'hook' || normalizedName === 'drop') {
           chorusMemory[memoryIdx] = baseLine;
         }
       }
 
-      // Generate up to exact syllable limits using the target
-      let fittedLine = fitLineToSyllableTarget(baseLine, syllablesTarget, lexicon.fillers);
+      let fittedLine = fitLineToSyllableTarget(baseLine, syllablesTarget, activeLexicon.fillers);
 
       // Final strict validation
       const currentSyllables = lineToSyllables(fittedLine).length;
