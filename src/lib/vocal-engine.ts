@@ -32,7 +32,7 @@ export interface VocalConfig {
 
 export type VocalStyleType =
   | 'male_electronic' | 'female_melodic' | 'robotic_vocoder'
-  | 'rap' | 'choir' | 'whisper' | 'melodic_singing';
+  | 'rap' | 'choir' | 'whisper' | 'melodic_singing' | 'spoken_word';
 
 export interface VocalSegment {
   text: string;
@@ -165,7 +165,7 @@ function generateLineMelody(
 
   const isChorus = /chorus|hook|drop/i.test(sectionName);
   const isBridge = /bridge/i.test(sectionName);
-  const isRap = style === 'rap';
+  const isRap = style === 'rap' || style === 'spoken_word';
 
   // Pick starting note — higher energy → higher in scale
   const rangeStart = Math.floor(scaleMidi.length * 0.2);
@@ -307,6 +307,8 @@ function getStyleParams(style: VocalStyleType, intensity: number): StyleParams {
       return { baseOctave: 4, vibratoRate: 5, vibratoDepth: 10 * f, breathiness: 0.2, formantShift: 1.0, attackTime: 0.08, releaseTime: 0.15, waveform: 'sine', harmonicRichness: 0.3, pitchGlide: 0.06 };
     case 'whisper':
       return { baseOctave: 4, vibratoRate: 0, vibratoDepth: 0, breathiness: 0.85, formantShift: 1.1, attackTime: 0.02, releaseTime: 0.05, waveform: 'sine', harmonicRichness: 0.1, pitchGlide: 0 };
+    case 'spoken_word':
+      return { baseOctave: 3, vibratoRate: 0, vibratoDepth: 0, breathiness: 0.18, formantShift: 0.98, attackTime: 0.01, releaseTime: 0.025, waveform: 'triangle', harmonicRichness: 0.42, pitchGlide: 0.008 };
     case 'melodic_singing':
     default:
       return { baseOctave: 4, vibratoRate: 5, vibratoDepth: 6 * f, breathiness: 0.2, formantShift: 1.0, attackTime: 0.025, releaseTime: 0.07, waveform: 'sine', harmonicRichness: 0.5, pitchGlide: 0.035 };
@@ -322,6 +324,7 @@ export function inferVocalStyle(genres: string[], vocalStyle?: string): VocalSty
     if (lower.includes('female')) return 'female_melodic';
     if (lower.includes('robot') || lower.includes('vocoder')) return 'robotic_vocoder';
     if (lower.includes('rap')) return 'rap';
+    if (lower.includes('spoken') || lower.includes('word')) return 'spoken_word';
     if (lower.includes('choir')) return 'choir';
     if (lower.includes('whisper')) return 'whisper';
     if (lower.includes('melodic') || lower.includes('singing')) return 'melodic_singing';
@@ -329,6 +332,7 @@ export function inferVocalStyle(genres: string[], vocalStyle?: string): VocalSty
   const g = genres.join(' ').toLowerCase();
   if (g.includes('techno') || g.includes('industrial')) return 'robotic_vocoder';
   if (g.includes('trap') || g.includes('hip hop') || g.includes('rap')) return 'rap';
+  if (g.includes('spoken word') || g.includes('poetry')) return 'spoken_word';
   if (g.includes('pop') || g.includes('r&b')) return 'female_melodic';
   if (g.includes('choir') || g.includes('gospel')) return 'choir';
   if (g.includes('ambient') || g.includes('lo-fi')) return 'whisper';
@@ -408,6 +412,8 @@ function getSyllablePacing(style: VocalStyleType, intensity: number) {
   switch (style) {
     case 'rap':
       return { min: Math.round(12 * intensityFactor), max: Math.round(16 * intensityFactor), preferredLineBars: 2, silenceRatio: 0.1 };
+    case 'spoken_word':
+      return { min: 8, max: 12, preferredLineBars: 2, silenceRatio: 0.14 };
     case 'whisper':
       return { min: 4, max: 6, preferredLineBars: 2, silenceRatio: 0.25 };
     case 'robotic_vocoder':
@@ -535,6 +541,11 @@ function getStyleVoiceTokens(style: VocalStyleType) {
       return {
         verseClosers: ['hit hard', 'cut clean', 'talk sharp', 'run deep'],
         chorusClosers: ['bring it back', 'lock that in', 'stay on beat'],
+      };
+    case 'spoken_word':
+      return {
+        verseClosers: ['speak plain', 'hold weight', 'land slow', 'cut through'],
+        chorusClosers: ['say it twice', 'stay in frame', 'hold that line'],
       };
     case 'whisper':
       return {
@@ -1103,10 +1114,15 @@ export async function generateVocals(
   const ctx = new OfflineAudioContext(2, Math.ceil(sampleRate * durationSeconds), sampleRate);
 
   const vocalBus = ctx.createGain();
-  vocalBus.gain.value = 0.95;
+  vocalBus.gain.value = vocalStyle === 'whisper' ? 1.05 : 1.18;
+
+  const dryBus = ctx.createGain();
+  dryBus.gain.value = vocalStyle === 'robotic_vocoder' ? 0.48 : vocalStyle === 'whisper' ? 0.72 : 0.86;
+  vocalBus.connect(dryBus);
+  dryBus.connect(ctx.destination);
 
   const effectsBus = ctx.createGain();
-  effectsBus.gain.value = 1.0;
+  effectsBus.gain.value = vocalStyle === 'robotic_vocoder' ? 0.95 : 0.82;
   applyVocalEffects(ctx, vocalBus, effectsBus, vocalEffects, genres);
   effectsBus.connect(ctx.destination);
 
@@ -1137,12 +1153,12 @@ export async function generateVocals(
   }
 
   if (peak < 0.08) {
-    normalizeAudio(vocalBuffer, 0.28);
+    normalizeAudio(vocalBuffer, 0.34);
   }
 
   const postNormalizePeak = measurePeak(vocalBuffer);
-  if (postNormalizePeak < 0.14) {
-    applyGain(vocalBuffer, Math.min(2.5, 0.18 / Math.max(postNormalizePeak, 0.001)));
+  if (postNormalizePeak < 0.18) {
+    applyGain(vocalBuffer, Math.min(3.2, 0.24 / Math.max(postNormalizePeak, 0.001)));
   }
 
   onProgress({ stage: 'mixing', progress: 1.0 });
@@ -1155,7 +1171,7 @@ export async function generateVocals(
 export function mixVocalsIntoInstrumental(
   instrumental: AudioBuffer,
   vocals: AudioBuffer,
-  vocalLevel: number = 0.95,
+  vocalLevel: number = 1.08,
 ): AudioBuffer {
   const sampleRate = instrumental.sampleRate;
   const numChannels = instrumental.numberOfChannels;
@@ -1172,8 +1188,8 @@ export function mixVocalsIntoInstrumental(
     for (let i = 0; i < length; i++) {
       const inst = instData[i];
       const vocal = i < vocalSamples ? vocalData[i] * vocalLevel : 0;
-      const vocalPresence = Math.abs(vocal) > 0.003 ? Math.min(1, Math.abs(vocal) * 8) : 0;
-      const instDuck = 1 - vocalPresence * 0.24;
+      const vocalPresence = Math.abs(vocal) > 0.0025 ? Math.min(1, Math.abs(vocal) * 10) : 0;
+      const instDuck = 1 - vocalPresence * 0.34;
       mixData[i] = inst * instDuck + vocal;
     }
   }

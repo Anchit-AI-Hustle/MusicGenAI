@@ -41,6 +41,30 @@ const CREATIVE_ANGLES = [
   "atmospheric or textural focus",
 ];
 
+interface StyleFamilyProfile {
+  family: string;
+  substyles: string[];
+  tempoRange: [number, number];
+  instruments: string[];
+  moods: string[];
+  arrangements: string[];
+}
+
+const STYLE_FAMILY_LIBRARY: StyleFamilyProfile[] = [
+  { family: "Electronic", substyles: ["dub techno", "progressive house", "IDM", "breakbeat", "trance"], tempoRange: [112, 150], instruments: ["drum machines", "modular synths", "sub bass", "arpeggiators"], moods: ["hypnotic", "futuristic", "euphoric"], arrangements: ["club build and release", "progressive layering", "late-night pulse"] },
+  { family: "Hip Hop / Rap", substyles: ["boom bap", "trap", "drill", "lo-fi hip hop", "jazz rap"], tempoRange: [70, 100], instruments: ["drum machine", "808 bass", "sample chops", "keys"], moods: ["gritty", "confessional", "swaggering"], arrangements: ["verse-forward", "hook-driven", "cypher-style rotation"] },
+  { family: "Rock / Metal", substyles: ["indie rock", "post-punk", "alt metal", "shoegaze rock", "garage rock"], tempoRange: [90, 150], instruments: ["electric guitar", "live drums", "bass guitar", "amp textures"], moods: ["urgent", "anthemic", "raw"], arrangements: ["band crescendo", "riff-led chorus", "dynamic breakdown"] },
+  { family: "Pop", substyles: ["synth pop", "alt pop", "dance pop", "bedroom pop", "art pop"], tempoRange: [90, 132], instruments: ["hook synths", "tight drums", "bass", "glossy vocal layers"], moods: ["bright", "heartbroken", "playful"], arrangements: ["hook-first", "verse-pre-chorus-chorus", "radio-tight arc"] },
+  { family: "Jazz / Blues", substyles: ["bebop", "smooth jazz", "jazz fusion", "soul jazz", "electric blues"], tempoRange: [95, 180], instruments: ["piano", "upright bass", "saxophone", "brush drums"], moods: ["sultry", "nimble", "late-night"], arrangements: ["head-solo-head", "improvised turns", "swinging ensemble"] },
+  { family: "Classical / Orchestral", substyles: ["chamber music", "symphonic poem", "minimalist ensemble", "romantic score", "baroque-inspired"], tempoRange: [55, 140], instruments: ["strings", "woodwinds", "brass", "timpani"], moods: ["dramatic", "elegant", "cinematic"], arrangements: ["movement-like arc", "motivic development", "orchestral swell"] },
+  { family: "Ambient / Cinematic", substyles: ["dark ambient", "drone", "cinematic underscore", "neo-ambient", "post-classical ambient"], tempoRange: [40, 90], instruments: ["pads", "drones", "felt piano", "textural strings"], moods: ["immersive", "haunting", "weightless"], arrangements: ["slow evolution", "textural bloom", "scene-building atmosphere"] },
+  { family: "World / Folk", substyles: ["Celtic folk", "Anatolian folk", "Nordic folk", "Appalachian folk", "desert blues"], tempoRange: [70, 125], instruments: ["acoustic strings", "hand percussion", "folk winds", "drones"], moods: ["earthy", "storytelling", "ritual"], arrangements: ["call and response", "traveling ballad", "communal refrain"] },
+  { family: "Reggae / Dub", substyles: ["roots reggae", "dub", "steppers", "dub poetry", "rocksteady"], tempoRange: [68, 110], instruments: ["offbeat guitar", "deep bass", "rimshot drums", "delay effects"], moods: ["sun-warmed", "meditative", "resistant"], arrangements: ["bass-led groove", "dropout dub sections", "chant hook"] },
+  { family: "Latin / Afro", substyles: ["afrobeats", "salsa", "cumbia", "reggaeton", "highlife"], tempoRange: [88, 128], instruments: ["polyrhythmic percussion", "bass", "guitars", "horns"], moods: ["festive", "sensual", "kinetic"], arrangements: ["percussion lift", "dance callouts", "cyclical chorus"] },
+  { family: "Indian / Asian Traditions", substyles: ["raga-inspired electronica", "qawwali fusion", "ghazal noir", "taiko-driven score", "gamelan ambient"], tempoRange: [60, 150], instruments: ["tabla", "tanpura", "bansuri", "sarangi"], moods: ["devotional", "intricate", "mystic"], arrangements: ["alap to pulse", "tala-driven expansion", "cyclical refrain"] },
+  { family: "Experimental / Avant-garde", substyles: ["glitch collage", "electroacoustic", "noise pop", "free improvisation", "deconstructed club"], tempoRange: [50, 170], instruments: ["found sound", "granular textures", "prepared instruments", "fractured drums"], moods: ["unsettling", "inventive", "volatile"], arrangements: ["fragmented episodes", "abrupt contrast", "nonlinear narrative"] },
+];
+
 function hashSeed(input: string): number {
   let hash = 2166136261;
   for (let i = 0; i < input.length; i++) {
@@ -173,7 +197,43 @@ function buildEntropyDirective(seed: number, previousSuggestions: string[], requ
   return directive;
 }
 
-function buildStructuredSuggestion(field: string, suggestion: string, context: any) {
+function sampleStyleFamily(seed: number, previousGenreFamilies: string[] = []) {
+  const rng = createSeededRng(`style-family:${seed}:${previousGenreFamilies.join("|")}`);
+  const lastFamily = previousGenreFamilies.at(-1);
+  const candidateFamilies = STYLE_FAMILY_LIBRARY.filter((profile) => profile.family !== lastFamily);
+  const familyProfile = candidateFamilies[Math.floor(rng() * candidateFamilies.length)] || STYLE_FAMILY_LIBRARY[Math.floor(rng() * STYLE_FAMILY_LIBRARY.length)];
+  const substyle = familyProfile.substyles[Math.floor(rng() * familyProfile.substyles.length)];
+  const mood = familyProfile.moods[Math.floor(rng() * familyProfile.moods.length)];
+  const arrangement = familyProfile.arrangements[Math.floor(rng() * familyProfile.arrangements.length)];
+  const instrumentCount = Math.min(familyProfile.instruments.length, 3 + Math.floor(rng() * 2));
+  const instruments = pickRandom(familyProfile.instruments, seed + 77, instrumentCount);
+  return {
+    family: familyProfile.family,
+    substyle,
+    tempoRange: familyProfile.tempoRange,
+    mood,
+    arrangement,
+    instruments,
+  };
+}
+
+function buildStyleSamplerDirective(sampled: ReturnType<typeof sampleStyleFamily>, previousGenreFamilies: string[] = []) {
+  const previousFamily = previousGenreFamilies.at(-1);
+  let directive = `\n\n--- STYLE SAMPLER ---`;
+  directive += `\nSelected genre family: ${sampled.family}`;
+  directive += `\nSelected substyle: ${sampled.substyle}`;
+  directive += `\nTempo range: ${sampled.tempoRange[0]}-${sampled.tempoRange[1]} BPM`;
+  directive += `\nInstrument palette: ${sampled.instruments.join(", ")}`;
+  directive += `\nMood axis: ${sampled.mood}`;
+  directive += `\nArrangement style: ${sampled.arrangement}`;
+  if (previousFamily) {
+    directive += `\nCRITICAL: The previous suggestion used the genre family "${previousFamily}". Do NOT repeat that family in this response.`;
+  }
+  directive += `\nUse this sampled family as the primary style frame unless the user's existing context explicitly requires something else. Do not default back to techno, hard techno, or generic electronic phrasing unless this sampler selected Electronic.`;
+  return directive;
+}
+
+function buildStructuredSuggestion(field: string, suggestion: string, context: any, sampledStyle?: ReturnType<typeof sampleStyleFamily>) {
   const structured = {
     genre: Array.isArray(context?.genres) ? [...context.genres] : [],
     mood: context?.mood || "",
@@ -207,6 +267,18 @@ function buildStructuredSuggestion(field: string, suggestion: string, context: a
       break;
   }
 
+  if (sampledStyle) {
+    if (structured.genre.length === 0 && (field === "prompt" || field === "genres")) {
+      structured.genre = [sampledStyle.substyle];
+    }
+    if (!structured.tempo && field !== "duration") {
+      structured.tempo = String(Math.round((sampledStyle.tempoRange[0] + sampledStyle.tempoRange[1]) / 2));
+    }
+    if (!structured.mood) {
+      structured.mood = sampledStyle.mood;
+    }
+  }
+
   return structured;
 }
 
@@ -216,7 +288,7 @@ serve(async (req) => {
   }
 
   try {
-    const { field, value, context, action = "suggest", previousSuggestions = [], randomSeed = 0, requestNonce = "", generationDNA = null } = await req.json();
+    const { field, value, context, action = "suggest", previousSuggestions = [], previousGenreFamilies = [], randomSeed = 0, requestNonce = "", generationDNA = null } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -228,6 +300,8 @@ serve(async (req) => {
     const contextStr = buildContext(context);
     const fallbackSeed = randomSeed || hashSeed(`${requestNonce || crypto.randomUUID()}:${Date.now()}`);
     const entropyDirective = buildEntropyDirective(fallbackSeed, previousSuggestions || [], requestNonce);
+    const sampledStyle = sampleStyleFamily(fallbackSeed, previousGenreFamilies || []);
+    const styleSamplerDirective = buildStyleSamplerDirective(sampledStyle, previousGenreFamilies || []);
     const universalKnowledgePrompt = buildUniversalMusicKnowledgePrompt({
       musicPrompt: context?.musicPrompt || value,
       genres: context?.genres || [],
@@ -248,19 +322,22 @@ Arrangement style: ${generationDNA.arrangementStyle}`
 
     let userContent: string;
     if (isEnhance) {
-      userContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}${dnaDirective}\n${universalKnowledgePrompt}${entropyDirective}`;
+      userContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}${dnaDirective}\n${universalKnowledgePrompt}${styleSamplerDirective}${entropyDirective}`;
     } else if (isNew) {
-      userContent = `${fieldPrompt}${contextStr}${dnaDirective}\n${universalKnowledgePrompt}\n\nCreate something substantially different from any prior phrasing or idea.${entropyDirective}`;
+      userContent = `${fieldPrompt}${contextStr}${dnaDirective}\n${universalKnowledgePrompt}${styleSamplerDirective}\n\nCreate something substantially different from any prior phrasing or idea.${entropyDirective}`;
     } else {
       const currentValueNote = value
         ? `\n\nThe user has already entered: "${value}". Generate a completely NEW and DIFFERENT suggestion. Do NOT repeat or slightly modify their input.`
         : "\n\nThe field is empty. Suggest a creative starting point.";
-      userContent = `${fieldPrompt}${contextStr}${dnaDirective}\n${universalKnowledgePrompt}${currentValueNote}${entropyDirective}`;
+      userContent = `${fieldPrompt}${contextStr}${dnaDirective}\n${universalKnowledgePrompt}${styleSamplerDirective}${currentValueNote}${entropyDirective}`;
     }
 
     const systemPrompt = `You are a music production AI assistant. You help users craft their musical vision.
 CRITICAL RULES:
 - You have access to UniversalMusicKnowledge across historical eras, world regions, vocal traditions, production lineages, and hybrid genres.
+- Before writing a suggestion, anchor it to the sampled genre family and substyle provided in the STYLE SAMPLER block.
+- Rotate across global style families. Never repeat the immediately previous genre family when a prior family is provided.
+- Do not default to hard techno, industrial techno, or generic electronic descriptors unless the sampled family is Electronic or the user explicitly asked for that.
 - Generate ALL outputs dynamically. NEVER return example text, template phrases, or placeholder content.
 - Every response MUST be unique. Use completely different wording, vocabulary, phrasing, and creative angles each time.
 - Treat each request nonce as a hard requirement for novelty. Never reuse previous wording even when the field and context are similar.
@@ -287,17 +364,19 @@ CRITICAL RULES:
       const temperature = 0.92 + rng() * 0.08;
       const attemptSeed = Math.floor(rng() * 1000000);
       const entropyRefresh = buildEntropyDirective(attemptSeed, previousSuggestions || [], requestNonce);
+      const attemptSampledStyle = sampleStyleFamily(attemptSeed, previousGenreFamilies || []);
+      const attemptStyleDirective = buildStyleSamplerDirective(attemptSampledStyle, previousGenreFamilies || []);
       
       let freshUserContent: string;
       if (isEnhance) {
-        freshUserContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}${dnaDirective}\n${universalKnowledgePrompt}${entropyRefresh}`;
+        freshUserContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}${dnaDirective}\n${universalKnowledgePrompt}${attemptStyleDirective}${entropyRefresh}`;
       } else if (isNew) {
-        freshUserContent = `${fieldPrompt}${contextStr}${dnaDirective}\n${universalKnowledgePrompt}\n\nCreate a brand new concept that avoids all previous ideas.${entropyRefresh}`;
+        freshUserContent = `${fieldPrompt}${contextStr}${dnaDirective}\n${universalKnowledgePrompt}${attemptStyleDirective}\n\nCreate a brand new concept that avoids all previous ideas.${entropyRefresh}`;
       } else {
         const currentValueNote = value
           ? `\n\nThe user has already entered: "${value}". Generate a completely NEW and DIFFERENT suggestion. Do NOT repeat or slightly modify their input.`
           : "\n\nThe field is empty. Suggest a creative starting point.";
-        freshUserContent = `${fieldPrompt}${contextStr}${dnaDirective}\n${universalKnowledgePrompt}${currentValueNote}${entropyRefresh}`;
+        freshUserContent = `${fieldPrompt}${contextStr}${dnaDirective}\n${universalKnowledgePrompt}${attemptStyleDirective}${currentValueNote}${entropyRefresh}`;
       }
       
       return JSON.stringify({
@@ -390,8 +469,8 @@ CRITICAL RULES:
       if (toolCall?.function?.arguments) {
         const args = JSON.parse(toolCall.function.arguments);
         suggestion = args.suggestion || "";
-        const structured = args.structured || buildStructuredSuggestion(field, suggestion, context);
-        return new Response(JSON.stringify({ suggestion, field, action, seed: generationDNA?.seed || String(fallbackSeed), structured }), {
+        const structured = args.structured || buildStructuredSuggestion(field, suggestion, context, sampledStyle);
+        return new Response(JSON.stringify({ suggestion, field, action, seed: generationDNA?.seed || String(fallbackSeed), structured, genreFamily: sampledStyle.family }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } else {
@@ -403,7 +482,8 @@ CRITICAL RULES:
         field,
         action,
         seed: generationDNA?.seed || String(fallbackSeed),
-        structured: buildStructuredSuggestion(field, suggestion, context),
+        structured: buildStructuredSuggestion(field, suggestion, context, sampledStyle),
+        genreFamily: sampledStyle.family,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

@@ -89,6 +89,7 @@ export interface AiSuggestionResult {
   action: AiAction;
   suggestion: string | null;
   seed?: string;
+  genreFamily?: string;
   structured?: StructuredPromptSuggestion | null;
 }
 
@@ -581,7 +582,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             await updateTrackDB(trackId, creationId, 'Mixing vocals into track', 0.74, 'vocal_alignment');
 
             // Mix vocals into instrumental
-            const mixedBuffer = mixVocalsIntoInstrumental(trackResult.instrumentalBuffer, vocalBuffer, 0.7);
+            const mixedBuffer = mixVocalsIntoInstrumental(trackResult.instrumentalBuffer, vocalBuffer, 1.08);
             
             // Master the mixed version
             updateTrackLocal(creationId, trackId, { status: 'mastering_track', currentStage: 'Mastering final mix with vocals', progress: 0.76 });
@@ -860,6 +861,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Session suggestion history
   const suggestionHistoryRef = useRef<Record<string, string[]>>({});
+  const suggestionGenreFamilyHistoryRef = useRef<string[]>([]);
 
   const aiSuggestQueueRef = useRef(Promise.resolve());
 
@@ -892,6 +894,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             body: JSON.stringify({
               field, value, context, action,
               previousSuggestions,
+              previousGenreFamilies: suggestionGenreFamilyHistoryRef.current.slice(-8),
               randomSeed,
               requestNonce,
               generationDNA: dna,
@@ -920,12 +923,16 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             if (!suggestionHistoryRef.current.__global__) suggestionHistoryRef.current.__global__ = [];
             suggestionHistoryRef.current.__global__.push(suggestion);
           }
+          if (data.genreFamily) {
+            suggestionGenreFamilyHistoryRef.current.push(data.genreFamily);
+          }
 
           return {
             field: data.field || field,
             action: data.action || action,
             suggestion,
             seed: data.seed,
+            genreFamily: data.genreFamily,
             structured: data.structured || null,
           };
         } catch (e) {
