@@ -6,6 +6,23 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function hashSeed(input: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function createSeededRng(seed: string) {
+  let s = hashSeed(seed);
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 0xffffffff;
+  };
+}
+
 // ===== TYPE DEFINITIONS =====
 
 interface SegmentPlan {
@@ -39,8 +56,10 @@ async function callAI(
   toolName: string,
   toolDescription: string,
   toolParams: Record<string, any>,
-  requiredFields: string[]
+  requiredFields: string[],
+  randomnessSeed?: string,
 ): Promise<any> {
+  const rng = createSeededRng(randomnessSeed || `${toolName}:${userPrompt.slice(0, 120)}`);
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -49,7 +68,7 @@ async function callAI(
     },
     body: JSON.stringify({
       model: "google/gemini-3-flash-preview",
-      temperature: 0.7 + Math.random() * 0.2,
+      temperature: 0.7 + rng() * 0.2,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -742,7 +761,7 @@ Durations MUST sum to exactly ${durationSec}.`,
     });
 
     if (frozenInput.generateVideo) {
-      await updateProgress(supabase, trackId, creationId, "Generating video visuals", 0.86, 20, jobId, 8, totalSegments, totalSegments, "generating_video");
+      await updateProgress(supabase, trackId, creationId, "Rendering video", 0.86, 20, jobId, 8, totalSegments, totalSegments, "generating_video");
       // Video generation happens client-side via Canvas + MediaRecorder
       // The edge function marks the track as audio-complete so the client can pick up video generation
     }

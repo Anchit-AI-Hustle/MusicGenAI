@@ -133,7 +133,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   }, [numberOfSongs]);
 
   const updateAlbumTrack = (index: number, config: TrackConfig) => {
-    setAlbumTracks(prev => prev.map((t, i) => i === index ? config : t));
+    setAlbumTracks(prev => prev.map((t, i) => i === index ? { ...t, ...config } : t));
   };
 
   // Song mode helpers

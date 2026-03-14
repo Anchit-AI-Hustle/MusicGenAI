@@ -40,6 +40,23 @@ const CREATIVE_ANGLES = [
   "atmospheric or textural focus",
 ];
 
+function hashSeed(input: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function createSeededRng(seed: string) {
+  let s = hashSeed(seed);
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 0xffffffff;
+  };
+}
+
 function pickRandom<T>(arr: T[], seed: number, count = 1): T[] {
   const shuffled = [...arr].sort(() => Math.sin(seed++) - 0.5);
   return shuffled.slice(0, count);
@@ -190,8 +207,9 @@ CRITICAL RULES:
 
     // High temperature + top_p for maximum creativity — rebuild per attempt for unique seeds
     const buildRequestBody = () => {
-      const temperature = 0.92 + Math.random() * 0.08; // 0.92-1.0 range (safe for all models)
-      const attemptSeed = Math.floor(Math.random() * 1000000);
+      const rng = createSeededRng(`${randomSeed}:${requestNonce}:${field}:${action}:${value}`);
+      const temperature = 0.92 + rng() * 0.08;
+      const attemptSeed = Math.floor(rng() * 1000000);
       const entropyRefresh = buildEntropyDirective(attemptSeed, previousSuggestions || [], requestNonce);
       
       let freshUserContent: string;
@@ -238,7 +256,8 @@ CRITICAL RULES:
     let lastError = "";
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       if (attempt > 0) {
-        const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 8000);
+        const delayRng = createSeededRng(`${randomSeed}:${requestNonce}:retry:${attempt}`);
+        const delay = Math.min(1000 * Math.pow(2, attempt) + delayRng() * 500, 8000);
         await new Promise(r => setTimeout(r, delay));
       }
 

@@ -84,6 +84,19 @@ interface MusicContextType {
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
 
+const TERMINAL_TRACK_STATUSES = ['completed', 'audio_complete_video_failed', 'failed'];
+
+function deriveCreationState(tracks: Track[]) {
+  const statuses = tracks.map(t => t.status);
+  const derivedStatus = statuses.some(s => s === 'failed') && statuses.every(s => TERMINAL_TRACK_STATUSES.includes(s))
+    ? 'completed'
+    : statuses.every(s => s === 'completed' || s === 'audio_complete_video_failed')
+      ? 'completed'
+      : statuses.find(s => !['pending', 'completed', 'audio_complete_video_failed'].includes(s)) || 'pending';
+  const derivedProgress = tracks.reduce((a, t) => a + (t.progress ?? 0), 0) / (tracks.length || 1);
+  return { derivedStatus, derivedProgress };
+}
+
 export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
   const [creations, setCreations] = useState<MusicCreation[]>([]);
@@ -115,23 +128,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (!tracksError) tracksData = data || [];
       }
 
-      const mapped: MusicCreation[] = (creationsData || []).map(creation => ({
-        id: creation.id,
-        userId: creation.user_id,
-        type: creation.type as 'song' | 'album',
-        title: creation.title,
-        musicPrompt: creation.music_prompt,
-        genres: creation.genres || [],
-        status: creation.status,
-        durationSeconds: creation.duration_seconds,
-        generateVideo: creation.generate_video,
-        vocalLanguages: creation.vocal_languages || [],
-        lyrics: creation.lyrics || undefined,
-        artistInspiration: creation.artist_inspiration || undefined,
-        videoStyle: creation.video_style || undefined,
-        createdAt: new Date(creation.created_at),
-        progress: creation.progress ?? 0,
-        tracks: tracksData
+      const mapped: MusicCreation[] = (creationsData || []).map(creation => {
+        const tracks = tracksData
           .filter(t => t.creation_id === creation.id)
           .map(track => ({
             id: track.id,
@@ -148,8 +146,27 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             errorMessage: track.error_message || undefined,
             currentStage: track.current_stage || undefined,
             estimatedTimeLeft: track.estimated_time_left ?? 0,
-          })),
-      }));
+          }));
+        const { derivedStatus, derivedProgress } = deriveCreationState(tracks);
+        return {
+          id: creation.id,
+          userId: creation.user_id,
+          type: creation.type as 'song' | 'album',
+          title: creation.title,
+          musicPrompt: creation.music_prompt,
+          genres: creation.genres || [],
+          status: derivedStatus,
+          durationSeconds: creation.duration_seconds,
+          generateVideo: creation.generate_video,
+          vocalLanguages: creation.vocal_languages || [],
+          lyrics: creation.lyrics || undefined,
+          artistInspiration: creation.artist_inspiration || undefined,
+          videoStyle: creation.video_style || undefined,
+          createdAt: new Date(creation.created_at),
+          progress: derivedProgress,
+          tracks,
+        };
+      });
 
       setCreations(mapped);
     } catch (error) {
@@ -186,22 +203,14 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
         setCreations(prev => prev.map(c => {
           const tracks = c.tracks.map(mapTrack);
-          const statuses = tracks.map(t => t.status);
-          const derivedStatus = statuses.some(s => s === 'failed') ? 'failed'
-            : statuses.every(s => s === 'completed') ? 'completed'
-            : statuses.find(s => !['pending', 'completed'].includes(s)) || 'pending';
-          const derivedProgress = tracks.reduce((a, t) => a + (t.progress ?? 0), 0) / (tracks.length || 1);
+          const { derivedStatus, derivedProgress } = deriveCreationState(tracks);
           return { ...c, tracks, status: derivedStatus, progress: derivedProgress };
         }));
 
         setCurrentCreation(prev => {
           if (!prev) return prev;
           const tracks = prev.tracks.map(mapTrack);
-          const statuses = tracks.map(t => t.status);
-          const derivedStatus = statuses.some(s => s === 'failed') ? 'failed'
-            : statuses.every(s => s === 'completed') ? 'completed'
-            : statuses.find(s => !['pending', 'completed'].includes(s)) || 'pending';
-          const derivedProgress = tracks.reduce((a, t) => a + (t.progress ?? 0), 0) / (tracks.length || 1);
+          const { derivedStatus, derivedProgress } = deriveCreationState(tracks);
           return { ...prev, tracks, status: derivedStatus, progress: derivedProgress };
         });
       })
@@ -222,21 +231,13 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setCreations(prev => prev.map(c => {
       if (c.id !== creationId) return c;
       const tracks = c.tracks.map(mapTrack);
-      const statuses = tracks.map(t => t.status);
-      const derivedStatus = statuses.some(s => s === 'failed') ? 'failed'
-        : statuses.every(s => s === 'completed') ? 'completed'
-        : statuses.find(s => !['pending', 'completed'].includes(s)) || 'pending';
-      const derivedProgress = tracks.reduce((a, t) => a + (t.progress ?? 0), 0) / (tracks.length || 1);
+      const { derivedStatus, derivedProgress } = deriveCreationState(tracks);
       return { ...c, tracks, status: derivedStatus, progress: derivedProgress };
     }));
     setCurrentCreation(prev => {
       if (prev?.id !== creationId) return prev;
       const tracks = prev.tracks.map(mapTrack);
-      const statuses = tracks.map(t => t.status);
-      const derivedStatus = statuses.some(s => s === 'failed') ? 'failed'
-        : statuses.every(s => s === 'completed') ? 'completed'
-        : statuses.find(s => !['pending', 'completed'].includes(s)) || 'pending';
-      const derivedProgress = tracks.reduce((a, t) => a + (t.progress ?? 0), 0) / (tracks.length || 1);
+      const { derivedStatus, derivedProgress } = deriveCreationState(tracks);
       return { ...prev, tracks, status: derivedStatus, progress: derivedProgress };
     });
   };
@@ -391,7 +392,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       await updateTrackDB(trackId, creationId, 'Analyzing prompt', 0.03, 'analyzing');
       trackLastUpdateRef.current[trackId] = Date.now();
 
-      // Step 1b: Preparing generation seed
+      // Step 1b: Create GenerationDNA for this request
       updateTrackLocal(creationId, trackId, { status: 'seeding', currentStage: 'Creating GenerationDNA', progress: 0.05 });
       await updateTrackDB(trackId, creationId, 'Creating GenerationDNA', 0.05, 'seeding');
 
@@ -781,9 +782,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       if (numberOfTracks === 1) {
         // Single song: direct generation
         generateTrackInBrowser(newCreation.tracks[0].id, newCreation.id, getTrackInput(0), newCreation.tracks[0].title)
-          .then(async () => {
-            await supabase.from('music_creations').update({ status: 'completed', progress: 1 }).eq('id', newCreation.id);
-          });
+          .catch(console.error);
       } else {
         // Album: use orchestrator with retry logic
         orchestrateAlbum(

@@ -121,7 +121,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
       case 'prompt': update({ musicPrompt: value }); break;
       case 'genres':
         const suggested = value.split(',').map(g => g.trim()).filter(g => GENRES.includes(g));
-        if (suggested.length > 0) update({ genres: suggested });
+        if (suggested.length > 0) update({ genres: Array.from(new Set([...config.genres, ...suggested])) });
         break;
       case 'mood': update({ mood: value }); break;
       case 'tempoBpm': { const p = parseInt(value); if (!isNaN(p)) update({ tempoBpm: Math.max(60, Math.min(200, p)) }); break; }
@@ -132,10 +132,10 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
       case 'vocalStructure': update({ vocalStructure: value }); break;
       case 'vocalStyle': update({ vocalStyle: value }); break;
       case 'vocalIntensity': { const p = parseInt(value); if (!isNaN(p)) update({ vocalIntensity: Math.max(1, Math.min(10, p)) }); break; }
-      case 'vocalEffects': update({ vocalEffects: value.split(',').map(e => e.trim()).filter(Boolean) }); break;
+      case 'vocalEffects': update({ vocalEffects: Array.from(new Set([...config.vocalEffects, ...value.split(',').map(e => e.trim()).filter(Boolean)])) }); break;
       case 'vocalLanguage':
         const langs = value.split(',').map(l => l.trim()).filter(l => LANGUAGES.includes(l));
-        if (langs.length > 0) update({ vocalLanguages: langs });
+        if (langs.length > 0) update({ vocalLanguages: Array.from(new Set([...config.vocalLanguages, ...langs])) });
         break;
       case 'songStructure': update({ songStructure: value }); break;
     }

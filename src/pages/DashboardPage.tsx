@@ -366,14 +366,17 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
 };
 
 const DASH_PIPELINE_STEPS = [
-  { key: 'analyzing', label: 'Analyzing musical vision', icon: '🔍', match: /analyz/i },
-  { key: 'planning', label: 'Planning song structure', icon: '🎼', match: /plan/i },
-  { key: 'composing', label: 'Composing musical patterns', icon: '🎹', match: /compos/i },
-  { key: 'instrumental', label: 'Generating instrumental', icon: '🎵', match: /instrumental|render.*audio|generat.*segment/i },
+  { key: 'analyzing', label: 'Analyzing prompt', icon: '🔍', match: /analyz/i },
+  { key: 'seeding', label: 'Creating GenerationDNA', icon: '🧬', match: /generationdna|seed|dna/i },
+  { key: 'planning', label: 'Planning arrangement', icon: '🎼', match: /plan|arrang/i },
+  { key: 'composing', label: 'Generating melody', icon: '🎹', match: /melody|motif|hook/i },
+  { key: 'instrumental', label: 'Synthesizing instruments', icon: '🎵', match: /instrumental|synthesi[sz].*instrument|render.*audio|generat.*segment/i },
   { key: 'vocals', label: 'Generating vocals', icon: '🎤', match: /vocal|lyric|singing|synthe/i },
   { key: 'vocal_align', label: 'Aligning & mixing vocals', icon: '🎙️', match: /align.*vocal|mix.*vocal/i },
-  { key: 'mixing', label: 'Mixing & mastering', icon: '🎚️', match: /mix|master/i },
-  { key: 'video_gen', label: 'Generating video visuals', icon: '🎬', match: /generat.*video/i },
+  { key: 'mixing', label: 'Mixing audio', icon: '🎚️', match: /mix(?!.*vocal)/i },
+  { key: 'mastering', label: 'Mastering track', icon: '💿', match: /master/i },
+  { key: 'beat_analysis', label: 'Analyzing beats', icon: '📊', match: /analyzing beats|beat structure/i },
+  { key: 'video_gen', label: 'Rendering video', icon: '🎬', match: /render.*video|generat.*video/i },
   { key: 'video_enc', label: 'Encoding video', icon: '📹', match: /encod.*video/i },
   { key: 'finalizing', label: 'Finalizing & uploading', icon: '💾', match: /finaliz|upload/i },
   { key: 'complete', label: 'Complete', icon: '✅', match: /complete/i },
