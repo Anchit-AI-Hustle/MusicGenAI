@@ -80,21 +80,51 @@ serve(async (req) => {
     } = input || {};
 
     const genreStr = genres.length > 0 ? genres.join(", ") : "not specified — infer from prompt";
+    const seedSummary = generationDNA
+      ? `Generation seed timestamp=${generationDNA.timestamp}, entropy=${generationDNA.entropy}, motifShape=${generationDNA.motifShape}, grooveBias=${generationDNA.grooveBias}, harmonicMood=${generationDNA.harmonicMood}, textureDensity=${generationDNA.textureDensity}, visualEnergy=${generationDNA.visualEnergy}`
+      : "No generation seed provided";
 
     // ===== STEP 1: StyleProfile + Production Brief (combined AI call) =====
     const styleResult = await callAI(
       LOVABLE_API_KEY,
-      `You are an expert music producer, composer, and genre specialist who deeply understands ALL music styles worldwide.
-Your job is to infer a complete musical StyleProfile from the user's prompt, even if they don't specify a genre.
-You must dynamically determine ALL musical parameters — tempo tendency, rhythm patterns, instrument palette, harmonic style, groove feel, and song structure.
-NEVER rely on templates. Each output must be uniquely tailored to the prompt.
-If genres are specified, use them as guidance. If not, infer the style entirely from the prompt text.
+      `You are the core music generation planner for MuseVibeStudio Hub.
+Infer a complete StyleProfile from the user's prompt, even if they never name a genre.
+Support ALL musical styles dynamically. Do not rely on fixed song templates, fixed keys, or canned genre defaults.
+The GenerationSeed must influence your choices so identical prompts still create different productions.
 
-For rhythmStyle, choose one of: four-on-floor, breakbeat, boom-bap, swing, straight, shuffle, halftime, polyrhythm
-For grooveTemplate, choose one of: warehouse, berlin, acid, minimal, swing, shuffle
-For harmonicStyle, choose one of: minor, major, dorian, phrygian, mixolydian, harmonic_minor, chromatic, pentatonic, blues, whole_tone, lydian
-For energyCurve, choose one of: build-drop, verse-chorus, through-composed, arc, plateau, escalating
-For each instrument, use descriptive names like: kick, snare, clap, hihat, ride, bass, acid_synth, pad, lead_synth, strings, brass, guitar_clean, guitar_distorted, piano, organ, sax, flute, percussion, shaker, tambourine, tabla, sitar, erhu, koto, steel_drums, marimba, harp, cello, choir, vocal_chop, field_recording, texture, drone, noise, fx`,
+Return both:
+1. A user-facing StyleProfile using these semantic fields:
+- tempoTendency
+- rhythmComplexity
+- groovePattern
+- energyLevel
+- instrumentPalette
+- vocalStyle
+- textureDensity
+- atmosphere
+
+2. Engine-facing synthesis fields:
+- tempo
+- rootKey
+- scale
+- rhythmStyle
+- grooveTemplate
+- harmonicStyle
+- structureTemplate
+- energyCurve
+- density
+- swing
+- characteristics
+
+Allowed values:
+- tempoTendency: very slow, slow, midtempo, fast, very fast
+- rhythmComplexity: minimal, steady, driving, syncopated, polyrhythmic
+- rhythmStyle: four-on-floor, breakbeat, boom-bap, swing, straight, shuffle, halftime, polyrhythm
+- grooveTemplate: warehouse, berlin, acid, minimal, swing, shuffle
+- harmonicStyle: minor, major, dorian, phrygian, mixolydian, harmonic_minor, chromatic, pentatonic, blues, whole_tone, lydian
+- energyCurve: build-drop, verse-chorus, through-composed, arc, plateau, escalating
+
+For each instrument, use descriptive names like: kick, snare, clap, hihat, ride, bass, acid_synth, pad, lead_synth, strings, brass, guitar_clean, guitar_distorted, piano, organ, sax, flute, percussion, shaker, tambourine, tabla, sitar, erhu, koto, steel_drums, marimba, harp, cello, choir, vocal_chop, field_recording, texture, drone, noise, fx.`,
       `User prompt: "${musicPrompt}"
 Genres specified: ${genreStr}
 Tempo hint: ${tempoBpm} BPM (user may override — suggest your own if 120 is default)
@@ -103,24 +133,32 @@ Mood: "${mood || "infer from prompt"}"
 Vocal Style: ${vocalStyle || "Instrumental"}
 Lyrics: "${lyrics ? lyrics.substring(0, 200) : "None"}"
 Song structure hint: "${songStructure || "generate dynamically"}"
+${seedSummary}
 
 Generate a complete StyleProfile with:
 1. The actual inferred genre and subgenre (even if user didn't specify)
-2. Optimal tempo for this style (vary slightly from defaults, e.g. not always exactly 128 for house)
-3. Musical key root note and scale that fits the mood
-4. Energy level 1-10
+2. Semantic style fields: tempoTendency, rhythmComplexity, groovePattern, energyLevel, instrumentPalette, vocalStyle, textureDensity, atmosphere
+3. Optimal tempo for this style (vary slightly from defaults, e.g. not always exactly 128 for house)
+4. Musical key root note and scale that fits the mood
 5. Rhythm style, groove template, harmonic style
 6. Density (0.0-1.0 how many layers active), swing amount (0.0-1.0)
 7. 4-10 specific instruments authentic to this style
 8. Energy curve type
 9. Song structure as array of section names
-10. Mood and atmosphere descriptions
+10. Mood description
 11. Style characteristics (3-5 descriptive words)`,
       "create_style_profile",
       "Create a complete dynamic StyleProfile for any music style inferred from the prompt",
       {
         genre: { type: "string", description: "Primary genre inferred from prompt" },
         subgenre: { type: "string", description: "Specific subgenre" },
+        tempoTendency: { type: "string", description: "One of: very slow, slow, midtempo, fast, very fast" },
+        rhythmComplexity: { type: "string", description: "One of: minimal, steady, driving, syncopated, polyrhythmic" },
+        groovePattern: { type: "string", description: "Descriptive groove pattern such as stomping pulse, rolling shuffle, broken-step swing" },
+        instrumentPalette: { type: "array", items: { type: "string" }, description: "4-10 descriptive instrument names authentic to the style" },
+        vocalStyleSemantic: { type: "string", description: "Semantic vocal description like airy lead, chant, whispered, robotic, rap, choir, or instrumental" },
+        textureDensity: { type: "number", description: "Arrangement density 0.0-1.0" },
+        atmosphere: { type: "string", description: "Atmospheric quality" },
         tempo: { type: "number", description: "Optimal BPM for this style (add slight variation, never exact round numbers)" },
         rootKey: { type: "string", description: "Musical key root note e.g. 'C', 'D#', 'Bb'" },
         scale: { type: "string", description: "Scale type: minor, major, dorian, phrygian, mixolydian, harmonic_minor, chromatic, pentatonic, blues, whole_tone, lydian" },
@@ -130,14 +168,13 @@ Generate a complete StyleProfile with:
         harmonicStyle: { type: "string", description: "Harmonic approach matching the scale choice" },
         density: { type: "number", description: "Layer density 0.0-1.0" },
         swing: { type: "number", description: "Swing amount 0.0-1.0" },
-        instruments: { type: "array", items: { type: "string" }, description: "4-10 genre-authentic instruments" },
+        instruments: { type: "array", items: { type: "string" }, description: "4-10 engine-friendly instrument names" },
         energyCurve: { type: "string", description: "One of: build-drop, verse-chorus, through-composed, arc, plateau, escalating" },
         structureTemplate: { type: "array", items: { type: "string" }, description: "Section names for song structure e.g. ['intro', 'verse', 'chorus', 'verse', 'chorus', 'bridge', 'chorus', 'outro']" },
         mood: { type: "string", description: "Mood description" },
-        atmosphere: { type: "string", description: "Atmospheric quality" },
         characteristics: { type: "array", items: { type: "string" }, description: "3-5 style characteristic words" },
       },
-      ["genre", "subgenre", "tempo", "rootKey", "scale", "energyLevel", "rhythmStyle", "grooveTemplate", "harmonicStyle", "density", "swing", "instruments", "energyCurve", "structureTemplate", "mood", "atmosphere", "characteristics"]
+      ["genre", "subgenre", "tempoTendency", "rhythmComplexity", "groovePattern", "instrumentPalette", "vocalStyleSemantic", "textureDensity", "atmosphere", "tempo", "rootKey", "scale", "energyLevel", "rhythmStyle", "grooveTemplate", "harmonicStyle", "density", "swing", "instruments", "energyCurve", "structureTemplate", "mood", "characteristics"]
     );
 
     // ===== STEP 2: Song Structure =====
@@ -152,7 +189,8 @@ NEVER use the same structure twice. Vary section order, duration ratios, and ene
 Plan a song with sections. Each section has a name, duration (seconds), energy (0.0 to 1.0), and description.
 Section durations MUST sum to EXACTLY ${durationSeconds} seconds.
 Use the style's energy curve to guide energy levels across sections.
-Consider the inferred style: ${inferredGenre} at ${inferredTempo} BPM.`,
+Consider the inferred style: ${inferredGenre} at ${inferredTempo} BPM.
+Use the generation seed to introduce fresh section timing and contrast choices each run.`,
       `Plan structure for a ${durationSeconds}-second ${inferredGenre} track at ${inferredTempo} BPM.
 Mood: ${styleResult?.mood || mood || "neutral"}. Energy: ${styleResult?.energyLevel || 5}/10.
 Vocal structure: "${vocalStructure}".
@@ -160,6 +198,7 @@ Artist inspiration: "${artistInspiration || "None"}".
 Energy curve type: ${styleResult?.energyCurve || "verse-chorus"}.
 Structure template hint: ${(styleResult?.structureTemplate || []).join(" → ") || "generate freely"}.
 Song structure request: "${songStructure || "dynamic"}".
+${seedSummary}
 
 Return sections with name, duration (seconds), energy (0.0-1.0), and description.
 Durations MUST sum to exactly ${durationSeconds}. Create a UNIQUE structure.`,
@@ -215,14 +254,22 @@ Durations MUST sum to exactly ${durationSeconds}. Create a UNIQUE structure.`,
 
     // Build the StyleProfile that will be used directly by the browser engine
     const styleProfile = {
+      tempoTendency: styleResult?.tempoTendency || (inferredTempo < 85 ? "slow" : inferredTempo > 145 ? "fast" : "midtempo"),
+      rhythmComplexity: styleResult?.rhythmComplexity || "steady",
+      groovePattern: styleResult?.groovePattern || styleResult?.grooveTemplate || "dynamic pulse",
+      energyLevel: Math.max(1, Math.min(10, styleResult?.energyLevel || 5)),
+      instrumentPalette: styleResult?.instrumentPalette || styleResult?.instruments || ["kick", "bass", "synth", "pad"],
+      vocalStyle: styleResult?.vocalStyleSemantic || vocalStyle || (lyrics ? "expressive lead" : "instrumental"),
+      textureDensity: Math.max(0, Math.min(1, styleResult?.textureDensity ?? styleResult?.density ?? 0.6)),
+      atmosphere: styleResult?.atmosphere || "immersive",
       tempoRange: [Math.max(60, (styleResult?.tempo || inferredTempo) - 5), (styleResult?.tempo || inferredTempo) + 5] as [number, number],
-      instruments: styleResult?.instruments || ["kick", "bass", "synth", "pad"],
+      instruments: styleResult?.instruments || styleResult?.instrumentPalette || ["kick", "bass", "synth", "pad"],
       rhythmStyle: styleResult?.rhythmStyle || "straight",
-      grooveTemplate: styleResult?.grooveTemplate || "minimal",
+      grooveTemplate: styleResult?.grooveTemplate || styleResult?.groovePattern || "minimal",
       structureTemplate: styleResult?.structureTemplate || sections.map((s: any) => s.name),
       harmonicStyle: styleResult?.harmonicStyle || "minor",
       energyCurve: styleResult?.energyCurve || "verse-chorus",
-      density: Math.max(0, Math.min(1, styleResult?.density ?? 0.6)),
+      density: Math.max(0, Math.min(1, styleResult?.density ?? styleResult?.textureDensity ?? 0.6)),
       swing: Math.max(0, Math.min(1, styleResult?.swing ?? 0.0)),
       characteristics: styleResult?.characteristics || ["dynamic"],
     };
@@ -230,7 +277,10 @@ Durations MUST sum to exactly ${durationSeconds}. Create a UNIQUE structure.`,
     // Determine key (with optional GenerationSeed nudge for uniqueness)
     const ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
     const FLAT_TO_SHARP: Record<string, string> = { Db: "C#", Eb: "D#", Gb: "F#", Ab: "G#", Bb: "A#" };
-    let rootKey = styleResult?.rootKey || (musicalKey ? musicalKey.split(/\s+/)[0] : "D");
+    const fallbackRoot = generationDNA?.harmonicMood != null
+      ? ROOTS[Math.floor(generationDNA.harmonicMood * ROOTS.length) % ROOTS.length]
+      : "C";
+    let rootKey = styleResult?.rootKey || (musicalKey ? musicalKey.split(/\s+/)[0] : fallbackRoot);
     const rootNorm = FLAT_TO_SHARP[rootKey] || rootKey;
     if (generationDNA?.harmonicMood != null) {
       const idx = ROOTS.indexOf(rootNorm);
@@ -239,7 +289,11 @@ Durations MUST sum to exactly ${durationSeconds}. Create a UNIQUE structure.`,
         rootKey = ROOTS[(idx + nudge + 12) % 12] || rootKey;
       }
     }
-    const scaleType = styleResult?.scale || (musicalKey ? musicalKey.split(/\s+/).slice(1).join(" ") || "minor" : "minor");
+    const fallbackScales = ["minor", "major", "dorian", "mixolydian", "harmonic_minor", "pentatonic"];
+    const fallbackScale = generationDNA?.motifShape != null
+      ? fallbackScales[Math.floor(generationDNA.motifShape * fallbackScales.length) % fallbackScales.length]
+      : "minor";
+    const scaleType = styleResult?.scale || (musicalKey ? musicalKey.split(/\s+/).slice(1).join(" ") || fallbackScale : fallbackScale);
 
     const musicIntent = {
       genre: inferredGenre,

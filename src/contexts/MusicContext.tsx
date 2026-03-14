@@ -263,7 +263,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     videoStyle: tc.generateVideo ? tc.videoStyle : undefined,
     tempoBpm: tc.tempoBpm,
     mood: tc.mood || undefined,
-    musicalKey: 'D minor',
+    musicalKey: undefined,
     vocalStructure: tc.vocalStructure,
     vocalStyle: tc.vocalStyle || undefined,
     vocalIntensity: tc.vocalIntensity,
@@ -312,7 +312,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             vocalStructure: input.vocalStructure,
             vocalStyle: input.vocalStyle,
             mood: input.mood || '',
-            musicalKey: input.musicalKey || 'D minor',
+            musicalKey: input.musicalKey || '',
             songStructure: input.songStructure || '',
           },
           generationDNA: dna,
@@ -344,25 +344,28 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const totalSegments = Math.ceil(input.durationSeconds / 20);
       const onProgress = (stage: string, progress: number) => {
         const stageLabels: Record<string, string> = {
-          composing_music: 'Composing musical patterns',
-          generating_instrumental: 'Generating instrumental',
+          generating_melody: 'Generating melody',
+          synthesizing_instruments: 'Synthesizing instruments',
+          mixing_audio: 'Mixing audio',
+          mastering_track: 'Mastering track',
           generating_vocals: 'Generating vocals',
           vocal_alignment: 'Aligning vocals to music',
-          mixing_mastering: 'Mixing and mastering',
+          analyzing_beat_structure: 'Analyzing beat structure',
+          rendering_video: 'Rendering video',
           finalizing: 'Finalizing track',
         };
         let label = stageLabels[stage] || stage;
 
         // Add segment info during rendering
-        if (stage === 'generating_instrumental' && totalSegments > 1) {
+        if (stage === 'synthesizing_instruments' && totalSegments > 1) {
           const segIdx = Math.min(totalSegments, Math.floor(((progress - 0.20) / 0.35) * totalSegments) + 1);
-          label = `Rendering instrumental segment ${Math.max(1, segIdx)} / ${totalSegments}`;
+          label = `Synthesizing instrument layers ${Math.max(1, segIdx)} / ${totalSegments}`;
         }
 
         updateTrackLocal(creationId, trackId, {
           status: stage, currentStage: label, progress,
-          totalSegments: stage === 'generating_instrumental' ? totalSegments : undefined,
-          completedSegments: stage === 'generating_instrumental' ? Math.floor(((progress - 0.20) / 0.35) * totalSegments) : undefined,
+          totalSegments: stage === 'synthesizing_instruments' ? totalSegments : undefined,
+          completedSegments: stage === 'synthesizing_instruments' ? Math.floor(((progress - 0.20) / 0.35) * totalSegments) : undefined,
         });
         updateTrackDB(trackId, creationId, label, progress, stage).catch(console.warn);
         trackLastUpdateRef.current[trackId] = Date.now();
@@ -425,8 +428,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             const mixedBuffer = mixVocalsIntoInstrumental(trackResult.instrumentalBuffer, vocalBuffer, 0.7);
             
             // Master the mixed version
-            updateTrackLocal(creationId, trackId, { status: 'mixing_mastering', currentStage: 'Mastering final mix with vocals', progress: 0.76 });
-            await updateTrackDB(trackId, creationId, 'Mastering final mix with vocals', 0.76, 'mixing_mastering');
+            updateTrackLocal(creationId, trackId, { status: 'mastering_track', currentStage: 'Mastering final mix with vocals', progress: 0.76 });
+            await updateTrackDB(trackId, creationId, 'Mastering final mix with vocals', 0.76, 'mastering_track');
             
             const mixedMaster = masterAudio(mixedBuffer, 2);
             finalBlob = mixedMaster.blob;
@@ -488,7 +491,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             input.videoStyle,
             (p) => {
                 const stageLabel = p.stage === 'generating_video'
-                  ? 'Generating video visuals'
+                  ? 'Rendering video'
+                  : p.stage === 'analyzing_beat_structure'
+                    ? 'Analyzing beat structure'
+                    : p.stage === 'rendering_video'
+                      ? 'Rendering video'
                   : p.stage === 'transcoding_video'
                     ? 'Optimizing MP4 for all devices'
                     : 'Encoding video';

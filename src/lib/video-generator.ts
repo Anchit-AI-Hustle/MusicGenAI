@@ -17,6 +17,9 @@ export interface VideoStyle {
   bgGradient: [string, string];
   glowIntensity: number;
   motionSpeed: number;
+  shapeGeometry: 'orbs' | 'rings' | 'shards' | 'grid';
+  cameraMovement: number;
+  backgroundAnimation: 'pulse' | 'drift' | 'strobe';
 }
 
 const VIDEO_STYLES: Record<string, VideoStyle> = {
@@ -28,6 +31,9 @@ const VIDEO_STYLES: Record<string, VideoStyle> = {
     bgGradient: ['#0a0a0a', '#1a1a2e'],
     glowIntensity: 0.8,
     motionSpeed: 1.0,
+    shapeGeometry: 'grid',
+    cameraMovement: 14,
+    backgroundAnimation: 'pulse',
   },
   'cyberpunk city': {
     name: 'Cyberpunk City',
@@ -37,6 +43,9 @@ const VIDEO_STYLES: Record<string, VideoStyle> = {
     bgGradient: ['#0d0221', '#150050'],
     glowIntensity: 1.2,
     motionSpeed: 0.8,
+    shapeGeometry: 'shards',
+    cameraMovement: 24,
+    backgroundAnimation: 'drift',
   },
   'warehouse rave': {
     name: 'Warehouse Rave',
@@ -46,6 +55,9 @@ const VIDEO_STYLES: Record<string, VideoStyle> = {
     bgGradient: ['#000000', '#0a0a0a'],
     glowIntensity: 1.5,
     motionSpeed: 1.5,
+    shapeGeometry: 'grid',
+    cameraMovement: 10,
+    backgroundAnimation: 'strobe',
   },
   'psychedelic abstract': {
     name: 'Psychedelic Abstract',
@@ -55,6 +67,9 @@ const VIDEO_STYLES: Record<string, VideoStyle> = {
     bgGradient: ['#1a0033', '#003366'],
     glowIntensity: 1.0,
     motionSpeed: 0.6,
+    shapeGeometry: 'orbs',
+    cameraMovement: 18,
+    backgroundAnimation: 'drift',
   },
   'dark techno industrial': {
     name: 'Dark Techno Industrial',
@@ -64,6 +79,9 @@ const VIDEO_STYLES: Record<string, VideoStyle> = {
     bgGradient: ['#000000', '#1a0000'],
     glowIntensity: 0.6,
     motionSpeed: 1.2,
+    shapeGeometry: 'shards',
+    cameraMovement: 12,
+    backgroundAnimation: 'strobe',
   },
   'space cinematic': {
     name: 'Space Cinematic',
@@ -73,6 +91,9 @@ const VIDEO_STYLES: Record<string, VideoStyle> = {
     bgGradient: ['#000011', '#000033'],
     glowIntensity: 0.9,
     motionSpeed: 0.4,
+    shapeGeometry: 'rings',
+    cameraMovement: 20,
+    backgroundAnimation: 'drift',
   },
   'neon synthwave': {
     name: 'Neon Synthwave',
@@ -82,6 +103,9 @@ const VIDEO_STYLES: Record<string, VideoStyle> = {
     bgGradient: ['#0a001a', '#1a0033'],
     glowIntensity: 1.3,
     motionSpeed: 0.7,
+    shapeGeometry: 'grid',
+    cameraMovement: 16,
+    backgroundAnimation: 'pulse',
   },
 };
 
@@ -127,6 +151,9 @@ function randomizeStyle(base: VideoStyle, dna?: VideoGenerationDNA): VideoStyle 
     waveformStyle: r() < 0.3 ? waveformStyles[Math.floor(r() * waveformStyles.length)] : base.waveformStyle,
     glowIntensity: base.glowIntensity * (0.7 + r() * 0.6) * visualMult,
     motionSpeed: base.motionSpeed * (0.7 + r() * 0.6),
+    cameraMovement: base.cameraMovement * (0.8 + r() * 0.8),
+    shapeGeometry: r() < 0.25 ? (['orbs', 'rings', 'shards', 'grid'] as const)[Math.floor(r() * 4)] : base.shapeGeometry,
+    backgroundAnimation: r() < 0.25 ? (['pulse', 'drift', 'strobe'] as const)[Math.floor(r() * 3)] : base.backgroundAnimation,
   };
 }
 
@@ -165,9 +192,109 @@ interface Particle {
   size: number; color: string; life: number; maxLife: number;
 }
 
+interface AudioVisualAnalysis {
+  frameEnergies: number[];
+  frameBass: number[];
+  frameMid: number[];
+  frameHigh: number[];
+  beatStrengths: number[];
+  transitionFlags: boolean[];
+}
+
 export interface VideoGenerationProgress {
   stage: string;
   progress: number;
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function analyzeAudioForVisuals(
+  audioBuffer: AudioBuffer,
+  durationSeconds: number,
+  onProgress?: (p: VideoGenerationProgress) => void,
+): AudioVisualAnalysis {
+  const channelData = audioBuffer.getChannelData(0);
+  const sampleRate = audioBuffer.sampleRate;
+  const fps = 30;
+  const totalFrames = Math.ceil(durationSeconds * fps);
+  const samplesPerFrame = Math.max(1, Math.floor(sampleRate / fps));
+
+  const frameEnergies: number[] = [];
+  const frameBass: number[] = [];
+  const frameMid: number[] = [];
+  const frameHigh: number[] = [];
+  const beatStrengths: number[] = new Array(totalFrames).fill(0);
+  const transitionFlags: boolean[] = new Array(totalFrames).fill(false);
+
+  for (let f = 0; f < totalFrames; f++) {
+    const start = f * samplesPerFrame;
+    const end = Math.min(start + samplesPerFrame, channelData.length);
+    let energy = 0;
+    let bass = 0;
+    let mid = 0;
+    let high = 0;
+    const count = Math.max(1, end - start);
+
+    for (let i = start; i < end; i++) {
+      const val = Math.abs(channelData[i] || 0);
+      energy += val;
+      const pos = (i - start) / count;
+      if (pos < 0.18) bass += val;
+      else if (pos < 0.62) mid += val;
+      else high += val;
+    }
+
+    frameEnergies.push(energy / count);
+    frameBass.push(bass / Math.max(1, count * 0.18));
+    frameMid.push(mid / Math.max(1, count * 0.44));
+    frameHigh.push(high / Math.max(1, count * 0.38));
+  }
+
+  const normalize = (values: number[]) => {
+    const max = Math.max(...values, 0.001);
+    return values.map((value) => value / max);
+  };
+
+  const normEnergy = normalize(frameEnergies);
+  const normBass = normalize(frameBass);
+  const normMid = normalize(frameMid);
+  const normHigh = normalize(frameHigh);
+
+  for (let i = 0; i < totalFrames; i++) {
+    const localStart = Math.max(0, i - 18);
+    const localEnd = Math.min(totalFrames, i + 18);
+    const localSlice = normEnergy.slice(localStart, localEnd);
+    const localAvg = localSlice.reduce((sum, value) => sum + value, 0) / Math.max(1, localSlice.length);
+    const prev = i > 0 ? normEnergy[i - 1] : 0;
+    const bassPulse = normBass[i];
+    const energyRise = normEnergy[i] - prev;
+    beatStrengths[i] = clamp01((normEnergy[i] - localAvg) * 2.4 + bassPulse * 0.55 + energyRise * 1.4);
+
+    if (i > 30) {
+      const shortWindow = normEnergy.slice(Math.max(0, i - 15), i + 1);
+      const longWindow = normEnergy.slice(Math.max(0, i - 60), i + 1);
+      const shortAvg = shortWindow.reduce((sum, value) => sum + value, 0) / shortWindow.length;
+      const longAvg = longWindow.reduce((sum, value) => sum + value, 0) / longWindow.length;
+      transitionFlags[i] = Math.abs(shortAvg - longAvg) > 0.16 && Math.abs(normBass[i] - normBass[Math.max(0, i - 15)]) > 0.12;
+    }
+
+    if (i % Math.max(1, Math.floor(totalFrames / 4)) === 0) {
+      onProgress?.({ stage: 'analyzing_beat_structure', progress: 0.08 + (i / totalFrames) * 0.10 });
+    }
+  }
+
+  onProgress?.({ stage: 'analyzing_beat_structure', progress: 0.20 });
+
+  return {
+    frameEnergies: normEnergy,
+    frameBass: normBass,
+    frameMid: normMid,
+    frameHigh: normHigh,
+    beatStrengths,
+    transitionFlags,
+  };
 }
 
 /**
@@ -323,8 +450,9 @@ export async function generateVideoFromAudio(
   generationDNA?: VideoGenerationDNA,
 ): Promise<Blob> {
   const style = getStyleFromMetadata(genres, mood, videoStyleName, generationDNA);
+  const rng = generationDNA ? createSeededRng(generationDNA.seed ^ 0x9e3779b9) : () => Math.random();
 
-  onProgress?.({ stage: 'generating_video', progress: 0.02 });
+  onProgress?.({ stage: 'analyzing_beat_structure', progress: 0.02 });
 
   // Create offscreen canvas
   const width = 1280;
@@ -340,66 +468,24 @@ export async function generateVideoFromAudio(
   const audioArrayBuffer = await audioResponse.arrayBuffer();
   const audioBuffer = await audioContext.decodeAudioData(audioArrayBuffer);
 
-  onProgress?.({ stage: 'generating_video', progress: 0.10 });
-
-  // Extract energy envelope from audio
-  const channelData = audioBuffer.getChannelData(0);
-  const sampleRate = audioBuffer.sampleRate;
   const fps = 30;
   const totalFrames = Math.ceil(durationSeconds * fps);
-  const samplesPerFrame = Math.floor(sampleRate / fps);
+  const analysis = analyzeAudioForVisuals(audioBuffer, durationSeconds, onProgress);
 
-  // Pre-compute per-frame energy and frequency bands
-  const frameEnergies: number[] = [];
-  const frameBass: number[] = [];
-  const frameMid: number[] = [];
-  const frameHigh: number[] = [];
-
-  for (let f = 0; f < totalFrames; f++) {
-    const start = f * samplesPerFrame;
-    const end = Math.min(start + samplesPerFrame, channelData.length);
-    let energy = 0;
-    let bass = 0;
-    let mid = 0;
-    let high = 0;
-    const count = end - start;
-
-    for (let i = start; i < end; i++) {
-      const val = Math.abs(channelData[i] || 0);
-      energy += val;
-      // Simple frequency band approximation
-      const pos = (i - start) / count;
-      if (pos < 0.2) bass += val;
-      else if (pos < 0.6) mid += val;
-      else high += val;
-    }
-
-    frameEnergies.push(count > 0 ? energy / count : 0);
-    frameBass.push(count > 0 ? bass / (count * 0.2) : 0);
-    frameMid.push(count > 0 ? mid / (count * 0.4) : 0);
-    frameHigh.push(count > 0 ? high / (count * 0.4) : 0);
-  }
-
-  // Normalize
-  const maxEnergy = Math.max(...frameEnergies, 0.001);
-  const maxBass = Math.max(...frameBass, 0.001);
-  const maxMid = Math.max(...frameMid, 0.001);
-  const maxHigh = Math.max(...frameHigh, 0.001);
-
-  onProgress?.({ stage: 'generating_video', progress: 0.20 });
+  onProgress?.({ stage: 'rendering_video', progress: 0.24 });
 
   // Initialize particles
   const particles: Particle[] = [];
   for (let i = 0; i < style.particleCount; i++) {
     particles.push({
-      x: Math.random() * width,
-      y: Math.random() * height,
-      vx: (Math.random() - 0.5) * 2,
-      vy: (Math.random() - 0.5) * 2,
-      size: Math.random() * 3 + 1,
-      color: style.colors[Math.floor(Math.random() * style.colors.length)],
-      life: Math.random() * 100,
-      maxLife: 100 + Math.random() * 200,
+      x: rng() * width,
+      y: rng() * height,
+      vx: (rng() - 0.5) * 2,
+      vy: (rng() - 0.5) * 2,
+      size: rng() * 3 + 1,
+      color: style.colors[Math.floor(rng() * style.colors.length)],
+      life: rng() * 100,
+      maxLife: 100 + rng() * 200,
     });
   }
 
@@ -443,7 +529,7 @@ export async function generateVideoFromAudio(
     if (e.data.size > 0) chunks.push(e.data);
   };
 
-  onProgress?.({ stage: 'encoding_video', progress: 0.25 });
+  onProgress?.({ stage: 'rendering_video', progress: 0.25 });
 
   return new Promise<Blob>((resolve, reject) => {
     mediaRecorder.onstop = async () => {
@@ -469,30 +555,40 @@ export async function generateVideoFromAudio(
       if (frame >= totalFrames) {
         mediaRecorder.stop();
         audioSource.stop();
-        onProgress?.({ stage: 'encoding_video', progress: 0.95 });
+        onProgress?.({ stage: 'rendering_video', progress: 0.98 });
         return;
       }
 
       const t = frame / totalFrames;
-      const energy = frameEnergies[frame] / maxEnergy;
-      const bass = frameBass[frame] / maxBass;
-      const mid = frameMid[frame] / maxMid;
-      const high = frameHigh[frame] / maxHigh;
-
-      // Draw background
-      const grad = ctx.createLinearGradient(0, 0, width, height);
-      grad.addColorStop(0, style.bgGradient[0]);
-      grad.addColorStop(1, style.bgGradient[1]);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, width, height);
+      const energy = analysis.frameEnergies[frame] || 0;
+      const bass = analysis.frameBass[frame] || 0;
+      const mid = analysis.frameMid[frame] || 0;
+      const high = analysis.frameHigh[frame] || 0;
+      const beatStrength = analysis.beatStrengths[frame] || 0;
+      const sectionTransition = analysis.transitionFlags[frame] || false;
 
       // Draw visualization based on style
-      drawVisualization(ctx, style, width, height, t, energy, bass, mid, high, particles, frame);
+      drawVisualization(
+        ctx,
+        style,
+        width,
+        height,
+        t,
+        energy,
+        bass,
+        mid,
+        high,
+        beatStrength,
+        sectionTransition,
+        particles,
+        frame,
+        rng,
+      );
 
       // Update progress every 30 frames
       if (frame % 30 === 0) {
         const vidProgress = 0.25 + (t * 0.65);
-        onProgress?.({ stage: 'encoding_video', progress: vidProgress });
+        onProgress?.({ stage: 'rendering_video', progress: vidProgress });
       }
 
       frame++;
@@ -514,23 +610,101 @@ function drawVisualization(
   w: number, h: number,
   t: number,
   energy: number, bass: number, mid: number, high: number,
+  beatStrength: number,
+  sectionTransition: boolean,
   particles: Particle[],
   frame: number,
+  rng: () => number,
 ) {
   const cx = w / 2;
   const cy = h / 2;
+
+  const grad = ctx.createLinearGradient(0, 0, w, h);
+  grad.addColorStop(0, style.bgGradient[0]);
+  grad.addColorStop(1, style.bgGradient[1]);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  if (style.backgroundAnimation === 'pulse') {
+    ctx.fillStyle = `${style.colors[0]}${Math.floor((0.08 + beatStrength * 0.15) * 255).toString(16).padStart(2, '0')}`;
+    ctx.fillRect(0, 0, w, h);
+  } else if (style.backgroundAnimation === 'drift') {
+    ctx.fillStyle = `${style.colors[1 % style.colors.length]}22`;
+    ctx.beginPath();
+    ctx.ellipse(cx + Math.sin(t * Math.PI * 2) * w * 0.18, cy, w * 0.28, h * 0.22, t * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (sectionTransition || beatStrength > 0.72) {
+    ctx.fillStyle = `${style.colors[2 % style.colors.length]}18`;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  ctx.save();
+  const cameraOffsetX = Math.sin(frame * 0.03 * style.motionSpeed) * style.cameraMovement * (0.15 + beatStrength * 0.6);
+  const cameraOffsetY = Math.cos(frame * 0.024 * style.motionSpeed) * style.cameraMovement * 0.12;
+  const cameraScale = 1 + beatStrength * 0.03 + (sectionTransition ? 0.02 : 0);
+  ctx.translate(cameraOffsetX, cameraOffsetY);
+  ctx.translate(cx, cy);
+  ctx.scale(cameraScale, cameraScale);
+  ctx.translate(-cx, -cy);
+
+  if (style.shapeGeometry === 'rings') {
+    ctx.strokeStyle = `${style.colors[0]}33`;
+    ctx.lineWidth = 2;
+    for (let ring = 1; ring <= 3; ring++) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, ring * 90 + bass * 55, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  } else if (style.shapeGeometry === 'grid') {
+    ctx.strokeStyle = `${style.colors[1 % style.colors.length]}20`;
+    for (let x = 0; x <= w; x += 80) {
+      ctx.beginPath();
+      ctx.moveTo(x + Math.sin(t * 6 + x * 0.01) * 10 * energy, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+  } else if (style.shapeGeometry === 'shards') {
+    ctx.fillStyle = `${style.colors[2 % style.colors.length]}18`;
+    for (let i = 0; i < 6; i++) {
+      const angle = t * Math.PI * 2 + i * (Math.PI / 3);
+      const radius = 120 + high * 140 + i * 30;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
+      ctx.lineTo(cx + Math.cos(angle + 0.18) * (radius * 0.58), cy + Math.sin(angle + 0.18) * (radius * 0.58));
+      ctx.closePath();
+      ctx.fill();
+    }
+  } else {
+    ctx.fillStyle = `${style.colors[0]}10`;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.arc(
+        cx + Math.sin(t * (i + 1) * 3.1) * 180,
+        cy + Math.cos(t * (i + 1) * 2.7) * 120,
+        40 + energy * 70,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
+  }
 
   // Draw particles
   for (const p of particles) {
     p.life++;
     if (p.life > p.maxLife) {
-      p.x = Math.random() * w;
-      p.y = Math.random() * h;
+      p.x = rng() * w;
+      p.y = rng() * h;
       p.life = 0;
     }
 
-    p.vx += (Math.random() - 0.5) * energy * style.motionSpeed;
-    p.vy += (Math.random() - 0.5) * energy * style.motionSpeed;
+    p.vx += (rng() - 0.5) * (energy + beatStrength) * style.motionSpeed;
+    p.vy += (rng() - 0.5) * (energy + beatStrength) * style.motionSpeed;
+    if (sectionTransition) {
+      p.vx += (p.x - cx) * -0.0009;
+      p.vy += (p.y - cy) * -0.0009;
+    }
     p.vx *= 0.98;
     p.vy *= 0.98;
     p.x += p.vx;
@@ -542,8 +716,8 @@ function drawVisualization(
     if (p.y < 0) p.y += h;
     if (p.y > h) p.y -= h;
 
-    const alpha = Math.min(1, (1 - p.life / p.maxLife) * energy * 2);
-    const size = p.size * (1 + bass * 3);
+    const alpha = Math.min(1, (1 - p.life / p.maxLife) * (0.5 + energy + beatStrength));
+    const size = p.size * (1 + bass * 3 + beatStrength * 2);
     ctx.beginPath();
     ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
     ctx.fillStyle = p.color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
@@ -609,7 +783,7 @@ function drawVisualization(
   }
 
   // Central energy pulse
-  const pulseRadius = 50 + bass * 150;
+  const pulseRadius = 50 + bass * 150 + beatStrength * 60;
   const pulseGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, pulseRadius);
   pulseGrad.addColorStop(0, style.colors[0] + '40');
   pulseGrad.addColorStop(0.5, style.colors[1 % style.colors.length] + '20');
@@ -621,4 +795,5 @@ function drawVisualization(
 
   // Reset shadow
   ctx.shadowBlur = 0;
+  ctx.restore();
 }

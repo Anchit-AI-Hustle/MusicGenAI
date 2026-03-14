@@ -24,22 +24,28 @@ import { AlbumTrackForm, defaultTrackConfig, type TrackConfig } from '@/componen
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Waiting to start',
-  analyzing: 'Analyzing inputs',
-  planning_structure: 'Planning song structure',
-  composing_music: 'Composing patterns',
-  generating_instrumental: 'Generating instrumental',
+  analyzing: 'Analyzing prompt',
+  seeding: 'Preparing generation seed',
+  inferring: 'Inferring musical style',
+  planning_structure: 'Planning arrangement',
+  generating_melody: 'Generating melody',
+  synthesizing_instruments: 'Synthesizing instruments',
   generating_vocals: 'Generating vocals',
   vocal_alignment: 'Aligning vocals',
-  mixing_mastering: 'Mixing & mastering',
-  generating_video: 'Generating video',
+  mixing_audio: 'Mixing audio',
+  mastering_track: 'Mastering track',
+  analyzing_beat_structure: 'Analyzing beat structure',
+  generating_video: 'Rendering video',
+  rendering_video: 'Rendering video',
   encoding_video: 'Encoding video',
+  transcoding_video: 'Optimizing MP4',
   finalizing: 'Finalizing',
   completed: 'Ready',
   failed: 'Failed',
   audio_complete_video_failed: 'Audio ready (video failed)',
 };
 
-const ACTIVE_STATUSES = ['analyzing', 'planning_structure', 'composing_music', 'generating_instrumental', 'generating_vocals', 'vocal_alignment', 'mixing_mastering', 'generating_video', 'encoding_video', 'finalizing'];
+const ACTIVE_STATUSES = ['analyzing', 'seeding', 'inferring', 'planning_structure', 'generating_melody', 'synthesizing_instruments', 'generating_vocals', 'vocal_alignment', 'mixing_audio', 'mastering_track', 'analyzing_beat_structure', 'generating_video', 'rendering_video', 'encoding_video', 'transcoding_video', 'finalizing'];
 
 interface CreateMusicPageProps {
   onAuthClick: () => void;
@@ -371,13 +377,14 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     { key: 'seeding', label: 'Preparing generation seed', icon: '🧬', match: /seed|dna|prepar/i },
     { key: 'inferring', label: 'Inferring musical style', icon: '🎯', match: /infer|style/i },
     { key: 'planning', label: 'Planning arrangement', icon: '🎼', match: /plan|arrang/i },
-    { key: 'composing', label: 'Generating melody', icon: '🎹', match: /compos|melody/i },
-    { key: 'instrumental', label: 'Generating sections', icon: '🎵', match: /instrumental|render.*audio|generat.*segment|section/i },
+    { key: 'composing', label: 'Generating melody', icon: '🎹', match: /melody|motif|hook/i },
+    { key: 'instrumental', label: 'Synthesizing instruments', icon: '🎵', match: /synthesi[sz].*instrument|instrument layer|segment/i },
     { key: 'vocals', label: 'Generating vocals', icon: '🎤', match: /vocal|lyric|singing|synthe/i },
     { key: 'vocal_align', label: 'Aligning & mixing vocals', icon: '🎙️', match: /align.*vocal|mix.*vocal/i },
-    { key: 'mixing', label: 'Mixing', icon: '🎚️', match: /mix(?!.*vocal)/i },
+    { key: 'mixing', label: 'Mixing audio', icon: '🎚️', match: /mix(?!.*vocal)/i },
     { key: 'mastering', label: 'Mastering', icon: '💿', match: /master/i },
-    { key: 'video_gen', label: 'Rendering video', icon: '🎬', match: /generat.*video/i },
+    { key: 'beat_analysis', label: 'Analyzing beat structure', icon: '📊', match: /beat structure/i },
+    { key: 'video_gen', label: 'Rendering video', icon: '🎬', match: /render.*video|generat.*video/i },
     { key: 'video_enc', label: 'Encoding video', icon: '📹', match: /encod.*video/i },
     { key: 'finalizing', label: 'Finalizing & uploading', icon: '💾', match: /finaliz|upload/i },
     { key: 'complete', label: 'Complete', icon: '✅', match: /complete/i },

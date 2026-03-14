@@ -30,14 +30,16 @@ import { renderTransition } from './transition-engine';
 // ===== Types =====
 
 /**
- * GenerationDNA — unique fingerprint per generation ensuring no two outputs are alike.
- * GenerationSeed = timestamp + random entropy. Drives all creative decisions.
+ * GenerationSeed — unique fingerprint per generation ensuring no two outputs are alike.
+ * Seed = timestamp + random entropy. Drives all creative decisions.
  */
-export interface GenerationDNA {
+export interface GenerationSeed {
   /** Combined timestamp + entropy; used as RNG seed */
   seed: number;
   /** Unix timestamp (ms) at creation — explicit per spec */
   timestamp: number;
+  /** Random entropy mixed into the final seed */
+  entropy: number;
   /** 0-1, controls melodic contour bias */
   motifShape: number;
   /** 0-1, swing vs straight feel */
@@ -50,8 +52,10 @@ export interface GenerationDNA {
   visualEnergy: number;
 }
 
-/** Create a fresh GenerationDNA with timestamp + high-entropy randomness */
-export function createGenerationDNA(): GenerationDNA {
+export type GenerationDNA = GenerationSeed;
+
+/** Create a fresh GenerationSeed with timestamp + high-entropy randomness */
+export function createGenerationSeed(): GenerationSeed {
   const timestamp = Date.now();
   const cryptoRand = () => {
     if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
@@ -63,12 +67,36 @@ export function createGenerationDNA(): GenerationDNA {
   return {
     seed: (timestamp & 0x7fffffff) ^ entropy,
     timestamp,
+    entropy,
     motifShape: cryptoRand(),
     grooveBias: cryptoRand(),
     harmonicMood: cryptoRand(),
     textureDensity: cryptoRand(),
     visualEnergy: cryptoRand(),
   };
+}
+
+export const createGenerationDNA = createGenerationSeed;
+
+export interface StyleProfile {
+  tempoTendency?: 'very slow' | 'slow' | 'midtempo' | 'fast' | 'very fast';
+  rhythmComplexity?: 'minimal' | 'steady' | 'driving' | 'syncopated' | 'polyrhythmic';
+  groovePattern?: string;
+  energyLevel?: number; // 1-10
+  instrumentPalette?: string[];
+  vocalStyle?: string;
+  textureDensity?: number; // 0-1
+  atmosphere?: string;
+  tempoRange?: [number, number];
+  instruments?: string[];
+  rhythmStyle?: string;
+  grooveTemplate?: string;
+  structureTemplate?: string[];
+  harmonicStyle?: string;
+  energyCurve?: string;
+  density?: number;
+  swing?: number;
+  characteristics?: string[];
 }
 
 export interface MusicIntent {
@@ -84,20 +112,9 @@ export interface MusicIntent {
   atmosphere: string;
   durationSeconds: number;
   genres?: string[]; // multiple genres for blending
-  generationDNA?: GenerationDNA;
+  generationDNA?: GenerationSeed;
   // AI-inferred style profile
-  styleProfile?: {
-    tempoRange?: [number, number];
-    instruments?: string[];
-    rhythmStyle?: string;
-    grooveTemplate?: string;
-    structureTemplate?: string[];
-    harmonicStyle?: string;
-    energyCurve?: string;
-    density?: number;
-    swing?: number;
-    characteristics?: string[];
-  };
+  styleProfile?: StyleProfile;
 }
 
 export interface SectionPlan {
@@ -628,7 +645,7 @@ export async function generateTrack(
 
   console.log(`[Engine] GenerationDNA seed=${seedVal}, motif=${dna?.motifShape?.toFixed(3)}, groove=${dna?.grooveBias?.toFixed(3)}, harmonic=${dna?.harmonicMood?.toFixed(3)}`);
 
-  onProgress('composing_music', 0.12);
+  onProgress('generating_melody', 0.12);
   await sleep(30);
 
   // ===== Get profile: AI-inferred (primary) or hardcoded fallback =====
@@ -681,7 +698,7 @@ export async function generateTrack(
   const trackMotif = generateMotif(rng, globalEnergy / 10);
   const trackHook = generateHook(rng);
 
-  onProgress('generating_instrumental', 0.18);
+  onProgress('synthesizing_instruments', 0.18);
 
   // ===== Segmented rendering =====
   const totalSegments = Math.ceil(durationSeconds / SEGMENT_DURATION);
@@ -692,7 +709,7 @@ export async function generateTrack(
     const segEnd = Math.min((i + 1) * SEGMENT_DURATION, durationSeconds);
 
     const segProgress = 0.20 + (i / totalSegments) * 0.35;
-    onProgress('generating_instrumental', segProgress);
+    onProgress('synthesizing_instruments', segProgress);
 
     const segBuffer = await renderSegment(
       intent, i, segStart, segEnd,
@@ -706,16 +723,16 @@ export async function generateTrack(
     await sleep(10);
   }
 
-  onProgress('generating_instrumental', 0.57);
+  onProgress('synthesizing_instruments', 0.57);
 
   // ===== Combine segments =====
-  onProgress('mixing_mastering', 0.58);
+  onProgress('mixing_audio', 0.58);
   const fullBuffer = concatenateBuffers(segmentBuffers, sampleRate);
 
   const instrumentalBuffer = copyAudioBuffer(fullBuffer);
 
   // ===== Professional mastering pipeline =====
-  onProgress('mixing_mastering', 0.60);
+  onProgress('mastering_track', 0.60);
   console.log('[Mastering] Starting professional mastering pipeline...');
   
   const masterResult = masterAudio(fullBuffer, 2);
@@ -724,7 +741,7 @@ export async function generateTrack(
     `LUFS: ${masterResult.stats.lufs.toFixed(1)}, Clipping: ${masterResult.stats.clipping}, ` +
     `Artifacts: ${masterResult.stats.artifacts}, Quality: ${masterResult.stats.passedQualityCheck ? 'PASS' : 'WARN'}`);
 
-  onProgress('mixing_mastering', 0.65);
+  onProgress('mastering_track', 0.65);
 
   return { blob: masterResult.blob, instrumentalBuffer, rngState: seedVal };
 }

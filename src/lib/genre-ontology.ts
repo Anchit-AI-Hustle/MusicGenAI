@@ -21,11 +21,15 @@ export interface GenreProfile {
   characteristics: string[];
 }
 
-/**
- * Create a GenreProfile from an AI-inferred StyleProfile object.
- * This is the PRIMARY path — AI dynamically determines all musical parameters.
- */
-export function createProfileFromAI(styleProfile: {
+type AIStyleProfile = {
+  tempoTendency?: string;
+  rhythmComplexity?: string;
+  groovePattern?: string;
+  energyLevel?: number;
+  instrumentPalette?: string[];
+  vocalStyle?: string;
+  textureDensity?: number;
+  atmosphere?: string;
   tempoRange?: [number, number];
   instruments?: string[];
   rhythmStyle?: string;
@@ -36,29 +40,86 @@ export function createProfileFromAI(styleProfile: {
   density?: number;
   swing?: number;
   characteristics?: string[];
-}): GenreProfile {
+};
+
+function inferTempoRange(styleProfile: AIStyleProfile): [number, number] {
+  if (styleProfile.tempoRange) return styleProfile.tempoRange;
+
+  switch ((styleProfile.tempoTendency || '').toLowerCase()) {
+    case 'very slow':
+      return [55, 75];
+    case 'slow':
+      return [70, 95];
+    case 'fast':
+      return [128, 155];
+    case 'very fast':
+      return [155, 185];
+    case 'midtempo':
+    default:
+      return [96, 124];
+  }
+}
+
+function inferRhythmStyle(styleProfile: AIStyleProfile): GenreProfile['rhythmStyle'] {
   const validRhythms = ['four-on-floor', 'breakbeat', 'boom-bap', 'swing', 'straight', 'shuffle', 'halftime', 'polyrhythm'] as const;
+  if (validRhythms.includes(styleProfile.rhythmStyle as any)) {
+    return styleProfile.rhythmStyle as GenreProfile['rhythmStyle'];
+  }
+
+  switch ((styleProfile.rhythmComplexity || '').toLowerCase()) {
+    case 'minimal':
+    case 'steady':
+      return 'straight';
+    case 'driving':
+      return 'four-on-floor';
+    case 'syncopated':
+      return 'shuffle';
+    case 'polyrhythmic':
+      return 'polyrhythm';
+    default:
+      return 'straight';
+  }
+}
+
+function inferEnergyCurve(styleProfile: AIStyleProfile): GenreProfile['energyCurve'] {
   const validCurves = ['build-drop', 'verse-chorus', 'through-composed', 'arc', 'plateau', 'escalating'] as const;
+  if (validCurves.includes(styleProfile.energyCurve as any)) {
+    return styleProfile.energyCurve as GenreProfile['energyCurve'];
+  }
 
-  const rhythmStyle = validRhythms.includes(styleProfile.rhythmStyle as any)
-    ? styleProfile.rhythmStyle as GenreProfile['rhythmStyle']
-    : 'straight';
+  const energy = styleProfile.energyLevel ?? 5;
+  if (energy >= 8) return 'build-drop';
+  if (energy <= 3) return 'through-composed';
+  return 'verse-chorus';
+}
 
-  const energyCurve = validCurves.includes(styleProfile.energyCurve as any)
-    ? styleProfile.energyCurve as GenreProfile['energyCurve']
-    : 'verse-chorus';
+/**
+ * Create a GenreProfile from an AI-inferred StyleProfile object.
+ * This is the PRIMARY path — AI dynamically determines all musical parameters.
+ */
+export function createProfileFromAI(styleProfile: AIStyleProfile): GenreProfile {
+  const rhythmStyle = inferRhythmStyle(styleProfile);
+  const energyCurve = inferEnergyCurve(styleProfile);
+  const density = styleProfile.density ?? styleProfile.textureDensity;
+  const instruments = styleProfile.instruments?.length
+    ? styleProfile.instruments
+    : styleProfile.instrumentPalette?.length
+      ? styleProfile.instrumentPalette
+      : ['kick', 'bass', 'synth', 'pad'];
 
   return {
-    tempoRange: styleProfile.tempoRange || [100, 130],
-    instruments: styleProfile.instruments?.length ? styleProfile.instruments : ['kick', 'bass', 'synth', 'pad'],
+    tempoRange: inferTempoRange(styleProfile),
+    instruments,
     rhythmStyle,
-    grooveTemplate: styleProfile.grooveTemplate || 'minimal',
+    grooveTemplate: styleProfile.grooveTemplate || styleProfile.groovePattern || 'minimal',
     structureTemplate: styleProfile.structureTemplate?.length ? styleProfile.structureTemplate : ['intro', 'verse', 'chorus', 'outro'],
     harmonicStyle: styleProfile.harmonicStyle || 'minor',
     energyCurve,
-    density: Math.max(0, Math.min(1, styleProfile.density ?? 0.6)),
+    density: Math.max(0, Math.min(1, density ?? 0.6)),
     swing: Math.max(0, Math.min(1, styleProfile.swing ?? 0.0)),
-    characteristics: styleProfile.characteristics?.length ? styleProfile.characteristics : ['dynamic'],
+    characteristics: styleProfile.characteristics?.length
+      ? styleProfile.characteristics
+      : [styleProfile.atmosphere || 'dynamic'].filter(Boolean),
   };
 }
 
