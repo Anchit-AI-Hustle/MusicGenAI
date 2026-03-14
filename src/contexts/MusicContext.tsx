@@ -764,12 +764,20 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const result = aiSuggestQueueRef.current.then(async () => {
       const maxRetries = 2;
       const history = suggestionHistoryRef.current[field] || [];
+      const globalHistory = suggestionHistoryRef.current.__global__ || [];
       // Use crypto-grade random seed for each suggestion request
       const randomSeed = (Date.now() & 0x7fffffff) ^ Math.floor(
         (typeof crypto !== 'undefined' && crypto.getRandomValues
           ? crypto.getRandomValues(new Uint32Array(1))[0] / 0xffffffff
           : Math.random()) * 1000000
       );
+      const requestNonce = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${randomSeed}`;
+      const previousSuggestions = Array.from(new Set([
+        ...history.slice(-10),
+        ...globalHistory.slice(-25),
+      ]));
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
@@ -782,8 +790,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             },
             body: JSON.stringify({
               field, value, context, action,
-              previousSuggestions: history.slice(-10),
+              previousSuggestions,
               randomSeed,
+              requestNonce,
             }),
           });
 
@@ -805,6 +814,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           if (suggestion) {
             if (!suggestionHistoryRef.current[field]) suggestionHistoryRef.current[field] = [];
             suggestionHistoryRef.current[field].push(suggestion);
+            if (!suggestionHistoryRef.current.__global__) suggestionHistoryRef.current.__global__ = [];
+            suggestionHistoryRef.current.__global__.push(suggestion);
           }
 
           return suggestion;

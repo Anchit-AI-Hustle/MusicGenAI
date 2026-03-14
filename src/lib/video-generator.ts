@@ -433,7 +433,16 @@ export async function ensureUniversalMp4Blob(
     return videoBlob;
   }
 
-  return enqueueTranscodeJob(() => transcodeToUniversalMp4Blob(videoBlob, onProgress));
+  if (videoBlob.type.includes('mp4')) {
+    return videoBlob;
+  }
+
+  try {
+    return await enqueueTranscodeJob(() => transcodeToUniversalMp4Blob(videoBlob, onProgress));
+  } catch (error) {
+    console.warn('[Video] MP4 transcode failed, falling back to original recording.', error);
+    return videoBlob;
+  }
 }
 
 /**
@@ -449,6 +458,10 @@ export async function generateVideoFromAudio(
   onProgress?: (p: VideoGenerationProgress) => void,
   generationDNA?: VideoGenerationDNA,
 ): Promise<Blob> {
+  if (typeof MediaRecorder === 'undefined') {
+    throw new Error('This browser does not support video recording.');
+  }
+
   const style = getStyleFromMetadata(genres, mood, videoStyleName, generationDNA);
   const rng = generationDNA ? createSeededRng(generationDNA.seed ^ 0x9e3779b9) : () => Math.random();
 
@@ -467,6 +480,7 @@ export async function generateVideoFromAudio(
   const audioResponse = await fetch(audioUrl);
   const audioArrayBuffer = await audioResponse.arrayBuffer();
   const audioBuffer = await audioContext.decodeAudioData(audioArrayBuffer);
+  await audioContext.resume().catch(() => undefined);
 
   const fps = 30;
   const totalFrames = Math.ceil(durationSeconds * fps);
@@ -497,7 +511,6 @@ export async function generateVideoFromAudio(
   audioSource.buffer = audioBuffer;
   const dest = audioContext.createMediaStreamDestination();
   audioSource.connect(dest);
-  audioSource.connect(audioContext.destination);
 
   for (const track of dest.stream.getAudioTracks()) {
     stream.addTrack(track);
@@ -519,10 +532,12 @@ export async function generateVideoFromAudio(
     }
   }
 
-  const mediaRecorder = new MediaRecorder(stream, {
-    mimeType: selectedMime,
-    videoBitsPerSecond: 4_000_000,
-  });
+  const mediaRecorder = selectedMime
+    ? new MediaRecorder(stream, {
+        mimeType: selectedMime,
+        videoBitsPerSecond: 4_000_000,
+      })
+    : new MediaRecorder(stream);
 
   const chunks: Blob[] = [];
   mediaRecorder.ondataavailable = (e) => {
@@ -542,6 +557,8 @@ export async function generateVideoFromAudio(
       } catch (error) {
         reject(error);
       } finally {
+        stream.getTracks().forEach((track) => track.stop());
+        dest.stream.getTracks().forEach((track) => track.stop());
         audioContext.close().catch(() => undefined);
       }
     };
@@ -553,8 +570,14 @@ export async function generateVideoFromAudio(
     let frame = 0;
     const renderFrame = () => {
       if (frame >= totalFrames) {
-        mediaRecorder.stop();
-        audioSource.stop();
+        if (mediaRecorder.state !== 'inactive') {
+          mediaRecorder.stop();
+        }
+        try {
+          audioSource.stop();
+        } catch {
+          // BufferSource can only be stopped once.
+        }
         onProgress?.({ stage: 'rendering_video', progress: 0.98 });
         return;
       }

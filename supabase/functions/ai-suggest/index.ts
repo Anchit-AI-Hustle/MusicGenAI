@@ -106,7 +106,7 @@ function buildContext(context: any): string {
   return parts.length > 0 ? `\n\nContext from other fields:\n${parts.join("\n")}` : "";
 }
 
-function buildEntropyDirective(seed: number, previousSuggestions: string[]): string {
+function buildEntropyDirective(seed: number, previousSuggestions: string[], requestNonce?: string): string {
   const moods = pickRandom(MOOD_DESCRIPTORS, seed, 2);
   const envs = pickRandom(ENVIRONMENT_DESCRIPTORS, seed + 100, 2);
   const energies = pickRandom(ENERGY_DESCRIPTORS, seed + 200, 1);
@@ -114,6 +114,7 @@ function buildEntropyDirective(seed: number, previousSuggestions: string[]): str
   const angle = pickRandom(CREATIVE_ANGLES, seed + 400, 1)[0];
 
   let directive = `\n\n--- VARIATION DIRECTIVE (seed: ${seed}) ---`;
+  if (requestNonce) directive += `\nRequest nonce: ${requestNonce}`;
   directive += `\nStyle pattern to follow: ${pattern}`;
   directive += `\nCreative angle: Introduce ${angle}`;
   directive += `\nDraw inspiration from these descriptors: ${[...moods, ...envs, ...energies].join(", ")}`;
@@ -135,7 +136,7 @@ serve(async (req) => {
   }
 
   try {
-    const { field, value, context, action = "suggest", previousSuggestions = [], randomSeed = 0 } = await req.json();
+    const { field, value, context, action = "suggest", previousSuggestions = [], randomSeed = 0, requestNonce = "" } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -144,7 +145,7 @@ serve(async (req) => {
     const fieldPrompt = prompts[field] || (isEnhance ? "Improve and enhance this value." : "Provide a helpful suggestion for this music creation field.");
 
     const contextStr = buildContext(context);
-    const entropyDirective = buildEntropyDirective(randomSeed || Math.floor(Math.random() * 100000), previousSuggestions || []);
+    const entropyDirective = buildEntropyDirective(randomSeed || Math.floor(Math.random() * 100000), previousSuggestions || [], requestNonce);
 
     let userContent: string;
     if (isEnhance) {
@@ -160,6 +161,7 @@ serve(async (req) => {
 CRITICAL RULES:
 - Generate ALL outputs dynamically. NEVER return example text, template phrases, or placeholder content.
 - Every response MUST be unique. Use completely different wording, vocabulary, phrasing, and creative angles each time.
+- Treat each request nonce as a hard requirement for novelty. Never reuse previous wording even when the field and context are similar.
 - If previous suggestions are listed, you MUST avoid repeating any of them — not even paraphrased versions.
 - Draw from the variation directive's descriptors and style pattern to ensure novelty.
 - Analyze the user's filled fields deeply: genre influences mood, mood influences lyrics, BPM influences energy.
@@ -180,7 +182,7 @@ CRITICAL RULES:
     const buildRequestBody = () => {
       const temperature = 0.92 + Math.random() * 0.08; // 0.92-1.0 range (safe for all models)
       const attemptSeed = Math.floor(Math.random() * 1000000);
-      const entropyRefresh = buildEntropyDirective(attemptSeed, previousSuggestions || []);
+      const entropyRefresh = buildEntropyDirective(attemptSeed, previousSuggestions || [], requestNonce);
       
       let freshUserContent: string;
       if (isEnhance) {
