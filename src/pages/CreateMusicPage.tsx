@@ -439,7 +439,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handleTrackPlay = (track: { id: string; title: string; audioUrl?: string; videoUrl?: string; duration: number }) => {
+  const handleTrackPlay = (track: { id: string; title: string; audioUrl?: string; videoUrl?: string; duration: number; lyrics?: string; lyricCues?: PlayerTrack['lyricCues'] }) => {
     if (!track.audioUrl) return;
     const isCurrentTrack = player.currentTrack?.id === track.id;
     if (isCurrentTrack) {
@@ -453,6 +453,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         videoUrl: track.videoUrl,
         duration: track.duration,
         genres: currentCreation?.genres,
+        lyrics: track.lyrics || currentCreation?.lyrics,
+        lyricCues: track.lyricCues,
       });
     }
   };

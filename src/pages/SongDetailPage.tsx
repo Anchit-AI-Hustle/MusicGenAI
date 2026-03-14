@@ -28,7 +28,8 @@ const toPlayerTrack = (track: Track, creation: MusicCreation): PlayerTrack => ({
   creationId: creation.id,
   creationType: creation.type,
   genres: creation.genres,
-  lyrics: creation.lyrics,
+  lyrics: track.lyrics || creation.lyrics,
+  lyricCues: track.lyricCues,
 });
 
 const formatDuration = (secs: number) => {

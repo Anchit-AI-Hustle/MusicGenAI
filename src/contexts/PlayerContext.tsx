@@ -12,6 +12,13 @@ import React, { createContext, useContext, useState, useRef, useCallback, useEff
 
 export type PlaybackMode = 'audio' | 'video' | 'visualizer';
 
+export interface PlayerLyricCue {
+  text: string;
+  startTime: number;
+  endTime: number;
+  sectionName?: string;
+}
+
 export interface PlayerTrack {
   id: string;
   title: string;
@@ -24,6 +31,7 @@ export interface PlayerTrack {
   creationType?: 'song' | 'album';
   genres?: string[];
   lyrics?: string;
+  lyricCues?: PlayerLyricCue[];
 }
 
 // Stable refs for high-frequency values (currentTime) to avoid re-render storms
@@ -49,6 +57,7 @@ interface PlayerActions {
   setQueue: (tracks: PlayerTrack[], startIndex?: number) => void;
   clearQueue: () => void;
   setIsExpanded: (expanded: boolean) => void;
+  setIsImmersive: (immersive: boolean) => void;
 }
 
 interface PlayerState {
@@ -61,6 +70,8 @@ interface PlayerState {
   playbackSpeed: number;
   isMuted: boolean;
   isExpanded: boolean;
+  isImmersive: boolean;
+  audioElement: HTMLAudioElement | null;
 }
 
 // Separate context for time (high-frequency updates) to isolate renders
@@ -88,6 +99,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [playbackSpeed, setPlaybackSpeedState] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isImmersive, setIsImmersive] = useState(false);
 
   // Time state — updated at throttled rate (4Hz instead of 60Hz)
   const [timeState, setTimeState] = useState<PlayerTimeState>({ currentTime: 0, duration: 0 });
@@ -172,13 +184,19 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     if (!audio) return;
     setCurrentTrack(track);
     setPlaybackModeState(track.videoUrl ? 'video' : 'audio');
-    audio.src = track.audioUrl;
-    audio.load();
+    if (audio.src !== track.audioUrl) {
+      audio.src = track.audioUrl;
+      audio.load();
+    }
     audio.play().then(() => setIsPlaying(true)).catch(console.warn);
   }, []);
 
   const play = useCallback((track?: PlayerTrack) => {
     if (track) {
+      if (currentTrack?.id === track.id) {
+        audioRef.current.play().then(() => setIsPlaying(true)).catch(console.warn);
+        return;
+      }
       const q = queueRef.current;
       const idx = q.findIndex(t => t.id === track.id);
       if (idx >= 0) {
@@ -191,7 +209,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } else if (audioRef.current) {
       audioRef.current.play().then(() => setIsPlaying(true)).catch(console.warn);
     }
-  }, [loadAndPlay]);
+  }, [currentTrack?.id, loadAndPlay]);
 
   const pause = useCallback(() => { audioRef.current?.pause(); }, []);
 
@@ -254,19 +272,22 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setQueueIndex(0);
     setCurrentTrack(null);
     setIsPlaying(false);
+    setIsExpanded(false);
+    setIsImmersive(false);
     setTimeState({ currentTime: 0, duration: 0 });
   }, []);
 
   const stateValue = useMemo(() => ({
     currentTrack, queue, queueIndex, isPlaying, volume, playbackMode,
-    playbackSpeed, isMuted, isExpanded,
+    playbackSpeed, isMuted, isExpanded, isImmersive,
+    audioElement: audioRef.current,
     audioRef, videoRef, currentTimeRef, durationRef,
     play, pause, togglePlay, next, previous, seek,
     setVolume, setPlaybackMode, setPlaybackSpeed, toggleMute,
-    addToQueue, setQueue, clearQueue, setIsExpanded,
+    addToQueue, setQueue, clearQueue, setIsExpanded, setIsImmersive,
   }), [
     currentTrack, queue, queueIndex, isPlaying, volume, playbackMode,
-    playbackSpeed, isMuted, isExpanded,
+    playbackSpeed, isMuted, isExpanded, isImmersive,
     play, pause, togglePlay, next, previous, seek,
     setVolume, setPlaybackMode, setPlaybackSpeed, toggleMute,
     addToQueue, setQueue, clearQueue,

@@ -15,6 +15,8 @@ export interface Track {
   duration: number;
   audioUrl?: string;
   videoUrl?: string;
+  lyrics?: string;
+  lyricCues?: LyricCue[];
   status: string;
   trackNumber: number;
   createdAt: Date;
@@ -260,6 +262,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const { derivedStatus, derivedProgress } = deriveCreationState(tracks);
       return { ...prev, tracks, status: derivedStatus, progress: derivedProgress };
     });
+  };
+
+  const updateCreationLocal = (creationId: string, updates: Partial<MusicCreation>) => {
+    setCreations(prev => prev.map(c => c.id === creationId ? { ...c, ...updates } : c));
+    setCurrentCreation(prev => prev?.id === creationId ? { ...prev, ...updates } : prev);
   };
 
   // Helper to update track in DB
@@ -526,6 +533,15 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             vocalStyle,
             vocalIntensity,
           });
+          updateTrackLocal(creationId, trackId, {
+            lyrics: lyricsText,
+            lyricCues,
+          });
+
+          if (input.type === 'song') {
+            updateCreationLocal(creationId, { lyrics: lyricsText });
+            supabase.from('music_creations').update({ lyrics: lyricsText }).eq('id', creationId).then().catch(console.warn);
+          }
 
           const vocalConfig: VocalConfig = {
             lyrics: lyricsText,
