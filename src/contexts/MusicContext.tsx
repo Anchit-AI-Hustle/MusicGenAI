@@ -4,7 +4,7 @@ import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 import { generateTrack, MusicIntent, createRng, createGenerationDNA, getGenerationSeedNumber, type GenerationDNA } from '@/lib/music-engine';
 import { generateVideoFromAudio } from '@/lib/video-generator';
-import { generateVocals, mixVocalsIntoInstrumental, inferVocalStyle, generateDefaultLyrics, type VocalConfig } from '@/lib/vocal-engine';
+import { generateVocals, generateLyricCues, mixVocalsIntoInstrumental, inferVocalStyle, generateDefaultLyrics, type LyricCue, type VocalConfig } from '@/lib/vocal-engine';
 import { masterAudio } from '@/lib/audio-utils';
 import type { TrackConfig } from '@/components/AlbumTrackForm';
 import { genreOptionsToLabels } from '@/data/genres';
@@ -277,6 +277,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     trackTitle: string,
     audioUrl: string,
     dna: GenerationDNA,
+    lyricCues: LyricCue[] = [],
   ) => {
     try {
       updateTrackLocal(creationId, trackId, { status: 'analyzing_beat_structure', currentStage: 'Analyzing beats', progress: 0.84, audioUrl });
@@ -313,6 +314,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           colorSignature: dna.colorSignature,
           arrangementStyle: dna.arrangementStyle,
         },
+        lyricCues,
       );
 
       updateTrackLocal(creationId, trackId, { status: 'finalizing', currentStage: 'Uploading video', progress: 0.97, audioUrl });
@@ -499,6 +501,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       // Step 5b: Vocal synthesis (if lyrics provided and not purely instrumental)
       const isInstrumental = (input.vocalStructure || '').toLowerCase() === 'instrumental';
       let finalBlob = trackResult.blob;
+      let lyricCues: LyricCue[] = [];
       
       if (!isInstrumental && (input.lyrics || input.musicPrompt)) {
         try {
@@ -509,6 +512,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           const lyricsText = input.lyrics || generateDefaultLyrics(
             input.musicPrompt, input.genres, input.mood || '', musicIntent.structure
           );
+          lyricCues = generateLyricCues(lyricsText, musicIntent.structure, input.durationSeconds);
 
           const vocalConfig: VocalConfig = {
             lyrics: lyricsText,
@@ -557,6 +561,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             finalBlob = mixedMaster.blob;
             
             console.log(`[Vocals] Mixed & mastered — Peak: ${mixedMaster.stats.peakDb.toFixed(1)} dB, LUFS: ${mixedMaster.stats.lufs.toFixed(1)}`);
+          } else {
+            console.warn(`[${trackId}] Vocal synthesis returned no audible buffer; continuing with instrumental mix.`);
           }
         } catch (vocalError) {
           console.error(`[${trackId}] Vocal generation failed:`, vocalError);
@@ -614,7 +620,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           progress: 0.84,
           audioUrl,
         });
-        runAsyncVideoRender(trackId, creationId, input, trackTitle, audioUrl, dna).catch(console.warn);
+        runAsyncVideoRender(trackId, creationId, input, trackTitle, audioUrl, dna, lyricCues).catch(console.warn);
         toast.success(`"${trackTitle}" audio is ready. Visuals are rendering in the background.`);
       } else {
         await supabase.from('tracks').update({

@@ -767,7 +767,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
                   <div className="flex items-center gap-2">
                     <Mic2 className="w-5 h-5 text-muted-foreground" />
-                    <Label className="text-foreground font-medium">Vocal Style</Label>
+                    <Label className="text-foreground font-medium">Vocal Style / Delivery</Label>
                   </div>
                   <AiToolbar field="vocalStyle" />
                 </div>
@@ -862,7 +862,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <div className="flex items-center gap-2">
                     <Mic2 className="w-5 h-5 text-muted-foreground" />
                     <div>
-                      <Label className="text-foreground font-medium">Lyrics or Vocal Theme</Label>
+                      <Label className="text-foreground font-medium">Lyrics (optional)</Label>
                       <p className="text-sm text-muted-foreground">Themes, stories, or full lyrics</p>
                     </div>
                   </div>

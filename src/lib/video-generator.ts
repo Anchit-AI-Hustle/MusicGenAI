@@ -234,6 +234,13 @@ export interface VideoGenerationProgress {
   progress: number;
 }
 
+export interface LyricVideoCue {
+  text: string;
+  sectionName: string;
+  startTime: number;
+  endTime: number;
+}
+
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
@@ -483,6 +490,7 @@ export async function generateVideoFromAudio(
   videoStyleName?: string,
   onProgress?: (p: VideoGenerationProgress) => void,
   generationDNA?: VideoGenerationDNA,
+  lyricCues: LyricVideoCue[] = [],
 ): Promise<Blob> {
   if (typeof MediaRecorder === 'undefined') {
     throw new Error('This browser does not support video recording.');
@@ -615,6 +623,9 @@ export async function generateVideoFromAudio(
       const high = analysis.frameHigh[frame] || 0;
       const beatStrength = analysis.beatStrengths[frame] || 0;
       const sectionTransition = analysis.transitionFlags[frame] || false;
+      const currentTime = frame / fps;
+      const activeLyricCue = lyricCues.find((cue) => currentTime >= cue.startTime && currentTime <= cue.endTime);
+      const lyricFlash = lyricCues.some((cue) => Math.abs(cue.startTime - currentTime) < 0.12) ? 1 : 0;
 
       // Draw visualization based on style
       drawVisualization(
@@ -632,6 +643,8 @@ export async function generateVideoFromAudio(
         particles,
         frame,
         rng,
+        activeLyricCue?.text || '',
+        lyricFlash,
       );
 
       // Update progress every 30 frames
@@ -664,6 +677,8 @@ function drawVisualization(
   particles: Particle[],
   frame: number,
   rng: () => number,
+  activeLyricText: string,
+  lyricFlash: number,
 ) {
   const cx = w / 2;
   const cy = h / 2;
@@ -685,6 +700,11 @@ function drawVisualization(
   } else if (sectionTransition || beatStrength > 0.72) {
     ctx.fillStyle = `${style.colors[2 % style.colors.length]}18`;
     ctx.fillRect(0, 0, w, h);
+  }
+
+  if (lyricFlash > 0) {
+    ctx.fillStyle = `${style.colors[0]}20`;
+    ctx.fillRect(0, h * 0.76, w, h * 0.24);
   }
 
   ctx.save();
@@ -841,6 +861,18 @@ function drawVisualization(
   ctx.beginPath();
   ctx.arc(cx, cy, pulseRadius, 0, Math.PI * 2);
   ctx.fill();
+
+  if (activeLyricText) {
+    const caption = activeLyricText.length > 72 ? `${activeLyricText.slice(0, 72)}...` : activeLyricText;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = '600 30px serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.shadowBlur = 18;
+    ctx.fillText(caption, cx, h - 72);
+    ctx.restore();
+  }
 
   // Reset shadow
   ctx.shadowBlur = 0;

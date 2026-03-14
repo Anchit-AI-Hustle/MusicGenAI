@@ -10,7 +10,7 @@
  * Supports vocal styles: melodic singing, robotic vocoder, rap, choir, whisper, etc.
  */
 
-import { midiToFreq, getScaleMidi, parseKey, INTERNAL_SAMPLE_RATE } from './audio-utils';
+import { applyGain, measurePeak, midiToFreq, getScaleMidi, normalizeAudio, parseKey, INTERNAL_SAMPLE_RATE } from './audio-utils';
 import type { SectionPlan } from './music-engine';
 
 // ===== Types =====
@@ -39,6 +39,13 @@ export interface VocalSegment {
   startTime: number;
   endTime: number;
   energy: number;
+}
+
+export interface LyricCue {
+  text: string;
+  sectionName: string;
+  startTime: number;
+  endTime: number;
 }
 
 export interface VocalProgress {
@@ -402,6 +409,21 @@ function alignLyricsToStructure(
   return segments;
 }
 
+export function generateLyricCues(
+  lyrics: string,
+  structure: SectionPlan[],
+  durationSeconds: number,
+): LyricCue[] {
+  const lyricLines = parseLyrics(lyrics);
+  if (lyricLines.length === 0) return [];
+  return alignLyricsToStructure(lyricLines, structure, durationSeconds).map((segment) => ({
+    text: segment.text,
+    sectionName: segment.sectionName,
+    startTime: segment.startTime,
+    endTime: segment.endTime,
+  }));
+}
+
 // ===== Render a Sung Syllable =====
 
 function renderSungSyllable(
@@ -489,6 +511,17 @@ function renderSungSyllable(
   // Formant filters (3-band parallel)
   const formants = vowelFormant.map(f => f * style.formantShift);
 
+  // Dry voiced body to keep the vocal stem audible before formant shaping.
+  const bodyGain = ctx.createGain();
+  const bodyFilter = ctx.createBiquadFilter();
+  bodyFilter.type = 'lowpass';
+  bodyFilter.frequency.value = Math.max(900, formants[1] * 1.25);
+  bodyGain.gain.setValueAtTime(0.001, vowelStart);
+  bodyGain.gain.linearRampToValueAtTime(volume * (0.22 + style.harmonicRichness * 0.18), vowelStart + style.attackTime);
+  bodyGain.gain.setValueAtTime(volume * 0.16, vowelStart + Math.max(style.attackTime, vowelDur - style.releaseTime));
+  bodyGain.gain.linearRampToValueAtTime(0.001, vowelStart + vowelDur);
+  osc.connect(bodyFilter).connect(bodyGain).connect(dest);
+
   for (let fi = 0; fi < 3; fi++) {
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
@@ -569,7 +602,7 @@ function renderVocalLine(
   if (lineDuration <= 0) return;
 
   const beatDuration = 60 / tempo;
-  const volume = 0.3 * (segment.energy * 0.5 + 0.5);
+  const volume = 0.48 * (segment.energy * 0.55 + 0.45);
   let time = segment.startTime;
   let prevFreq: number | null = null;
 
@@ -743,7 +776,7 @@ export async function generateVocals(
   const ctx = new OfflineAudioContext(2, Math.ceil(sampleRate * durationSeconds), sampleRate);
 
   const vocalBus = ctx.createGain();
-  vocalBus.gain.value = 0.65;
+  vocalBus.gain.value = 0.95;
 
   const effectsBus = ctx.createGain();
   effectsBus.gain.value = 1.0;
@@ -772,6 +805,20 @@ export async function generateVocals(
 
   const vocalBuffer = await ctx.startRendering();
 
+  const peak = measurePeak(vocalBuffer);
+  if (peak <= 0.0005) {
+    return null;
+  }
+
+  if (peak < 0.08) {
+    normalizeAudio(vocalBuffer, 0.28);
+  }
+
+  const postNormalizePeak = measurePeak(vocalBuffer);
+  if (postNormalizePeak < 0.14) {
+    applyGain(vocalBuffer, Math.min(2.5, 0.18 / Math.max(postNormalizePeak, 0.001)));
+  }
+
   onProgress({ stage: 'mixing', progress: 1.0 });
 
   return vocalBuffer;
@@ -782,7 +829,7 @@ export async function generateVocals(
 export function mixVocalsIntoInstrumental(
   instrumental: AudioBuffer,
   vocals: AudioBuffer,
-  vocalLevel: number = 0.7,
+  vocalLevel: number = 0.95,
 ): AudioBuffer {
   const sampleRate = instrumental.sampleRate;
   const numChannels = instrumental.numberOfChannels;
@@ -799,8 +846,8 @@ export function mixVocalsIntoInstrumental(
     for (let i = 0; i < length; i++) {
       const inst = instData[i];
       const vocal = i < vocalSamples ? vocalData[i] * vocalLevel : 0;
-      const vocalPresence = Math.abs(vocal) > 0.01 ? 1 : 0;
-      const instDuck = 1 - vocalPresence * 0.15;
+      const vocalPresence = Math.abs(vocal) > 0.003 ? Math.min(1, Math.abs(vocal) * 8) : 0;
+      const instDuck = 1 - vocalPresence * 0.24;
       mixData[i] = inst * instDuck + vocal;
     }
   }

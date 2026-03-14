@@ -372,7 +372,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                 </div>
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-2">
-                    <Label className="text-foreground font-medium text-sm">Vocal Style</Label>
+                    <Label className="text-foreground font-medium text-sm">Vocal Style / Delivery</Label>
                     <AiToolbar field="vocalStyle" />
                   </div>
                   <div className="relative">
@@ -477,7 +477,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
               {/* Lyrics */}
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <Label className="text-foreground font-medium text-sm">Lyrics</Label>
+                  <Label className="text-foreground font-medium text-sm">Lyrics (optional)</Label>
                   <AiToolbar field="lyrics" />
                 </div>
                 <Textarea value={config.lyrics} onChange={e => update({ lyrics: e.target.value })} className="bg-input border-border min-h-20 resize-none" placeholder="Lyrics or vocal theme..." />
