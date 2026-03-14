@@ -34,12 +34,14 @@ import { renderTransition } from './transition-engine';
  * Seed = timestamp + random entropy. Drives all creative decisions.
  */
 export interface GenerationSeed {
-  /** Combined timestamp + entropy; used as RNG seed */
-  seed: number;
+  /** Human-readable seed signature */
+  seed: string;
+  /** Numeric form of the seed for deterministic RNG */
+  numericSeed: number;
   /** Unix timestamp (ms) at creation — explicit per spec */
   timestamp: number;
   /** Random entropy mixed into the final seed */
-  entropy: number;
+  entropy: string;
   /** 0-1, controls melodic contour bias */
   motifShape: number;
   /** 0-1, swing vs straight feel */
@@ -50,29 +52,64 @@ export interface GenerationSeed {
   textureDensity: number;
   /** 0-1, calm vs intense visuals */
   visualEnergy: number;
+  /** Visual color signature used by the video engine */
+  colorSignature: string[];
+  /** Arrangement behavior hint used by planning/orchestration */
+  arrangementStyle: 'cinematic' | 'driving' | 'progressive' | 'punchy' | 'minimal' | 'through-composed';
 }
 
 export type GenerationDNA = GenerationSeed;
 
+function hashStringToSeed(value: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+export function getGenerationSeedNumber(seed?: Pick<GenerationSeed, 'numericSeed' | 'seed'>): number {
+  if (!seed) return 0;
+  return seed.numericSeed ?? hashStringToSeed(seed.seed);
+}
+
 /** Create a fresh GenerationSeed with timestamp + high-entropy randomness */
 export function createGenerationSeed(): GenerationSeed {
   const timestamp = Date.now();
-  const cryptoRand = () => {
-    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-      return crypto.getRandomValues(new Uint32Array(1))[0] / 0xffffffff;
-    }
-    return Math.random();
-  };
-  const entropy = Math.floor(cryptoRand() * 2147483647);
+  const uuid = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${timestamp}-${Math.random().toString(16).slice(2)}`;
+  const seed = `${timestamp}-${uuid}`;
+  const numericSeed = hashStringToSeed(seed);
+  const rng = createRng(numericSeed);
+  const palettes = [
+    ['#ff6a3d', '#ffd166', '#1f4fff'],
+    ['#0bd3d3', '#ff4d8d', '#f7d154'],
+    ['#7c3aed', '#2dd4bf', '#f97316'],
+    ['#19a974', '#1c7ed6', '#f03e3e'],
+    ['#f59f00', '#00bcd4', '#7b2cbf'],
+  ];
+  const arrangementStyles: GenerationSeed['arrangementStyle'][] = [
+    'cinematic',
+    'driving',
+    'progressive',
+    'punchy',
+    'minimal',
+    'through-composed',
+  ];
   return {
-    seed: (timestamp & 0x7fffffff) ^ entropy,
+    seed,
+    numericSeed,
     timestamp,
-    entropy,
-    motifShape: cryptoRand(),
-    grooveBias: cryptoRand(),
-    harmonicMood: cryptoRand(),
-    textureDensity: cryptoRand(),
-    visualEnergy: cryptoRand(),
+    entropy: uuid,
+    motifShape: rng(),
+    grooveBias: rng(),
+    harmonicMood: rng(),
+    textureDensity: rng(),
+    visualEnergy: rng(),
+    colorSignature: palettes[Math.floor(rng() * palettes.length)],
+    arrangementStyle: arrangementStyles[Math.floor(rng() * arrangementStyles.length)],
   };
 }
 
@@ -135,6 +172,12 @@ export function createRng(seed: number) {
   };
 }
 
+let renderRandomSource: (() => number) | null = null;
+
+function renderRandom() {
+  return renderRandomSource ? renderRandomSource() : Math.random();
+}
+
 // ===== Instrument Rendering Helpers =====
 
 function renderKick(
@@ -176,7 +219,7 @@ function renderSnare(
   const bufSize = Math.ceil(ctx.sampleRate * dur);
   const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
   const data = noiseBuf.getChannelData(0);
-  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  for (let i = 0; i < bufSize; i++) data[i] = renderRandom() * 2 - 1;
   const src = ctx.createBufferSource();
   src.buffer = noiseBuf;
   const filter = ctx.createBiquadFilter();
@@ -213,7 +256,7 @@ function renderClap(
     const bufSize = Math.ceil(ctx.sampleRate * 0.12);
     const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
     const data = noiseBuf.getChannelData(0);
-    for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+    for (let i = 0; i < bufSize; i++) data[i] = renderRandom() * 2 - 1;
     const src = ctx.createBufferSource();
     src.buffer = noiseBuf;
     const filter = ctx.createBiquadFilter();
@@ -237,7 +280,7 @@ function renderHihat(
   const bufSize = Math.ceil(ctx.sampleRate * duration);
   const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
   const data = noiseBuf.getChannelData(0);
-  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  for (let i = 0; i < bufSize; i++) data[i] = renderRandom() * 2 - 1;
   const src = ctx.createBufferSource();
   src.buffer = noiseBuf;
   const filter = ctx.createBiquadFilter();
@@ -259,7 +302,7 @@ function renderRide(
   const bufSize = Math.ceil(ctx.sampleRate * duration);
   const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
   const data = noiseBuf.getChannelData(0);
-  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  for (let i = 0; i < bufSize; i++) data[i] = renderRandom() * 2 - 1;
   const src = ctx.createBufferSource();
   src.buffer = noiseBuf;
   const filter = ctx.createBiquadFilter();
@@ -282,7 +325,7 @@ function renderPerc(
   const bufSize = Math.ceil(ctx.sampleRate * dur);
   const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
   const data = noiseBuf.getChannelData(0);
-  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  for (let i = 0; i < bufSize; i++) data[i] = renderRandom() * 2 - 1;
   const src = ctx.createBufferSource();
   src.buffer = noiseBuf;
   const filter = ctx.createBiquadFilter();
@@ -384,7 +427,7 @@ function renderPadChord(
     const osc = ctx.createOscillator();
     osc.type = 'triangle';
     osc.frequency.value = freq;
-    osc.detune.value = (Math.random() - 0.5) * 10;
+    osc.detune.value = (renderRandom() - 0.5) * 10;
     const gain = ctx.createGain();
     const attack = Math.min(0.8, duration * 0.15);
     const release = Math.min(1.5, duration * 0.3);
@@ -427,6 +470,7 @@ async function renderSegment(
   trackMotif: Motif,
   trackHook: Motif,
 ): Promise<AudioBuffer> {
+  renderRandomSource = rng;
   const segDuration = endTime - startTime;
   const sampleRate = INTERNAL_SAMPLE_RATE;
   const numChannels = 2;
@@ -479,7 +523,7 @@ async function renderSegment(
       const prevEnergy = sections[sIdx - 1].energy;
       const transType = getTransitionType(prevEnergy, energy, rng);
       const localTransTime = sectionStart - startTime;
-      renderTransition(ctx, fxBus, transType, localTransTime, Math.min(2, section.duration * 0.15), energy);
+      renderTransition(ctx, fxBus, transType, localTransTime, Math.min(2, section.duration * 0.15), energy, rng);
     }
 
     // DRUMS
@@ -589,7 +633,11 @@ async function renderSegment(
     sectionStart = sectionEnd;
   }
 
-  return await ctx.startRendering();
+  try {
+    return await ctx.startRendering();
+  } finally {
+    renderRandomSource = null;
+  }
 }
 
 function concatenateBuffers(buffers: AudioBuffer[], sampleRate: number): AudioBuffer {
@@ -624,13 +672,13 @@ export async function generateTrack(
 ): Promise<GenerateTrackResult> {
   // Use GenerationDNA seed if available, otherwise create high-entropy seed
   const dna = intent.generationDNA;
-  const seedVal = seed ?? dna?.seed ?? (
+  const seedVal = seed ?? (dna ? getGenerationSeedNumber(dna) : (
     (Date.now() & 0x7fffffff) ^ 
     Math.floor(Math.random() * 2147483647) ^ 
     (typeof crypto !== 'undefined' && crypto.getRandomValues 
       ? crypto.getRandomValues(new Uint32Array(1))[0] 
       : Math.floor(Math.random() * 2147483647))
-  );
+  ));
   const rng = createRng(seedVal);
   
   // Apply DNA biases to the RNG to further differentiate outputs
@@ -643,7 +691,7 @@ export async function generateTrack(
   const { tempo: baseTempo, key, scale, structure, durationSeconds, energy: globalEnergy } = intent;
   const sampleRate = INTERNAL_SAMPLE_RATE;
 
-  console.log(`[Engine] GenerationDNA seed=${seedVal}, motif=${dna?.motifShape?.toFixed(3)}, groove=${dna?.grooveBias?.toFixed(3)}, harmonic=${dna?.harmonicMood?.toFixed(3)}`);
+  console.log(`[Engine] GenerationDNA seed=${dna?.seed || seedVal}, motif=${dna?.motifShape?.toFixed(3)}, groove=${dna?.grooveBias?.toFixed(3)}, harmonic=${dna?.harmonicMood?.toFixed(3)}`);
 
   onProgress('generating_melody', 0.12);
   await sleep(30);
@@ -669,7 +717,7 @@ export async function generateTrack(
 
   // ===== Instrument Orchestration: vary combinations every generation via DNA =====
   if (dna && profile.instruments.length > 4) {
-    const rngBurn = createRng(dna.seed);
+    const rngBurn = createRng(getGenerationSeedNumber(dna));
     for (let i = 0; i < 20; i++) rngBurn();
     const shuffled = [...profile.instruments].sort(() => rngBurn() - 0.5);
     const count = Math.max(4, Math.min(profile.instruments.length, Math.floor(4 + dna.textureDensity * (profile.instruments.length - 3))));

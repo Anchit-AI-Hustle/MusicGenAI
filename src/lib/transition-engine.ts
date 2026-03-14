@@ -10,12 +10,12 @@ export type TransitionType = 'riser' | 'fill' | 'reverse_cymbal' | 'filter_sweep
  */
 export function renderRiser(
   ctx: OfflineAudioContext, destination: AudioNode,
-  startTime: number, duration: number, velocity: number
+  startTime: number, duration: number, velocity: number, rng: () => number = Math.random
 ): void {
   const bufSize = Math.ceil(ctx.sampleRate * duration);
   const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
   const data = noiseBuf.getChannelData(0);
-  for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1);
+  for (let i = 0; i < bufSize; i++) data[i] = (rng() * 2 - 1);
   
   const src = ctx.createBufferSource();
   src.buffer = noiseBuf;
@@ -41,13 +41,13 @@ export function renderRiser(
  */
 export function renderCrash(
   ctx: OfflineAudioContext, destination: AudioNode,
-  time: number, velocity: number
+  time: number, velocity: number, rng: () => number = Math.random
 ): void {
   const duration = 1.5;
   const bufSize = Math.ceil(ctx.sampleRate * duration);
   const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
   const data = noiseBuf.getChannelData(0);
-  for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1);
+  for (let i = 0; i < bufSize; i++) data[i] = (rng() * 2 - 1);
   
   const src = ctx.createBufferSource();
   src.buffer = noiseBuf;
@@ -70,7 +70,7 @@ export function renderCrash(
  */
 export function renderReverseCymbal(
   ctx: OfflineAudioContext, destination: AudioNode,
-  startTime: number, duration: number, velocity: number
+  startTime: number, duration: number, velocity: number, rng: () => number = Math.random
 ): void {
   const bufSize = Math.ceil(ctx.sampleRate * duration);
   const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
@@ -78,7 +78,7 @@ export function renderReverseCymbal(
   // Reverse envelope in the buffer itself
   for (let i = 0; i < bufSize; i++) {
     const env = (i / bufSize); // ramp up
-    data[i] = (Math.random() * 2 - 1) * env;
+    data[i] = (rng() * 2 - 1) * env;
   }
   
   const src = ctx.createBufferSource();
@@ -103,7 +103,7 @@ export function renderReverseCymbal(
  */
 export function renderFilterSweep(
   ctx: OfflineAudioContext, destination: AudioNode,
-  startTime: number, duration: number, velocity: number
+  startTime: number, duration: number, velocity: number, _rng: () => number = Math.random
 ): void {
   const osc = ctx.createOscillator();
   osc.type = 'sawtooth';
@@ -130,23 +130,23 @@ export function renderFilterSweep(
  */
 export function renderTransition(
   ctx: OfflineAudioContext, destination: AudioNode,
-  type: TransitionType, time: number, duration: number, energy: number
+  type: TransitionType, time: number, duration: number, energy: number, rng: () => number = Math.random
 ): void {
   const transitionDur = Math.min(duration, 2); // max 2 seconds
   const startTime = Math.max(0, time - transitionDur);
   
   switch (type) {
     case 'riser':
-      renderRiser(ctx, destination, startTime, transitionDur, energy);
+      renderRiser(ctx, destination, startTime, transitionDur, energy, rng);
       break;
     case 'crash':
-      renderCrash(ctx, destination, time, energy);
+      renderCrash(ctx, destination, time, energy, rng);
       break;
     case 'reverse_cymbal':
-      renderReverseCymbal(ctx, destination, startTime, transitionDur, energy);
+      renderReverseCymbal(ctx, destination, startTime, transitionDur, energy, rng);
       break;
     case 'filter_sweep':
-      renderFilterSweep(ctx, destination, startTime, transitionDur, energy);
+      renderFilterSweep(ctx, destination, startTime, transitionDur, energy, rng);
       break;
     case 'fill':
       // Fills are handled by the drum engine

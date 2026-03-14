@@ -5,8 +5,11 @@
  */
 
 export interface VideoGenerationDNA {
-  seed: number;
+  seed: string;
+  numericSeed?: number;
   visualEnergy?: number;
+  colorSignature?: string[];
+  arrangementStyle?: string;
 }
 
 export interface VideoStyle {
@@ -118,9 +121,20 @@ function createSeededRng(seed: number) {
   };
 }
 
+function getVideoSeedNumber(dna?: VideoGenerationDNA) {
+  if (!dna) return Date.now() & 0xffffffff;
+  if (dna.numericSeed != null) return dna.numericSeed;
+  let hash = 2166136261;
+  for (let i = 0; i < dna.seed.length; i++) {
+    hash ^= dna.seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 /** Randomize a style so each generation looks unique (uses DNA seed when provided) */
 function randomizeStyle(base: VideoStyle, dna?: VideoGenerationDNA): VideoStyle {
-  const rng = dna ? createSeededRng(dna.seed) : () => Math.random();
+  const rng = dna ? createSeededRng(getVideoSeedNumber(dna)) : () => Math.random();
   const r = rng;
   // Shift hue of colors randomly
   const shiftColor = (hex: string): string => {
@@ -146,7 +160,7 @@ function randomizeStyle(base: VideoStyle, dna?: VideoGenerationDNA): VideoStyle 
   const visualMult = dna?.visualEnergy != null ? 0.6 + dna.visualEnergy * 0.8 : 1;
   return {
     ...base,
-    colors: base.colors.map(shiftColor),
+    colors: (dna?.colorSignature?.length ? dna.colorSignature : base.colors).map(shiftColor),
     particleCount: Math.floor(base.particleCount * (0.7 + r() * 0.6) * visualMult),
     waveformStyle: r() < 0.3 ? waveformStyles[Math.floor(r() * waveformStyles.length)] : base.waveformStyle,
     glowIntensity: base.glowIntensity * (0.7 + r() * 0.6) * visualMult,
@@ -463,7 +477,7 @@ export async function generateVideoFromAudio(
   }
 
   const style = getStyleFromMetadata(genres, mood, videoStyleName, generationDNA);
-  const rng = generationDNA ? createSeededRng(generationDNA.seed ^ 0x9e3779b9) : () => Math.random();
+  const rng = generationDNA ? createSeededRng(getVideoSeedNumber(generationDNA) ^ 0x9e3779b9) : () => Math.random();
 
   onProgress?.({ stage: 'analyzing_beat_structure', progress: 0.02 });
 

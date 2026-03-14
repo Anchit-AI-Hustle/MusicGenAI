@@ -136,7 +136,7 @@ serve(async (req) => {
   }
 
   try {
-    const { field, value, context, action = "suggest", previousSuggestions = [], randomSeed = 0, requestNonce = "" } = await req.json();
+    const { field, value, context, action = "suggest", previousSuggestions = [], randomSeed = 0, requestNonce = "", generationDNA = null } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -146,15 +146,25 @@ serve(async (req) => {
 
     const contextStr = buildContext(context);
     const entropyDirective = buildEntropyDirective(randomSeed || Math.floor(Math.random() * 100000), previousSuggestions || [], requestNonce);
+    const dnaDirective = generationDNA
+      ? `\nGenerationDNA seed: ${generationDNA.seed}
+Motif shape: ${generationDNA.motifShape}
+Groove bias: ${generationDNA.grooveBias}
+Harmonic mood: ${generationDNA.harmonicMood}
+Texture density: ${generationDNA.textureDensity}
+Visual energy: ${generationDNA.visualEnergy}
+Color signature: ${(generationDNA.colorSignature || []).join(", ")}
+Arrangement style: ${generationDNA.arrangementStyle}`
+      : "";
 
     let userContent: string;
     if (isEnhance) {
-      userContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}${entropyDirective}`;
+      userContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}${dnaDirective}${entropyDirective}`;
     } else {
       const currentValueNote = value
         ? `\n\nThe user has already entered: "${value}". Generate a completely NEW and DIFFERENT suggestion. Do NOT repeat or slightly modify their input.`
         : "\n\nThe field is empty. Suggest a creative starting point.";
-      userContent = `${fieldPrompt}${contextStr}${currentValueNote}${entropyDirective}`;
+      userContent = `${fieldPrompt}${contextStr}${dnaDirective}${currentValueNote}${entropyDirective}`;
     }
 
     const systemPrompt = `You are a music production AI assistant. You help users craft their musical vision.
@@ -186,12 +196,12 @@ CRITICAL RULES:
       
       let freshUserContent: string;
       if (isEnhance) {
-        freshUserContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}${entropyRefresh}`;
+        freshUserContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}${dnaDirective}${entropyRefresh}`;
       } else {
         const currentValueNote = value
           ? `\n\nThe user has already entered: "${value}". Generate a completely NEW and DIFFERENT suggestion. Do NOT repeat or slightly modify their input.`
           : "\n\nThe field is empty. Suggest a creative starting point.";
-        freshUserContent = `${fieldPrompt}${contextStr}${currentValueNote}${entropyRefresh}`;
+        freshUserContent = `${fieldPrompt}${contextStr}${dnaDirective}${currentValueNote}${entropyRefresh}`;
       }
       
       return JSON.stringify({

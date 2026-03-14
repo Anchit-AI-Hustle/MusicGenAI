@@ -81,7 +81,7 @@ serve(async (req) => {
 
     const genreStr = genres.length > 0 ? genres.join(", ") : "not specified — infer from prompt";
     const seedSummary = generationDNA
-      ? `Generation seed timestamp=${generationDNA.timestamp}, entropy=${generationDNA.entropy}, motifShape=${generationDNA.motifShape}, grooveBias=${generationDNA.grooveBias}, harmonicMood=${generationDNA.harmonicMood}, textureDensity=${generationDNA.textureDensity}, visualEnergy=${generationDNA.visualEnergy}`
+      ? `Generation seed=${generationDNA.seed}, timestamp=${generationDNA.timestamp}, entropy=${generationDNA.entropy}, motifShape=${generationDNA.motifShape}, grooveBias=${generationDNA.grooveBias}, harmonicMood=${generationDNA.harmonicMood}, textureDensity=${generationDNA.textureDensity}, visualEnergy=${generationDNA.visualEnergy}, colorSignature=${(generationDNA.colorSignature || []).join("/")}, arrangementStyle=${generationDNA.arrangementStyle}`
       : "No generation seed provided";
 
     // ===== STEP 1: StyleProfile + Production Brief (combined AI call) =====
@@ -115,6 +115,8 @@ Return both:
 - density
 - swing
 - characteristics
+
+When the GenerationDNA includes arrangementStyle or colorSignature, use them as creative nudges for structure and atmosphere without repeating prior patterns.
 
 Allowed values:
 - tempoTendency: very slow, slow, midtempo, fast, very fast
@@ -190,7 +192,7 @@ Plan a song with sections. Each section has a name, duration (seconds), energy (
 Section durations MUST sum to EXACTLY ${durationSeconds} seconds.
 Use the style's energy curve to guide energy levels across sections.
 Consider the inferred style: ${inferredGenre} at ${inferredTempo} BPM.
-Use the generation seed to introduce fresh section timing and contrast choices each run.`,
+Use the generation seed and arrangement style to introduce fresh section timing and contrast choices each run.`,
       `Plan structure for a ${durationSeconds}-second ${inferredGenre} track at ${inferredTempo} BPM.
 Mood: ${styleResult?.mood || mood || "neutral"}. Energy: ${styleResult?.energyLevel || 5}/10.
 Vocal structure: "${vocalStructure}".

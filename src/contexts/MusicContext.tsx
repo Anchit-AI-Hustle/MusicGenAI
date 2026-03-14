@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
-import { generateTrack, MusicIntent, createRng, createGenerationDNA, type GenerationDNA } from '@/lib/music-engine';
+import { generateTrack, MusicIntent, createRng, createGenerationDNA, getGenerationSeedNumber, type GenerationDNA } from '@/lib/music-engine';
 import { generateVideoFromAudio } from '@/lib/video-generator';
 import { generateVocals, mixVocalsIntoInstrumental, inferVocalStyle, generateDefaultLyrics, type VocalConfig } from '@/lib/vocal-engine';
 import { masterAudio } from '@/lib/audio-utils';
@@ -249,6 +249,107 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     // Don't update creation status directly - derive from tracks
   };
 
+  const runAsyncVideoRender = async (
+    trackId: string,
+    creationId: string,
+    input: CreateMusicInput,
+    trackTitle: string,
+    audioUrl: string,
+    dna: GenerationDNA,
+  ) => {
+    try {
+      updateTrackLocal(creationId, trackId, { status: 'analyzing_beat_structure', currentStage: 'Analyzing beats', progress: 0.84, audioUrl });
+      await updateTrackDB(trackId, creationId, 'Analyzing beats', 0.84, 'analyzing_beat_structure');
+
+      const videoBlob = await generateVideoFromAudio(
+        audioUrl,
+        input.durationSeconds,
+        input.genres,
+        input.mood || '',
+        input.videoStyle,
+        (p) => {
+          const stageLabel = p.stage === 'analyzing_beat_structure'
+            ? 'Analyzing beats'
+            : p.stage === 'rendering_video' || p.stage === 'generating_video'
+              ? 'Rendering visuals'
+              : p.stage === 'transcoding_video'
+                ? 'Optimizing MP4 for all devices'
+                : 'Encoding video';
+
+          updateTrackLocal(creationId, trackId, {
+            status: p.stage as string,
+            currentStage: stageLabel,
+            progress: 0.84 + p.progress * 0.12,
+            audioUrl,
+          });
+          updateTrackDB(trackId, creationId, stageLabel, 0.84 + p.progress * 0.12, p.stage).catch(console.warn);
+          trackLastUpdateRef.current[trackId] = Date.now();
+        },
+        {
+          seed: dna.seed,
+          numericSeed: getGenerationSeedNumber(dna),
+          visualEnergy: dna.visualEnergy,
+          colorSignature: dna.colorSignature,
+          arrangementStyle: dna.arrangementStyle,
+        },
+      );
+
+      updateTrackLocal(creationId, trackId, { status: 'finalizing', currentStage: 'Uploading video', progress: 0.97, audioUrl });
+      await updateTrackDB(trackId, creationId, 'Uploading video', 0.97, 'finalizing');
+
+      const isMp4Video = videoBlob.type.includes('mp4');
+      const videoExt = isMp4Video ? 'mp4' : 'webm';
+      const videoContentType = isMp4Video ? 'video/mp4' : 'video/webm';
+      const videoPath = `tracks/${trackId}/video.${videoExt}`;
+      const { error: vidUploadError } = await supabase.storage
+        .from('music-files')
+        .upload(videoPath, videoBlob, { contentType: videoContentType, upsert: true });
+
+      if (vidUploadError) throw new Error(`Video upload failed: ${vidUploadError.message}`);
+
+      const { data: vidUrlData } = supabase.storage.from('music-files').getPublicUrl(videoPath);
+      const videoUrl = vidUrlData.publicUrl;
+
+      await supabase.from('tracks').update({
+        status: 'completed',
+        video_url: videoUrl,
+        audio_url: audioUrl,
+        progress: 1,
+        current_stage: 'Completed',
+        estimated_time_left: 0,
+      }).eq('id', trackId);
+
+      updateTrackLocal(creationId, trackId, {
+        status: 'completed',
+        currentStage: 'Completed',
+        progress: 1,
+        audioUrl,
+        videoUrl,
+      });
+      toast.success(`Visuals attached for "${trackTitle}".`);
+    } catch (videoError) {
+      console.error(`[${trackId}] Video generation failed:`, videoError);
+      await supabase.from('tracks').update({
+        status: 'audio_complete_video_failed',
+        current_stage: 'Audio ready, video failed',
+        error_message: `Video: ${videoError instanceof Error ? videoError.message : 'Unknown error'}`,
+        audio_url: audioUrl,
+        progress: 1,
+        estimated_time_left: 0,
+      }).eq('id', trackId);
+      updateTrackLocal(creationId, trackId, {
+        status: 'audio_complete_video_failed',
+        currentStage: 'Audio ready, video failed',
+        errorMessage: `Video: ${videoError instanceof Error ? videoError.message : 'Unknown error'}`,
+        progress: 1,
+        audioUrl,
+      });
+      toast.error(`Video generation failed for "${trackTitle}" — audio is still available.`);
+    } finally {
+      delete trackLastUpdateRef.current[trackId];
+    }
+  };
+
   // Build a CreateMusicInput from a TrackConfig
   const trackConfigToInput = (tc: TrackConfig): CreateMusicInput => ({
     type: 'song',
@@ -291,8 +392,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       trackLastUpdateRef.current[trackId] = Date.now();
 
       // Step 1b: Preparing generation seed
-      updateTrackLocal(creationId, trackId, { status: 'seeding', currentStage: 'Preparing generation seed', progress: 0.05 });
-      await updateTrackDB(trackId, creationId, 'Preparing generation seed', 0.05, 'seeding');
+      updateTrackLocal(creationId, trackId, { status: 'seeding', currentStage: 'Creating GenerationDNA', progress: 0.05 });
+      await updateTrackDB(trackId, creationId, 'Creating GenerationDNA', 0.05, 'seeding');
 
       const analyzeResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-music`, {
         method: 'POST',
@@ -350,8 +451,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           mastering_track: 'Mastering track',
           generating_vocals: 'Generating vocals',
           vocal_alignment: 'Aligning vocals to music',
-          analyzing_beat_structure: 'Analyzing beat structure',
-          rendering_video: 'Rendering video',
+          analyzing_beat_structure: 'Analyzing beats',
+          rendering_video: 'Rendering visuals',
           finalizing: 'Finalizing track',
         };
         let label = stageLabels[stage] || stage;
@@ -477,89 +578,37 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       updateTrackLocal(creationId, trackId, { audioUrl, progress: 0.82 });
       trackLastUpdateRef.current[trackId] = Date.now();
 
-      // Step 7: Video generation (if enabled)
       if (input.generateVideo) {
-        try {
-          updateTrackLocal(creationId, trackId, { status: 'generating_video', currentStage: 'Generating video visuals', progress: 0.84 });
-          await updateTrackDB(trackId, creationId, 'Generating video visuals', 0.84, 'generating_video');
+        await supabase.from('tracks').update({
+          status: 'analyzing_beat_structure',
+          audio_url: audioUrl,
+          progress: 0.84,
+          duration_seconds: input.durationSeconds,
+          current_stage: 'Analyzing beats',
+          estimated_time_left: 0,
+        }).eq('id', trackId);
+        updateTrackLocal(creationId, trackId, {
+          status: 'analyzing_beat_structure',
+          currentStage: 'Analyzing beats',
+          progress: 0.84,
+          audioUrl,
+        });
+        runAsyncVideoRender(trackId, creationId, input, trackTitle, audioUrl, dna).catch(console.warn);
+        toast.success(`"${trackTitle}" audio is ready. Visuals are rendering in the background.`);
+      } else {
+        await supabase.from('tracks').update({
+          status: 'completed', audio_url: audioUrl, progress: 1,
+          duration_seconds: input.durationSeconds,
+          current_stage: 'Completed', estimated_time_left: 0,
+        }).eq('id', trackId);
 
-          const videoBlob = await generateVideoFromAudio(
-            audioUrl,
-            input.durationSeconds,
-            input.genres,
-            input.mood || '',
-            input.videoStyle,
-            (p) => {
-                const stageLabel = p.stage === 'generating_video'
-                  ? 'Rendering video'
-                  : p.stage === 'analyzing_beat_structure'
-                    ? 'Analyzing beat structure'
-                    : p.stage === 'rendering_video'
-                      ? 'Rendering video'
-                  : p.stage === 'transcoding_video'
-                    ? 'Optimizing MP4 for all devices'
-                    : 'Encoding video';
-
-                updateTrackLocal(creationId, trackId, {
-                  status: p.stage as string,
-                  currentStage: stageLabel,
-                  progress: 0.84 + p.progress * 0.12,
-                });
-                updateTrackDB(trackId, creationId, stageLabel, 0.84 + p.progress * 0.12, p.stage).catch(console.warn);
-              trackLastUpdateRef.current[trackId] = Date.now();
-            },
-            dna ? { seed: dna.seed, visualEnergy: dna.visualEnergy } : undefined,
-          );
-
-          // Upload video
-          updateTrackLocal(creationId, trackId, { status: 'finalizing', currentStage: 'Uploading video', progress: 0.96 });
-          await updateTrackDB(trackId, creationId, 'Uploading video', 0.96, 'finalizing');
-
-          const isMp4Video = videoBlob.type.includes('mp4');
-          const videoExt = isMp4Video ? 'mp4' : 'webm';
-          const videoContentType = isMp4Video ? 'video/mp4' : 'video/webm';
-          const videoPath = `tracks/${trackId}/video.${videoExt}`;
-          const { error: vidUploadError } = await supabase.storage
-            .from('music-files')
-            .upload(videoPath, videoBlob, { contentType: videoContentType, upsert: true });
-
-          if (vidUploadError) throw new Error(`Video upload failed: ${vidUploadError.message}`);
-
-          const { data: vidUrlData } = supabase.storage.from('music-files').getPublicUrl(videoPath);
-          const videoUrl = vidUrlData.publicUrl;
-
-          await supabase.from('tracks').update({ video_url: videoUrl }).eq('id', trackId);
-          updateTrackLocal(creationId, trackId, { videoUrl });
-        } catch (videoError) {
-          console.error(`[${trackId}] Video generation failed:`, videoError);
-          // Video failure doesn't fail the whole track
-          await supabase.from('tracks').update({
-            status: 'audio_complete_video_failed',
-            current_stage: 'Audio ready, video failed',
-            error_message: `Video: ${videoError instanceof Error ? videoError.message : 'Unknown error'}`,
-          }).eq('id', trackId);
-          updateTrackLocal(creationId, trackId, {
-            status: 'audio_complete_video_failed',
-            currentStage: 'Audio ready, video failed',
-            errorMessage: `Video: ${videoError instanceof Error ? videoError.message : 'Unknown error'}`,
-          });
-          toast.error(`Video generation failed for "${trackTitle}" — audio is still available.`);
-        }
+        updateTrackLocal(creationId, trackId, {
+          status: 'completed', currentStage: 'Completed', progress: 1, audioUrl,
+        });
+        delete trackLastUpdateRef.current[trackId];
+        toast.success(`"${trackTitle}" is ready! 🎵`);
       }
 
-      // Step 8: Complete
-      await supabase.from('tracks').update({
-        status: 'completed', audio_url: audioUrl, progress: 1,
-        duration_seconds: input.durationSeconds,
-        current_stage: 'Completed', estimated_time_left: 0,
-      }).eq('id', trackId);
-
-      updateTrackLocal(creationId, trackId, {
-        status: 'completed', currentStage: 'Completed', progress: 1, audioUrl,
-      });
-
-      toast.success(`"${trackTitle}" is ready! 🎵${input.generateVideo ? ' 🎬' : ''}`);
-      delete trackLastUpdateRef.current[trackId];
       return 'completed';
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -765,12 +814,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const maxRetries = 2;
       const history = suggestionHistoryRef.current[field] || [];
       const globalHistory = suggestionHistoryRef.current.__global__ || [];
+      const dna = createGenerationDNA();
       // Use crypto-grade random seed for each suggestion request
-      const randomSeed = (Date.now() & 0x7fffffff) ^ Math.floor(
-        (typeof crypto !== 'undefined' && crypto.getRandomValues
-          ? crypto.getRandomValues(new Uint32Array(1))[0] / 0xffffffff
-          : Math.random()) * 1000000
-      );
+      const randomSeed = getGenerationSeedNumber(dna);
       const requestNonce = typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
         : `${Date.now()}-${randomSeed}`;
@@ -793,6 +839,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
               previousSuggestions,
               randomSeed,
               requestNonce,
+              generationDNA: dna,
             }),
           });
 

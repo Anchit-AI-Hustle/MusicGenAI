@@ -25,7 +25,7 @@ import { AlbumTrackForm, defaultTrackConfig, type TrackConfig } from '@/componen
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Waiting to start',
   analyzing: 'Analyzing prompt',
-  seeding: 'Preparing generation seed',
+  seeding: 'Creating GenerationDNA',
   inferring: 'Inferring musical style',
   planning_structure: 'Planning arrangement',
   generating_melody: 'Generating melody',
@@ -34,9 +34,9 @@ const STATUS_LABELS: Record<string, string> = {
   vocal_alignment: 'Aligning vocals',
   mixing_audio: 'Mixing audio',
   mastering_track: 'Mastering track',
-  analyzing_beat_structure: 'Analyzing beat structure',
-  generating_video: 'Rendering video',
-  rendering_video: 'Rendering video',
+  analyzing_beat_structure: 'Analyzing beats',
+  generating_video: 'Rendering visuals',
+  rendering_video: 'Rendering visuals',
   encoding_video: 'Encoding video',
   transcoding_video: 'Optimizing MP4',
   finalizing: 'Finalizing',
@@ -374,7 +374,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   // Pipeline Progress
   const PIPELINE_STEPS = [
     { key: 'analyzing', label: 'Analyzing prompt', icon: '🔍', match: /analyz/i },
-    { key: 'seeding', label: 'Preparing generation seed', icon: '🧬', match: /seed|dna|prepar/i },
+    { key: 'seeding', label: 'Creating GenerationDNA', icon: '🧬', match: /generationdna|seed|dna|prepar/i },
     { key: 'inferring', label: 'Inferring musical style', icon: '🎯', match: /infer|style/i },
     { key: 'planning', label: 'Planning arrangement', icon: '🎼', match: /plan|arrang/i },
     { key: 'composing', label: 'Generating melody', icon: '🎹', match: /melody|motif|hook/i },
@@ -382,9 +382,9 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     { key: 'vocals', label: 'Generating vocals', icon: '🎤', match: /vocal|lyric|singing|synthe/i },
     { key: 'vocal_align', label: 'Aligning & mixing vocals', icon: '🎙️', match: /align.*vocal|mix.*vocal/i },
     { key: 'mixing', label: 'Mixing audio', icon: '🎚️', match: /mix(?!.*vocal)/i },
-    { key: 'mastering', label: 'Mastering', icon: '💿', match: /master/i },
-    { key: 'beat_analysis', label: 'Analyzing beat structure', icon: '📊', match: /beat structure/i },
-    { key: 'video_gen', label: 'Rendering video', icon: '🎬', match: /render.*video|generat.*video/i },
+    { key: 'mastering', label: 'Mastering track', icon: '💿', match: /master/i },
+    { key: 'beat_analysis', label: 'Analyzing beats', icon: '📊', match: /analyzing beats|beat structure/i },
+    { key: 'video_gen', label: 'Rendering visuals', icon: '🎬', match: /render.*visual|render.*video|generat.*video/i },
     { key: 'video_enc', label: 'Encoding video', icon: '📹', match: /encod.*video/i },
     { key: 'finalizing', label: 'Finalizing & uploading', icon: '💾', match: /finaliz|upload/i },
     { key: 'complete', label: 'Complete', icon: '✅', match: /complete/i },
@@ -826,7 +826,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   {currentCreation.tracks.map((track, index) => (
                     <div key={track.id} className="p-3 sm:p-4 bg-secondary/50 rounded-lg">
                       <div className="flex items-center gap-3 sm:gap-4">
-                        {track.status === 'completed' && track.audioUrl ? (
+                        {track.audioUrl ? (
                           <button onClick={() => handleTrackPlay(track)} className={`w-10 h-10 rounded-full flex items-center justify-center hover:opacity-90 transition-smooth flex-shrink-0 ${player.currentTrack?.id === track.id ? 'bg-primary' : 'bg-primary/80'}`}>
                             {player.currentTrack?.id === track.id && player.isPlaying ? <Pause className="w-5 h-5 text-primary-foreground" /> : <Play className="w-5 h-5 text-primary-foreground ml-0.5" />}
                           </button>
@@ -851,10 +851,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                               estimatedTimeLeft={track.estimatedTimeLeft || 0}
                             />
                           )}
-                          {track.status === 'completed' && (
+                          {track.audioUrl && (
                             <p className="text-sm text-muted-foreground">{formatDuration(track.duration)}</p>
                           )}
-                          {track.status === 'completed' && track.videoUrl && (
+                          {track.videoUrl && (
                             <div className="mt-3">
                               <VideoPlayer videoUrl={track.videoUrl} title={track.title} duration={track.duration} />
                             </div>
@@ -864,7 +864,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                           )}
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
-                          {track.status === 'completed' && track.audioUrl && (
+                          {track.audioUrl && (
                             <>
                               <a href={track.audioUrl} download={`${track.title || 'track'}.wav`}>
                                 <Button variant="ghost" size="icon"><Download className="w-5 h-5" /></Button>

@@ -16,7 +16,7 @@ type FilterType = 'all' | 'songs' | 'albums';
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Waiting to start',
   analyzing: 'Analyzing prompt',
-  seeding: 'Preparing generation seed',
+  seeding: 'Creating GenerationDNA',
   inferring: 'Inferring musical style',
   planning_structure: 'Planning arrangement',
   generating_melody: 'Generating melody',
@@ -25,9 +25,9 @@ const STATUS_LABELS: Record<string, string> = {
   vocal_alignment: 'Aligning vocals',
   mixing_audio: 'Mixing audio',
   mastering_track: 'Mastering track',
-  analyzing_beat_structure: 'Analyzing beat structure',
-  generating_video: 'Rendering video',
-  rendering_video: 'Rendering video',
+  analyzing_beat_structure: 'Analyzing beats',
+  generating_video: 'Rendering visuals',
+  rendering_video: 'Rendering visuals',
   encoding_video: 'Encoding video',
   transcoding_video: 'Optimizing MP4',
   finalizing: 'Finalizing',
@@ -452,7 +452,7 @@ const TrackRow: React.FC<{ track: Track; index: number; formatDuration: (s: numb
     <div className={`p-2 sm:p-3 rounded-lg transition-smooth ${isCurrentTrack ? 'bg-primary/5 border border-primary/20' : 'hover:bg-secondary/50'}`}>
       <div className="flex items-center gap-3 sm:gap-4">
         <span className="w-6 text-center text-sm text-muted-foreground">{index + 1}</span>
-        {track.status === 'completed' && track.audioUrl ? (
+        {track.audioUrl ? (
           <button onClick={handlePlay} className={`w-8 h-8 rounded-full flex items-center justify-center transition-smooth flex-shrink-0 ${isCurrentTrack ? 'bg-primary' : 'bg-primary/20 hover:bg-primary/30'}`}>
             {isTrackPlaying ? <Pause className={`w-4 h-4 ${isCurrentTrack ? 'text-primary-foreground' : 'text-primary'}`} /> : <Play className={`w-4 h-4 ml-0.5 ${isCurrentTrack ? 'text-primary-foreground' : 'text-primary'}`} />}
           </button>
@@ -485,7 +485,7 @@ const TrackRow: React.FC<{ track: Track; index: number; formatDuration: (s: numb
             <p className="text-xs text-destructive/70 truncate mt-0.5">{track.errorMessage}</p>
           )}
         </div>
-        <Badge variant="secondary" className={`text-xs hidden sm:inline-flex ${track.status === 'completed' ? 'bg-green-500/20 text-green-400' : track.status === 'failed' ? 'bg-destructive/20 text-destructive' : isActiveStatus(track.status) ? 'bg-primary/20 text-primary' : ''}`}>
+        <Badge variant="secondary" className={`text-xs hidden sm:inline-flex ${track.audioUrl && track.status === 'completed' ? 'bg-green-500/20 text-green-400' : track.status === 'failed' ? 'bg-destructive/20 text-destructive' : isActiveStatus(track.status) ? 'bg-primary/20 text-primary' : ''}`}>
           {STATUS_LABELS[track.status] || track.status}
         </Badge>
         {track.status === 'failed' && (
@@ -496,7 +496,7 @@ const TrackRow: React.FC<{ track: Track; index: number; formatDuration: (s: numb
         )}
         <span className="text-sm text-muted-foreground">{formatDuration(track.duration)}</span>
       </div>
-      {track.status === 'completed' && track.videoUrl && (
+      {track.videoUrl && (
         <div className="mt-3 ml-9 sm:ml-10">
           <VideoPlayer videoUrl={track.videoUrl} title={track.title} duration={track.duration} />
         </div>
