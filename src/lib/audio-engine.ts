@@ -21,7 +21,7 @@ class AudioEngine {
   private constructor() {
     this.audio = new Audio();
     this.audio.crossOrigin = 'anonymous';
-    
+
     // Sync state on audio events
     this.audio.addEventListener('play', () => this.notify());
     this.audio.addEventListener('pause', () => this.notify());

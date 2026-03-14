@@ -517,10 +517,10 @@ async function renderSegment(
   const segDuration = endTime - startTime;
   const sampleRate = INTERNAL_SAMPLE_RATE;
   const numChannels = 2;
-  
+
   // Create separate contexts for each stem to ensure clean isolation
   const createStemCtx = () => new OfflineAudioContext(numChannels, Math.ceil(sampleRate * segDuration), sampleRate);
-  
+
   const drumCtx = createStemCtx();
   const bassCtx = createStemCtx();
   const synthCtx = createStemCtx();
@@ -692,7 +692,7 @@ function concatenateBuffers(buffers: AudioBuffer[], sampleRate: number): AudioBu
   const totalLength = buffers.reduce((acc, b) => acc + b.length, 0);
   const numChannels = buffers[0]?.numberOfChannels || 2;
   const finalBuffer = new AudioBuffer({ length: totalLength, numberOfChannels: numChannels, sampleRate });
-  
+
   let offset = 0;
   for (const buf of buffers) {
     for (let ch = 0; ch < numChannels; ch++) {
@@ -732,14 +732,14 @@ export async function generateTrack(
     ? getGenerationSeedNumber(dna)
     : ((Date.now() & 0x7fffffff) ^ getCryptoRandomUint32() ^ getCryptoRandomUint32()));
   const rng = createRng(seedVal);
-  
+
   // Apply DNA biases to the RNG to further differentiate outputs
   if (dna) {
     // Burn through some RNG iterations based on DNA values to shift the sequence
     const burnCount = Math.floor(dna.motifShape * 50) + Math.floor(dna.grooveBias * 30);
     for (let i = 0; i < burnCount; i++) rng();
   }
-  
+
   const { tempo: baseTempo, key, scale, structure, durationSeconds, energy: globalEnergy } = intent;
   const sampleRate = INTERNAL_SAMPLE_RATE;
 
@@ -788,7 +788,7 @@ export async function generateTrack(
   const beatsPerBar = 4; // standard 4/4
   const totalBars = Math.floor(durationSeconds / (60 / effectiveTempo) / beatsPerBar);
   const barsPerSection: { [key: string]: number } = {};
-  
+
   let accumulatedBars = 0;
   sections.forEach((sec, i) => {
     let bars = Math.round(sec.duration / (60 / effectiveTempo) / beatsPerBar);
@@ -805,7 +805,7 @@ export async function generateTrack(
 
   // Waveform selection based on harmonic style
   const harmonicStr = (profile.harmonicStyle || '').toLowerCase();
-  const leadWaveform: OscillatorType = 
+  const leadWaveform: OscillatorType =
     harmonicStr.includes('chromatic') || harmonicStr.includes('blues') ? 'sawtooth' : 'square';
   const bassWaveform: OscillatorType = profile.swing > 0.2 ? 'sine' : 'sawtooth';
 
@@ -855,7 +855,7 @@ export async function generateTrack(
     melodySegments.push(segStems.melody);
     padSegments.push(segStems.pads);
     fxSegments.push(segStems.fx);
-    
+
     await sleep(10);
   }
 
@@ -895,36 +895,36 @@ async function mixStemsLocally(stems: AudioStems): Promise<AudioBuffer> {
   const sampleRate = drums.sampleRate;
   const length = drums.length;
   const numChannels = drums.numberOfChannels;
-  
+
   const ctx = new OfflineAudioContext(numChannels, length, sampleRate);
-  
+
   const drumNode = ctx.createBufferSource(); drumNode.buffer = drums;
   const bassNode = ctx.createBufferSource(); bassNode.buffer = bass;
   const melodyNode = ctx.createBufferSource(); melodyNode.buffer = melody;
   const padNode = ctx.createBufferSource(); padNode.buffer = pads;
   const fxNode = ctx.createBufferSource(); fxNode.buffer = fx;
-  
+
   const drumGain = ctx.createGain(); drumGain.gain.value = 0.75;
   const bassGain = ctx.createGain(); bassGain.gain.value = 0.65;
   const melodyGain = ctx.createGain(); melodyGain.gain.value = 0.45;
   const padGain = ctx.createGain(); padGain.gain.value = 0.35;
   const fxGain = ctx.createGain(); fxGain.gain.value = 0.40;
-  
+
   // Basic sidechain ducking: melody and pads duck when drums have high peaks
   // In a real mixer this would be dynamic, but for this local mix we just balance
-  
+
   drumNode.connect(drumGain).connect(ctx.destination);
   bassNode.connect(bassGain).connect(ctx.destination);
   melodyNode.connect(melodyGain).connect(ctx.destination);
   padNode.connect(padGain).connect(ctx.destination);
   fxNode.connect(fxGain).connect(ctx.destination);
-  
+
   drumNode.start(0);
   bassNode.start(0);
   melodyNode.start(0);
   padNode.start(0);
   fxNode.start(0);
-  
+
   return await ctx.startRendering();
 }
 
@@ -942,38 +942,38 @@ export async function mixStems(
   const sampleRate = drums.sampleRate;
   const length = drums.length;
   const numChannels = drums.numberOfChannels;
-  
+
   const ctx = new OfflineAudioContext(numChannels, length, sampleRate);
-  
+
   const drumNode = ctx.createBufferSource(); drumNode.buffer = drums;
   const bassNode = ctx.createBufferSource(); bassNode.buffer = bass;
   const melodyNode = ctx.createBufferSource(); melodyNode.buffer = melody;
   const padNode = ctx.createBufferSource(); padNode.buffer = pads;
   const fxNode = ctx.createBufferSource(); fxNode.buffer = fx;
-  
+
   const drumGain = ctx.createGain(); drumGain.gain.value = 0.8;
   const bassGain = ctx.createGain(); bassGain.gain.value = 0.7;
   const melodyGain = ctx.createGain(); melodyGain.gain.value = 0.5;
   const padGain = ctx.createGain(); padGain.gain.value = 0.4;
   const fxGain = ctx.createGain(); fxGain.gain.value = 0.45;
-  
+
   drumNode.connect(drumGain).connect(ctx.destination);
   bassNode.connect(bassGain).connect(ctx.destination);
   melodyNode.connect(melodyGain).connect(ctx.destination);
   padNode.connect(padGain).connect(ctx.destination);
   fxNode.connect(fxGain).connect(ctx.destination);
-  
+
   if (vocalStem) {
     const vocalNode = ctx.createBufferSource();
     vocalNode.buffer = vocalStem;
     const vocalGain = ctx.createGain();
     vocalGain.gain.value = vocalLevel;
-    
+
     // Sidechain Compression (Ducking)
     // Duck melody and pads by -3dB when vocals are active
     const duckingNode = ctx.createGain();
     duckingNode.gain.value = 1.0;
-    
+
     // Simple static ducking for the local POC; 
     // real sidechaining would use a DynamicsCompressorNode keyed to the vocal signal.
     const vocalData = vocalStem.getChannelData(0);
@@ -992,24 +992,24 @@ export async function mixStems(
         duckingNode.gain.setTargetAtTime(1.0, time, 0.1); // Restore
       }
     }
-    
+
     // Apply ducking to melody and pads
     melodyGain.disconnect();
     padGain.disconnect();
     melodyGain.connect(duckingNode);
     padGain.connect(duckingNode);
     duckingNode.connect(ctx.destination);
-    
+
     vocalNode.connect(vocalGain).connect(ctx.destination);
     vocalNode.start(0);
   }
-  
+
   drumNode.start(0);
   bassNode.start(0);
   melodyNode.start(0);
   padNode.start(0);
   fxNode.start(0);
-  
+
   return await ctx.startRendering();
 }
 
