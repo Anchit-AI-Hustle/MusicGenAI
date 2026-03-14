@@ -2,9 +2,9 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
-import { generateTrack, MusicIntent, createRng, createGenerationDNA, getGenerationSeedNumber, type GenerationDNA } from '@/lib/music-engine';
+import { generateTrack, MusicIntent, createRng, createGenerationDNA, getGenerationSeedNumber, type GenerationDNA, mixStems } from '@/lib/music-engine';
 import { generateVideoFromAudio } from '@/lib/video-generator';
-import { generateVocals, generateLyricCues, mixVocalsIntoInstrumental, inferVocalStyle, generateDefaultLyrics, type LyricCue, type VocalConfig } from '@/lib/vocal-engine';
+import { generateVocals, generateLyricCues, inferVocalStyle, generateDefaultLyrics, type LyricCue, type VocalConfig } from '@/lib/vocal-engine';
 import { masterAudio } from '@/lib/audio-utils';
 import type { TrackConfig } from '@/components/AlbumTrackForm';
 import { genreOptionsToLabels } from '@/data/genres';
@@ -508,7 +508,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       // Step 5b: Vocal synthesis (if lyrics provided and not purely instrumental)
       const isInstrumental = (input.vocalStructure || '').toLowerCase() === 'instrumental';
-      let finalBlob = trackResult.blob;
+      let finalBuffer: AudioBuffer = trackResult.instrumentalBuffer;
       let lyricCues: LyricCue[] = [];
       
       if (!isInstrumental && (input.lyrics || input.musicPrompt)) {
@@ -581,30 +581,32 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             updateTrackLocal(creationId, trackId, { status: 'vocal_alignment', currentStage: 'Mixing vocals into track', progress: 0.74 });
             await updateTrackDB(trackId, creationId, 'Mixing vocals into track', 0.74, 'vocal_alignment');
 
-            // Mix vocals into instrumental
-            const mixedBuffer = mixVocalsIntoInstrumental(trackResult.instrumentalBuffer, vocalBuffer, 1.08);
-            
-            // Master the mixed version
-            updateTrackLocal(creationId, trackId, { status: 'mastering_track', currentStage: 'Mastering final mix with vocals', progress: 0.76 });
-            await updateTrackDB(trackId, creationId, 'Mastering final mix with vocals', 0.76, 'mastering_track');
-            
-            const mixedMaster = masterAudio(mixedBuffer, 2);
-            finalBlob = mixedMaster.blob;
-            
-            console.log(`[Vocals] Mixed & mastered — Peak: ${mixedMaster.stats.peakDb.toFixed(1)} dB, LUFS: ${mixedMaster.stats.lufs.toFixed(1)}`);
+            // NEW Production Pipeline: Mix instrument stems + vocal stem using Pro Engine
+            finalBuffer = await mixStems(trackResult.stems, vocalBuffer, 1.08);
+            console.log(`[Vocals] Multi-stem mix completed with ducking.`);
           } else {
             console.warn(`[${trackId}] Vocal synthesis returned no audible buffer; continuing with instrumental mix.`);
           }
         } catch (vocalError) {
           console.error(`[${trackId}] Vocal generation failed:`, vocalError);
           toast.error(`Vocal synthesis failed — continuing with instrumental version.`);
-          // Continue with instrumental blob
+          // Continue with instrumental buffer
+          finalBuffer = trackResult.instrumentalBuffer;
         }
       }
 
       trackLastUpdateRef.current[trackId] = Date.now();
 
-      // Step 6: Upload audio
+      // Step 6: Professional Mastering (Exactly once at end of chain)
+      updateTrackLocal(creationId, trackId, { status: 'mastering_track', currentStage: 'Mastering final production', progress: 0.76 });
+      await updateTrackDB(trackId, creationId, 'Mastering final production', 0.76, 'mastering_track');
+      
+      const masterResult = masterAudio(finalBuffer, 2);
+      const finalBlob = masterResult.blob;
+      
+      console.log(`[Production] Mastering complete — Peak: ${masterResult.stats.peakDb.toFixed(1)} dB, LUFS: ${masterResult.stats.lufs.toFixed(1)}`);
+
+      // Step 7: Upload audio
       updateTrackLocal(creationId, trackId, { status: 'finalizing', currentStage: 'Uploading final audio', progress: 0.80 });
       await updateTrackDB(trackId, creationId, 'Uploading final audio', 0.80, 'finalizing');
 
@@ -619,10 +621,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const audioUrl = urlData.publicUrl;
 
       // Also upload instrumental version separately if vocals were added
-      if (!isInstrumental && finalBlob !== trackResult.blob) {
+      if (!isInstrumental) {
         const instPath = `tracks/${trackId}/instrumental.wav`;
+        const instMaster = masterAudio(trackResult.instrumentalBuffer, 1);
         await supabase.storage.from('music-files')
-          .upload(instPath, trackResult.blob, { contentType: 'audio/wav', upsert: true })
+          .upload(instPath, instMaster.blob, { contentType: 'audio/wav', upsert: true })
           .catch(e => console.warn('Instrumental upload failed:', e));
       }
 
@@ -862,6 +865,13 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // Session suggestion history
   const suggestionHistoryRef = useRef<Record<string, string[]>>({});
   const suggestionGenreFamilyHistoryRef = useRef<string[]>([]);
+  
+  const GENRE_FAMILIES = [
+    'Electronic (Techno/House)', 'Hip Hop / Trap', 'Pop / Dance', 
+    'Rock / Metal', 'Jazz / Blues', 'Classical / Orchestral',
+    'World / Global', 'Ambient / Lo-fi', 'R&B / Soul',
+    'Latin / Reggaeton', 'Country / Folk', 'Experimental / Noise'
+  ];
 
   const aiSuggestQueueRef = useRef(Promise.resolve());
 
@@ -884,22 +894,28 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-          const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-suggest`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            },
-            body: JSON.stringify({
-              field, value, context, action,
-              previousSuggestions,
-              previousGenreFamilies: suggestionGenreFamilyHistoryRef.current.slice(-8),
-              randomSeed,
-              requestNonce,
-              generationDNA: dna,
-            }),
-          });
+            // Track genre family rotation
+            const lastFam = suggestionGenreFamilyHistoryRef.current[suggestionGenreFamilyHistoryRef.current.length - 1];
+            const nextFamIndex = (GENRE_FAMILIES.indexOf(lastFam || '') + 1) % GENRE_FAMILIES.length;
+            const targetGenreFamily = GENRE_FAMILIES[nextFamIndex];
+
+            const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-suggest`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              },
+              body: JSON.stringify({
+                field, value, context, action,
+                previousSuggestions,
+                previousGenreFamilies: suggestionGenreFamilyHistoryRef.current.slice(-12),
+                targetGenreFamily, // Force rotation
+                randomSeed,
+                requestNonce,
+                generationDNA: dna,
+              }),
+            });
 
           if (response.status === 429 && attempt < maxRetries) {
             const retryJitter = createRng(randomSeed ^ ((attempt + 1) * 0x9e3779b9));

@@ -1273,24 +1273,24 @@ function generateDefaultLyricsInternal(
       previousHeader = header;
     }
 
-    // Syllable Constraint Engine
+    // Syllable Constraint Engine (Strict per-bar targets)
     let targetSyllablesPerBar = 8;
-    if (options.vocalStyle === 'rap' || options.vocalStyle === 'spoken_word') {
-      targetSyllablesPerBar = 14;
-    } else if (options.vocalStyle === 'whisper') {
-      targetSyllablesPerBar = 5;
-    } else if (normalizedName === 'chorus' || normalizedName === 'drop' || normalizedName === 'hook') {
-      // Choruses: sustained melodic lines; 8 syl/bar is centre of the 6–10 spec range
-      targetSyllablesPerBar = 8;
+    const isRap = options.vocalStyle === 'rap' || options.vocalStyle === 'spoken_word';
+    const isAmbient = options.vocalStyle === 'whisper';
+    
+    if (isRap) {
+      targetSyllablesPerBar = 14; // Center of 12-16
+    } else if (isAmbient) {
+      targetSyllablesPerBar = 5; // Center of 4-6
+    } else {
+      targetSyllablesPerBar = 8; // Center of 6-10 for melodic
     }
 
     // Allocate lyric lines
-    // By default, one lyric line per bar (or per 2 bars depending on density)
-    // To keep it simple and fulfill "Generate lyrics one bar at a time":
-    // we'll attempt 1 line per 2 bars for singing, and 1 line per 1 bar for rap.
-    const stepsPerLine = (options.vocalStyle === 'rap' || options.vocalStyle === 'spoken_word') ? 1 : 2;
+    // RAP: 1 line per 1 bar
+    // MELODIC/AMBIENT: 1 line per 2 bars
+    const stepsPerLine = isRap ? 1 : 2;
 
-    // We iterate over the section in chunks of `stepsPerLine` bars
     for (let barIdx = 0; barIdx < sectionBars; barIdx += stepsPerLine) {
       const barsToUse = Math.min(stepsPerLine, sectionBars - barIdx);
       const syllablesTarget = targetSyllablesPerBar * barsToUse;
@@ -1305,25 +1305,22 @@ function generateDefaultLyricsInternal(
 
       let baseLine: string;
       if ((normalizedName === 'chorus' || normalizedName === 'hook' || normalizedName === 'drop') && chorusMemory[memoryIdx]) {
-        // Validation check: Minor variation on repeats
-        baseLine = (memoryIdx === sectionBars - 1)
+        baseLine = (barIdx + stepsPerLine >= sectionBars)
           ? `${chorusMemory[memoryIdx]} ${lexicon.fillers[memoryIdx % lexicon.fillers.length]}`
           : chorusMemory[memoryIdx];
       } else {
         baseLine = buildSectionLine(normalizedName, memoryIdx, hookSeed, promptWords, mood, lexicon, styleTokens, genres);
         if (normalizedName === 'chorus' || normalizedName === 'hook' || normalizedName === 'drop') {
-          // Hook rules: save phrase for chorus repeat
           chorusMemory[memoryIdx] = baseLine;
         }
       }
 
-      // Generate up to exact syllable limits length
+      // Generate up to exact syllable limits using the target
       let fittedLine = fitLineToSyllableTarget(baseLine, syllablesTarget, lexicon.fillers);
 
-      // Validation check (enforced here since it's a synchronous generation)
+      // Final strict validation
       const currentSyllables = lineToSyllables(fittedLine).length;
       if (currentSyllables > syllablesTarget + 2) {
-        // simplistic re-fit/trim if validation fails
         const words = fittedLine.split(' ');
         while (words.length > 2 && lineToSyllables(words.join(' ')).length > syllablesTarget + 1) {
           words.pop();
