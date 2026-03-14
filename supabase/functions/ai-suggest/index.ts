@@ -162,7 +162,8 @@ serve(async (req) => {
     const fieldPrompt = prompts[field] || (isEnhance ? "Improve and enhance this value." : "Provide a helpful suggestion for this music creation field.");
 
     const contextStr = buildContext(context);
-    const entropyDirective = buildEntropyDirective(randomSeed || Math.floor(Math.random() * 100000), previousSuggestions || [], requestNonce);
+    const fallbackSeed = randomSeed || hashSeed(`${requestNonce || crypto.randomUUID()}:${Date.now()}`);
+    const entropyDirective = buildEntropyDirective(fallbackSeed, previousSuggestions || [], requestNonce);
     const dnaDirective = generationDNA
       ? `\nGenerationDNA seed: ${generationDNA.seed}
 Motif shape: ${generationDNA.motifShape}

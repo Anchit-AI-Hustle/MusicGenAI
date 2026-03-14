@@ -23,6 +23,40 @@ function createSeededRng(seed: string) {
   };
 }
 
+interface GenerationDNA {
+  seed: string;
+  motifShape: number;
+  grooveBias: number;
+  harmonicMood: number;
+  textureDensity: number;
+  visualEnergy: number;
+  arrangementStyle: string;
+  colorSignature: string[];
+}
+
+function createGenerationDNA(): GenerationDNA {
+  const seed = `${Date.now()}-${crypto.randomUUID()}`;
+  const rng = createSeededRng(seed);
+  const palettes = [
+    ["#ff6a3d", "#ffd166", "#1f4fff"],
+    ["#0bd3d3", "#ff4d8d", "#f7d154"],
+    ["#7c3aed", "#2dd4bf", "#f97316"],
+    ["#19a974", "#1c7ed6", "#f03e3e"],
+    ["#f59f00", "#00bcd4", "#7b2cbf"],
+  ];
+  const arrangementStyles = ["cinematic", "driving", "progressive", "punchy", "minimal", "through-composed"];
+  return {
+    seed,
+    motifShape: rng(),
+    grooveBias: rng(),
+    harmonicMood: rng(),
+    textureDensity: rng(),
+    visualEnergy: rng(),
+    arrangementStyle: arrangementStyles[Math.floor(rng() * arrangementStyles.length)],
+    colorSignature: palettes[Math.floor(rng() * palettes.length)],
+  };
+}
+
 // ===== TYPE DEFINITIONS =====
 
 interface SegmentPlan {
@@ -155,7 +189,7 @@ async function workerGenerateSegment(
   duration: number,
   seed?: number,
 ): Promise<string> {
-  const actualSeed = seed ?? Math.floor(Math.random() * 2147483647);
+  const actualSeed = seed ?? hashSeed(`${Date.now()}:${crypto.randomUUID()}:${prompt}:${duration}`);
 
   console.log(`[Worker] Requesting segment: prompt="${prompt.substring(0, 80)}...", duration=${duration}s, seed=${actualSeed}`);
 
@@ -201,12 +235,13 @@ async function downloadAudio(url: string): Promise<ArrayBuffer> {
 async function generateSegmentWithRetry(
   workerUrl: string,
   prompt: string,
+  baseSeed: string,
   duration: number,
   maxRetries: number = 3,
 ): Promise<{ audioUrl: string; buffer: ArrayBuffer }> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const seed = Math.floor(Math.random() * 2147483647);
+      const seed = hashSeed(`${baseSeed}:attempt:${attempt}`);
       const audioUrl = await workerGenerateSegment(workerUrl, prompt, duration, seed);
       const buffer = await downloadAudio(audioUrl);
       return { audioUrl, buffer };
@@ -402,7 +437,15 @@ const TEXTURE_VARIATIONS = [
 ];
 
 function pickRandom<T>(arr: T[], count: number = 1): T[] {
-  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return arr.slice(0, count);
+}
+
+function pickRandomWithRng<T>(arr: T[], count: number, rng: () => number): T[] {
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
   return shuffled.slice(0, count);
 }
 
@@ -427,16 +470,22 @@ function buildSegmentPrompt(
   _totalSegments: number,
   _userPrompt: string,
   _artistInspiration: string,
+  generationDNA: GenerationDNA,
+  rng: () => number,
 ): string {
   const sectionName = seg.name.replace(/_\d+$/, "");
-  const textureVar = pickRandom(TEXTURE_VARIATIONS, 1)[0];
+  const textureVar = pickRandomWithRng(TEXTURE_VARIATIONS, 1, rng)[0];
+  const instrumentTokens = brief.instrumentation.split(",").map(s => s.trim()).filter(Boolean);
+  const colorMood = generationDNA.colorSignature.join(" ");
 
   const parts = [
     brief.genre,
     sectionName,
     brief.mood,
-    pickRandom(brief.instrumentation.split(",").map(s => s.trim()).filter(Boolean), 2).join(" "),
+    pickRandomWithRng(instrumentTokens, Math.min(2, instrumentTokens.length || 1), rng).join(" "),
     textureVar,
+    generationDNA.arrangementStyle,
+    colorMood,
   ].filter(Boolean);
 
   return sanitizePrompt(parts.join(" "));
@@ -470,8 +519,10 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
-    const { trackId, creationId, input, jobId: reqJobId } = await req.json();
+    const { trackId, creationId, input, jobId: reqJobId, generationDNA: requestDNA } = await req.json();
     const jobId = reqJobId || trackId;
+    const generationDNA: GenerationDNA = requestDNA || createGenerationDNA();
+    const requestRng = createSeededRng(generationDNA.seed);
 
     // ================================================================
     // INPUT FREEZE
@@ -497,9 +548,14 @@ serve(async (req) => {
     let etaRemaining = estTotalSec;
 
     // ================================================================
+    // STEP 0 — CREATING GENERATION DNA
+    // ================================================================
+    await updateProgress(supabase, trackId, creationId, "Creating GenerationDNA", 0.01, etaRemaining, jobId, 0, 0, 0, "seeding");
+
+    // ================================================================
     // STEP 1 — ANALYZING PROMPT
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Analyzing user inputs and prompt", 0.02, etaRemaining, jobId, 1, 0, 0, "analyzing");
+    await updateProgress(supabase, trackId, creationId, "Analyzing prompt", 0.02, etaRemaining, jobId, 1, 0, 0, "analyzing");
 
     const sentiment = await callAI(
       LOVABLE_API_KEY,
@@ -515,7 +571,8 @@ serve(async (req) => {
         melodicComplexity: { type: "number", description: "Melodic complexity 1-10" },
         rhythmicDensity: { type: "number", description: "Rhythmic density 1-10" },
       },
-      ["emotionPolarity", "energyIntensity", "darknessBrightness", "aggressionLevel", "melodicComplexity", "rhythmicDensity"]
+      ["emotionPolarity", "energyIntensity", "darknessBrightness", "aggressionLevel", "melodicComplexity", "rhythmicDensity"],
+      `${generationDNA.seed}:sentiment`
     ) || { emotionPolarity: "neutral", energyIntensity: 5, darknessBrightness: 0, aggressionLevel: 3, melodicComplexity: 5, rhythmicDensity: 5 };
 
     console.log(`[${trackId}] Sentiment:`, JSON.stringify(sentiment));
@@ -524,7 +581,7 @@ serve(async (req) => {
     // ================================================================
     // STEP 1b — EXPANDING PROMPT INTO PRODUCTION BRIEF
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Expanding into production brief", 0.04, etaRemaining, jobId, 2, 0, 0, "analyzing");
+    await updateProgress(supabase, trackId, creationId, "Inferring musical style", 0.04, etaRemaining, jobId, 2, 0, 0, "inferring");
 
     const briefResult = await callAI(
       LOVABLE_API_KEY,
@@ -533,6 +590,9 @@ serve(async (req) => {
 Genres: ${frozenInput.genres.join(", ") || "electronic"}
 Tempo: ${frozenInput.tempoBpm} BPM
 Artist Inspiration: "${frozenInput.artistInspiration || "None"}"
+GenerationDNA seed: ${generationDNA.seed}
+Arrangement style: ${generationDNA.arrangementStyle}
+Color signature: ${generationDNA.colorSignature.join(", ")}
 Sentiment: mood=${sentiment.emotionPolarity}, energy=${sentiment.energyIntensity}/10, darkness=${sentiment.darknessBrightness}, aggression=${sentiment.aggressionLevel}/10
 Vocal structure: "${frozenInput.vocalStructure}"
 
@@ -555,7 +615,8 @@ Generate a production brief with: genre, subgenre, tempo description, mood, atmo
           description: "5-8 texture/sonic keywords",
         },
       },
-      ["genre", "subgenre", "tempo", "mood", "atmosphere", "environment", "instrumentation", "energyCurve", "rhythmicStyle", "textureKeywords"]
+      ["genre", "subgenre", "tempo", "mood", "atmosphere", "environment", "instrumentation", "energyCurve", "rhythmicStyle", "textureKeywords"],
+      `${generationDNA.seed}:brief`
     );
 
     const productionBrief: ProductionBrief = briefResult ? {
@@ -588,13 +649,14 @@ Generate a production brief with: genre, subgenre, tempo description, mood, atmo
     // ================================================================
     // STEP 2 — PLANNING SONG STRUCTURE
     // ================================================================
-    await updateProgress(supabase, trackId, creationId, "Planning song structure and segments", 0.07, etaRemaining, jobId, 3, 0, 0, "planning_structure");
+    await updateProgress(supabase, trackId, creationId, "Planning arrangement", 0.07, etaRemaining, jobId, 3, 0, 0, "planning_structure");
 
     const planResult = await callAI(
       LOVABLE_API_KEY,
       `You are a professional song structure planner. Plan a song with segments that sum to EXACTLY ${durationSec} seconds total.
 Each segment should be a distinct musical section. Use varied structures — never produce identical plans.
 Consider: genre=${frozenInput.genres.join(", ") || "electronic"}, tempo=${frozenInput.tempoBpm}BPM, mood=${sentiment.emotionPolarity}, energy=${sentiment.energyIntensity}/10.
+GenerationDNA seed=${generationDNA.seed}, arrangementStyle=${generationDNA.arrangementStyle}, motifShape=${generationDNA.motifShape}, grooveBias=${generationDNA.grooveBias}, harmonicMood=${generationDNA.harmonicMood}, textureDensity=${generationDNA.textureDensity}.
 Vocal structure requested: "${frozenInput.vocalStructure}".
 IMPORTANT: segment durations MUST sum to exactly ${durationSec} seconds. Each segment MUST be between 4 and 8 seconds (MusicGen model limit).`,
       `Plan the structure for a ${durationSec}-second ${frozenInput.genres[0] || "electronic"} track at ${frozenInput.tempoBpm} BPM.
@@ -620,7 +682,8 @@ Durations MUST sum to exactly ${durationSec}.`,
           },
         },
       },
-      ["segments"]
+      ["segments"],
+      `${generationDNA.seed}:plan`
     );
 
     const targetSegmentDuration = 8;
@@ -669,9 +732,10 @@ Durations MUST sum to exactly ${durationSec}.`,
 
     const segmentTasks = songPlan.segments.map((seg, idx) => {
       return async (): Promise<ArrayBuffer> => {
+        const segmentRng = createSeededRng(`${generationDNA.seed}:segment:${idx}:${seg.name}`);
         const prompt = buildSegmentPrompt(
           productionBrief, seg, idx, totalSegments,
-          frozenInput.musicPrompt, frozenInput.artistInspiration
+          frozenInput.musicPrompt, frozenInput.artistInspiration, generationDNA, segmentRng
         );
         console.log(`[${trackId}] Segment ${idx + 1} prompt: ${prompt}`);
 
@@ -685,7 +749,12 @@ Durations MUST sum to exactly ${durationSec}.`,
           jobId, 4, completedSegments, totalSegments, "generating_segments"
         );
 
-        const { buffer } = await generateSegmentWithRetry(MUSIC_WORKER_URL!, prompt, seg.duration);
+        const { buffer } = await generateSegmentWithRetry(
+          MUSIC_WORKER_URL!,
+          prompt,
+          `${generationDNA.seed}:worker:${idx}:${seg.name}:${Math.floor(requestRng() * 1_000_000)}`,
+          seg.duration,
+        );
 
         const segPath = `tracks/${trackId}/segment_${idx}.wav`;
         await supabase.storage.from("music-files").upload(segPath, new Uint8Array(buffer), {

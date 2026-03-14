@@ -69,6 +69,20 @@ function hashStringToSeed(value: string): number {
   return hash >>> 0;
 }
 
+function getCryptoRandomUint32(): number {
+  if (typeof crypto !== 'undefined' && 'getRandomValues' in crypto) {
+    return crypto.getRandomValues(new Uint32Array(1))[0] >>> 0;
+  }
+  return hashStringToSeed(`${Date.now()}:${performance?.now?.() ?? 0}`);
+}
+
+function createEntropyToken(timestamp: number): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${timestamp}-${getCryptoRandomUint32().toString(16)}-${getCryptoRandomUint32().toString(16)}`;
+}
+
 export function getGenerationSeedNumber(seed?: Pick<GenerationSeed, 'numericSeed' | 'seed'>): number {
   if (!seed) return 0;
   return seed.numericSeed ?? hashStringToSeed(seed.seed);
@@ -77,9 +91,7 @@ export function getGenerationSeedNumber(seed?: Pick<GenerationSeed, 'numericSeed
 /** Create a fresh GenerationSeed with timestamp + high-entropy randomness */
 export function createGenerationSeed(): GenerationSeed {
   const timestamp = Date.now();
-  const uuid = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${timestamp}-${Math.random().toString(16).slice(2)}`;
+  const uuid = createEntropyToken(timestamp);
   const seed = `${timestamp}-${uuid}`;
   const numericSeed = hashStringToSeed(seed);
   const rng = createRng(numericSeed);
@@ -175,7 +187,16 @@ export function createRng(seed: number) {
 let renderRandomSource: (() => number) | null = null;
 
 function renderRandom() {
-  return renderRandomSource ? renderRandomSource() : Math.random();
+  return renderRandomSource ? renderRandomSource() : getCryptoRandomUint32() / 0xffffffff;
+}
+
+function shuffleWithRng<T>(arr: T[], rng: () => number): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
 }
 
 // ===== Instrument Rendering Helpers =====
@@ -672,13 +693,9 @@ export async function generateTrack(
 ): Promise<GenerateTrackResult> {
   // Use GenerationDNA seed if available, otherwise create high-entropy seed
   const dna = intent.generationDNA;
-  const seedVal = seed ?? (dna ? getGenerationSeedNumber(dna) : (
-    (Date.now() & 0x7fffffff) ^ 
-    Math.floor(Math.random() * 2147483647) ^ 
-    (typeof crypto !== 'undefined' && crypto.getRandomValues 
-      ? crypto.getRandomValues(new Uint32Array(1))[0] 
-      : Math.floor(Math.random() * 2147483647))
-  ));
+  const seedVal = seed ?? (dna
+    ? getGenerationSeedNumber(dna)
+    : ((Date.now() & 0x7fffffff) ^ getCryptoRandomUint32() ^ getCryptoRandomUint32()));
   const rng = createRng(seedVal);
   
   // Apply DNA biases to the RNG to further differentiate outputs
@@ -719,7 +736,7 @@ export async function generateTrack(
   if (dna && profile.instruments.length > 4) {
     const rngBurn = createRng(getGenerationSeedNumber(dna));
     for (let i = 0; i < 20; i++) rngBurn();
-    const shuffled = [...profile.instruments].sort(() => rngBurn() - 0.5);
+    const shuffled = shuffleWithRng(profile.instruments, rngBurn);
     const count = Math.max(4, Math.min(profile.instruments.length, Math.floor(4 + dna.textureDensity * (profile.instruments.length - 3))));
     profile = { ...profile, instruments: shuffled.slice(0, count) };
   }

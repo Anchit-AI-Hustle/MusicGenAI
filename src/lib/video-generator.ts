@@ -121,8 +121,22 @@ function createSeededRng(seed: number) {
   };
 }
 
+function getCryptoRandomUint32() {
+  if (typeof crypto !== 'undefined' && 'getRandomValues' in crypto) {
+    return crypto.getRandomValues(new Uint32Array(1))[0] >>> 0;
+  }
+  return (Date.now() & 0xffffffff) >>> 0;
+}
+
+function createEntropyToken() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${getCryptoRandomUint32().toString(16)}-${getCryptoRandomUint32().toString(16)}`;
+}
+
 function getVideoSeedNumber(dna?: VideoGenerationDNA) {
-  if (!dna) return Date.now() & 0xffffffff;
+  if (!dna) return getCryptoRandomUint32();
   if (dna.numericSeed != null) return dna.numericSeed;
   let hash = 2166136261;
   for (let i = 0; i < dna.seed.length; i++) {
@@ -134,7 +148,7 @@ function getVideoSeedNumber(dna?: VideoGenerationDNA) {
 
 /** Randomize a style so each generation looks unique (uses DNA seed when provided) */
 function randomizeStyle(base: VideoStyle, dna?: VideoGenerationDNA): VideoStyle {
-  const rng = dna ? createSeededRng(getVideoSeedNumber(dna)) : () => Math.random();
+  const rng = createSeededRng(getVideoSeedNumber(dna));
   const r = rng;
   // Shift hue of colors randomly
   const shiftColor = (hex: string): string => {
@@ -378,9 +392,7 @@ async function transcodeToUniversalMp4Blob(
   onProgress?: (p: VideoGenerationProgress) => void,
 ): Promise<Blob> {
   const { ffmpeg, fetchFile } = await loadFfmpegRuntime();
-  const uniqueId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const uniqueId = createEntropyToken();
 
   const inputName = `input-${uniqueId}.${getVideoExtension(videoBlob)}`;
   const outputName = `output-${uniqueId}.mp4`;
@@ -477,7 +489,7 @@ export async function generateVideoFromAudio(
   }
 
   const style = getStyleFromMetadata(genres, mood, videoStyleName, generationDNA);
-  const rng = generationDNA ? createSeededRng(getVideoSeedNumber(generationDNA) ^ 0x9e3779b9) : () => Math.random();
+  const rng = createSeededRng(getVideoSeedNumber(generationDNA) ^ 0x9e3779b9);
 
   onProgress?.({ stage: 'analyzing_beat_structure', progress: 0.02 });
 
