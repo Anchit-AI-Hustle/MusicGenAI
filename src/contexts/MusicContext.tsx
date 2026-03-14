@@ -7,6 +7,7 @@ import { generateVideoFromAudio } from '@/lib/video-generator';
 import { generateVocals, mixVocalsIntoInstrumental, inferVocalStyle, generateDefaultLyrics, type VocalConfig } from '@/lib/vocal-engine';
 import { masterAudio } from '@/lib/audio-utils';
 import type { TrackConfig } from '@/components/AlbumTrackForm';
+import { genreOptionsToLabels } from '@/data/genres';
 
 export interface Track {
   id: string;
@@ -375,7 +376,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     type: 'song',
     title: tc.trackName,
     musicPrompt: tc.musicPrompt,
-    genres: tc.genres,
+    genres: genreOptionsToLabels(tc.genres),
     durationSeconds: tc.durationSeconds,
     generateVideo: tc.generateVideo,
     vocalLanguages: tc.vocalLanguages,

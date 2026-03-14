@@ -11,13 +11,13 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
-import { GENRES, LANGUAGES } from '@/data/genres';
+import { GENRE_OPTIONS, LANGUAGES, normalizeGenreOptions, genreOptionsToLabels, type GenreOption } from '@/data/genres';
 import type { AiSuggestionResult } from '@/contexts/MusicContext';
 
 export interface TrackConfig {
   trackName: string;
   musicPrompt: string;
-  genres: string[];
+  genres: GenreOption[];
   mood: string;
   tempoBpm: number;
   durationSeconds: number;
@@ -99,7 +99,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
     switch (field) {
       case 'trackName': return config.trackName;
       case 'prompt': return config.musicPrompt;
-      case 'genres': return config.genres.join(', ');
+      case 'genres': return genreOptionsToLabels(config.genres).join(', ');
       case 'mood': return config.mood;
       case 'tempoBpm': return String(config.tempoBpm);
       case 'duration': return String(config.durationSeconds);
@@ -121,8 +121,8 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
       case 'trackName': update({ trackName: value }); break;
       case 'prompt': update({ musicPrompt: value }); break;
       case 'genres':
-        const suggested = value.split(',').map(g => g.trim()).filter(g => GENRES.includes(g));
-        if (suggested.length > 0) update({ genres: Array.from(new Set([...config.genres, ...suggested])) });
+        const suggested = normalizeGenreOptions(value.split(',').map(g => g.trim()).filter(Boolean));
+        if (suggested.length > 0) update({ genres: normalizeGenreOptions([...config.genres, ...suggested]) });
         break;
       case 'mood': update({ mood: value }); break;
       case 'tempoBpm': { const p = parseInt(value); if (!isNaN(p)) update({ tempoBpm: Math.max(60, Math.min(200, p)) }); break; }
@@ -145,7 +145,21 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
   const handleClearField = (field: string) => {
     switch (field) {
       case 'trackName': update({ trackName: '' }); break;
-      case 'prompt': update({ musicPrompt: '' }); break;
+      case 'prompt': update({
+        musicPrompt: '',
+        genres: [],
+        mood: '',
+        tempoBpm: 120,
+        lyrics: '',
+        artistInspiration: '',
+        vocalLanguages: [],
+        vocalStructure: 'Instrumental',
+        vocalStyle: '',
+        vocalIntensity: 5,
+        vocalEffects: [],
+        songStructure: '',
+        videoStyle: '',
+      }); break;
       case 'genres': update({ genres: [] }); break;
       case 'mood': update({ mood: '' }); break;
       case 'tempoBpm': update({ tempoBpm: 120 }); break;
@@ -166,12 +180,12 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
     const key = `${action}-${field}`;
     startLoading(key);
     const val = action === 'new' ? '' : getFieldValue(field);
-    const result = await aiSuggest(field, val, getContext(), action);
+    const result = await aiSuggest(field, val, { ...getContext(), genres: genreOptionsToLabels(config.genres) }, action);
     stopLoading(key);
     if (result?.structured && field === 'prompt') {
       const { genre, mood, tempo, artist_inspiration, lyrics, description } = result.structured;
       update({
-        genres: genre.length > 0 ? Array.from(new Set([...config.genres, ...genre])) : config.genres,
+        genres: genre.length > 0 ? normalizeGenreOptions([...config.genres, ...genre]) : config.genres,
         mood: mood || config.mood,
         tempoBpm: tempo ? Math.max(60, Math.min(200, parseInt(tempo) || config.tempoBpm)) : config.tempoBpm,
         artistInspiration: artist_inspiration || config.artistInspiration,
@@ -217,7 +231,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
     if (albumVibe) update({ musicPrompt: albumVibe });
   };
 
-  const filteredGenres = GENRES.filter(g => g.toLowerCase().includes(genreSearch.toLowerCase()));
+  const filteredGenres = GENRE_OPTIONS.filter(g => g.label.toLowerCase().includes(genreSearch.toLowerCase()));
 
   const formatDuration = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -233,7 +247,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
           <span className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary">{index + 1}</span>
           <div className="text-left">
             <p className="font-medium text-foreground">{config.trackName || `Track ${index + 1}`}</p>
-            <p className="text-xs text-muted-foreground">{config.genres.length > 0 ? config.genres.slice(0, 3).join(', ') : 'No genres selected'} • {formatDuration(config.durationSeconds)}</p>
+            <p className="text-xs text-muted-foreground">{config.genres.length > 0 ? config.genres.slice(0, 3).map(g => g.label).join(', ') : 'No genres selected'} • {formatDuration(config.durationSeconds)}</p>
           </div>
         </div>
         {expanded ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
@@ -277,7 +291,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                 {config.genres.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mb-2">
                     {config.genres.map(g => (
-                      <Badge key={g} variant="secondary" className="bg-primary/20 text-primary border-primary/30 cursor-pointer text-xs" onClick={() => update({ genres: config.genres.filter(x => x !== g) })}>{g} ×</Badge>
+                      <Badge key={g.value} variant="secondary" className="bg-primary/20 text-primary border-primary/30 cursor-pointer text-xs" onClick={() => update({ genres: config.genres.filter(x => x.value !== g.value) })}>{g.label} ×</Badge>
                     ))}
                   </div>
                 )}
@@ -287,7 +301,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                     {showGenreDropdown && (
                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
                         {filteredGenres.slice(0, 30).map(g => (
-                          <button key={g} onClick={() => update({ genres: config.genres.includes(g) ? config.genres.filter(x => x !== g) : [...config.genres, g] })} className={`w-full text-left px-3 py-1.5 text-sm hover:bg-secondary ${config.genres.includes(g) ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{g}</button>
+                          <button key={g.value} onClick={() => update({ genres: config.genres.some(x => x.value === g.value) ? config.genres.filter(x => x.value !== g.value) : [...config.genres, g] })} className={`w-full text-left px-3 py-1.5 text-sm hover:bg-secondary ${config.genres.some(x => x.value === g.value) ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{g.label}</button>
                         ))}
                       </motion.div>
                     )}

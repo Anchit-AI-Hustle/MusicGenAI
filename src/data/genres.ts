@@ -1,3 +1,8 @@
+export interface GenreOption {
+  label: string;
+  value: string;
+}
+
 export const GENRES = [
   // Electronic
   "House", "Deep House", "Tech House", "Progressive House", "Acid House",
@@ -76,6 +81,44 @@ export const GENRES = [
   "Video Game Music", "Chiptune", "8-bit",
   "Spoken Word", "Podcast Score",
 ];
+
+function slugifyGenre(label: string) {
+  return label
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export const GENRE_OPTIONS: GenreOption[] = GENRES.map((label) => ({
+  label,
+  value: slugifyGenre(label),
+}));
+
+export function toGenreOption(input: string | GenreOption): GenreOption {
+  if (typeof input !== "string") return input;
+  const trimmed = input.trim();
+  return GENRE_OPTIONS.find((option) => option.label.toLowerCase() === trimmed.toLowerCase())
+    || { label: trimmed, value: slugifyGenre(trimmed) };
+}
+
+export function normalizeGenreOptions(inputs: Array<string | GenreOption>): GenreOption[] {
+  const seen = new Set<string>();
+  const normalized: GenreOption[] = [];
+
+  for (const input of inputs) {
+    const option = toGenreOption(input);
+    if (!option.label || seen.has(option.value)) continue;
+    seen.add(option.value);
+    normalized.push(option);
+  }
+
+  return normalized;
+}
+
+export function genreOptionsToLabels(options: GenreOption[]): string[] {
+  return options.map((option) => option.label);
+}
 
 export const LANGUAGES = [
   "Instrumental", "English", "Spanish", "French", "German", "Italian",

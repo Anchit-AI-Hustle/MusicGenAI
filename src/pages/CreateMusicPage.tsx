@@ -18,7 +18,7 @@ import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMusic, type AiSuggestionResult } from '@/contexts/MusicContext';
 import { usePlayer, PlayerTrack } from '@/contexts/PlayerContext';
-import { GENRES, LANGUAGES } from '@/data/genres';
+import { GENRE_OPTIONS, LANGUAGES, normalizeGenreOptions, genreOptionsToLabels, type GenreOption } from '@/data/genres';
 import { toast } from 'sonner';
 import { AlbumTrackForm, defaultTrackConfig, type TrackConfig } from '@/components/AlbumTrackForm';
 
@@ -63,7 +63,7 @@ const VOCAL_STYLE_PRESETS = ['Male Vocal', 'Female Vocal', 'Robotic Vocal', 'Rap
 const VOCAL_EFFECTS_OPTIONS = ['Reverb', 'Delay', 'Chorus', 'Distortion', 'Autotune', 'Vocoder'];
 
 interface SongPromptState {
-  genre: string[];
+  genre: GenreOption[];
   mood: string;
   energy: string;
   tempo: number;
@@ -96,7 +96,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   // Song mode state
   const [title, setTitle] = useState('');
   const [musicPrompt, setMusicPrompt] = useState('');
-  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [selectedGenres, setSelectedGenres] = useState<GenreOption[]>([]);
   const [genreSearch, setGenreSearch] = useState('');
   const [showGenreDropdown, setShowGenreDropdown] = useState(false);
   const [durationSeconds, setDurationSeconds] = useState(180);
@@ -198,7 +198,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   // Song mode helpers
   const getFormContext = () => ({
-    title, musicPrompt, genres: selectedGenres, durationSeconds,
+    title, musicPrompt, genres: genreOptionsToLabels(selectedGenres), durationSeconds,
     vocalLanguages: selectedLanguages, lyrics, artistInspiration, videoStyle,
     tempoBpm, mood, vocalStructure, vocalStyle, vocalIntensity, vocalEffects: selectedVocalEffects,
     songStructure,
@@ -211,7 +211,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
     updateSongPrompt(prev => ({
       ...prev,
-      genre: structured.genre?.length ? Array.from(new Set([...prev.genre, ...structured.genre])) : prev.genre,
+      genre: structured.genre?.length ? normalizeGenreOptions([...prev.genre, ...structured.genre]) : prev.genre,
       mood: structured.mood || prev.mood,
       energy: structured.energy || prev.energy,
       tempo: structured.tempo ? Math.max(60, Math.min(200, parseInt(structured.tempo) || prev.tempo)) : prev.tempo,
@@ -230,12 +230,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'prompt': updateSongPrompt({ description: value }); break;
       case 'genres':
         // MERGE AI-suggested genres into existing selection instead of replacing
-        const suggested = value.split(',').map(g => g.trim()).filter(Boolean);
-        const validSuggested = suggested.filter(g => GENRES.includes(g));
+        const validSuggested = normalizeGenreOptions(value.split(',').map(g => g.trim()).filter(Boolean));
         if (validSuggested.length > 0) {
           updateSongPrompt(prev => ({
             ...prev,
-            genre: Array.from(new Set([...prev.genre, ...validSuggested])),
+            genre: normalizeGenreOptions([...prev.genre, ...validSuggested]),
           }));
         }
         break;
@@ -276,7 +275,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'albumName': return albumName;
       case 'albumVibe': return albumVibe;
       case 'prompt': return musicPrompt;
-      case 'genres': return selectedGenres.join(', ');
+      case 'genres': return genreOptionsToLabels(selectedGenres).join(', ');
       case 'lyrics': return lyrics;
       case 'artistInspiration': return artistInspiration;
       case 'vocalLanguage': return selectedLanguages.join(', ');
@@ -339,7 +338,22 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'trackName': setTitle(''); break;
       case 'albumName': setAlbumName(''); break;
       case 'albumVibe': setAlbumVibe(''); break;
-      case 'prompt': updateSongPrompt({ description: '' }); break;
+      case 'prompt': updateSongPrompt({
+        genre: [],
+        mood: '',
+        energy: '',
+        tempo: 120,
+        artist_inspiration: '',
+        lyrics: '',
+        description: '',
+        vocalLanguages: [],
+        videoStyle: '',
+        vocalStructure: 'Instrumental',
+        vocalStyle: '',
+        vocalIntensity: 5,
+        vocalEffects: [],
+        songStructure: '',
+      }); break;
       case 'genres': updateSongPrompt({ genre: [] }); break;
       case 'lyrics': updateSongPrompt({ lyrics: '' }); break;
       case 'artistInspiration': updateSongPrompt({ artist_inspiration: '' }); break;
@@ -371,9 +385,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   React.useEffect(() => { updateFromInputs(); }, [hours, minutes, seconds, updateFromInputs]);
 
-  const toggleGenre = (genre: string) => updateSongPrompt(prev => ({
+  const toggleGenre = (genre: GenreOption) => updateSongPrompt(prev => ({
     ...prev,
-    genre: prev.genre.includes(genre) ? prev.genre.filter(g => g !== genre) : [...prev.genre, genre],
+    genre: prev.genre.some(g => g.value === genre.value)
+      ? prev.genre.filter(g => g.value !== genre.value)
+      : [...prev.genre, genre],
   }));
   const toggleLanguage = (lang: string) => updateSongPrompt(prev => ({
     ...prev,
@@ -384,7 +400,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     vocalEffects: prev.vocalEffects.includes(effect) ? prev.vocalEffects.filter(e => e !== effect) : [...prev.vocalEffects, effect],
   }));
 
-  const filteredGenres = GENRES.filter(g => g.toLowerCase().includes(genreSearch.toLowerCase()));
+  const filteredGenres = GENRE_OPTIONS.filter(g => g.label.toLowerCase().includes(genreSearch.toLowerCase()));
 
   const handleGenerate = async () => {
     if (!isAuthenticated) { onAuthClick(); return; }
@@ -404,7 +420,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       await createMusic({
         type: 'song',
         title: title || 'Untitled Track',
-        musicPrompt, genres: selectedGenres, durationSeconds, generateVideo,
+        musicPrompt, genres: genreOptionsToLabels(selectedGenres), durationSeconds, generateVideo,
         vocalLanguages: selectedLanguages,
         lyrics: lyrics || undefined,
         artistInspiration: artistInspiration || undefined,
@@ -643,7 +659,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                 {selectedGenres.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-4">
                     {selectedGenres.map(genre => (
-                      <Badge key={genre} variant="secondary" className="bg-primary/20 text-primary border-primary/30 cursor-pointer hover:bg-primary/30" onClick={() => toggleGenre(genre)}>{genre} ×</Badge>
+                      <Badge key={genre.value} variant="secondary" className="bg-primary/20 text-primary border-primary/30 cursor-pointer hover:bg-primary/30" onClick={() => toggleGenre(genre)}>{genre.label} ×</Badge>
                     ))}
                   </div>
                 )}
@@ -652,7 +668,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <PortalDropdown open={showGenreDropdown} onClose={() => setShowGenreDropdown(false)} triggerRef={genreInputRef as React.RefObject<HTMLElement>} matchTriggerWidth>
                     {filteredGenres.slice(0, 50).map(genre => (
-                      <button key={genre} onClick={() => toggleGenre(genre)} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${selectedGenres.includes(genre) ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{genre}</button>
+                      <button key={genre.value} onClick={() => toggleGenre(genre)} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${selectedGenres.some(selected => selected.value === genre.value) ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{genre.label}</button>
                     ))}
                   </PortalDropdown>
                 </div>

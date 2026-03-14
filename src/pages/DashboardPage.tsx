@@ -220,7 +220,7 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
   const Icon = creation.type === 'song' ? Music : Disc;
   const totalDuration = creation.tracks.reduce((acc, t) => acc + t.duration, 0);
 
-  const completedTracks = creation.tracks.filter(t => t.status === 'completed' && t.audioUrl);
+  const completedTracks = creation.tracks.filter(t => t.audioUrl);
 
   const handlePlayAll = (e: React.MouseEvent) => {
     e.stopPropagation();
