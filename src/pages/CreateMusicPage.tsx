@@ -27,7 +27,8 @@ import {
   PRESET_VIDEO_STYLES, 
   VOCAL_STRUCTURE_PRESETS,
   SONG_STRUCTURE_PRESETS,
-  VOCAL_EFFECTS_OPTIONS
+  VOCAL_EFFECTS_OPTIONS,
+  PRESET_LYRIC_THEMES
 } from '@/data/form-presets';
 import { GENRE_OPTIONS, normalizeGenreOptions, genreOptionsToLabels, type GenreOption } from '@/data/genres';
 import { toast } from 'sonner';
@@ -76,6 +77,8 @@ interface SongPromptState {
   vocalIntensity: number;
   vocalEffects: string[];
   songStructure: string;
+  subgenre: string[];
+  lyricTheme: string;
 }
 
 export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick }) => {
@@ -117,6 +120,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const [selectedVocalEffects, setSelectedVocalEffects] = useState<string[]>([]);
   const [showVocalEffectsDropdown, setShowVocalEffectsDropdown] = useState(false);
   const [songStructure, setSongStructure] = useState('');
+  const [selectedSubgenres, setSelectedSubgenres] = useState<string[]>([]);
+  const [lyricTheme, setLyricTheme] = useState('');
 
   const genreInputRef = useRef<HTMLDivElement>(null);
   const vocalStructureRef = useRef<HTMLDivElement>(null);
@@ -139,10 +144,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     vocalIntensity,
     vocalEffects: selectedVocalEffects,
     songStructure,
+    subgenre: selectedSubgenres,
+    lyricTheme,
   }), [
     selectedGenres, mood, tempoBpm, artistInspiration, lyrics, musicPrompt,
     selectedLanguages, videoStyle, vocalStructure, vocalStyle, vocalIntensity,
-    selectedVocalEffects, songStructure,
+    selectedVocalEffects, songStructure, selectedSubgenres, lyricTheme,
   ]);
 
   const applySongPromptState = useCallback((next: SongPromptState) => {
@@ -159,6 +166,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     setVocalIntensity(next.vocalIntensity);
     setSelectedVocalEffects(next.vocalEffects);
     setSongStructure(next.songStructure);
+    setSelectedSubgenres(next.subgenre);
+    setLyricTheme(next.lyricTheme);
   }, []);
 
   const updateSongPrompt = useCallback((updater: Partial<SongPromptState> | ((prev: SongPromptState) => SongPromptState)) => {
@@ -299,8 +308,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     }
   };
 
-  const startLoading = (key: string) => setLoadingActions(prev => new Set(prev).add(key));
-  const stopLoading = (key: string) => setLoadingActions(prev => { const next = new Set(prev); next.delete(key); return next; });
+
 
   const handleAiSuggest = async (field: string) => {
     const result = await aiSuggest(field, getFieldValue(field), getFormContext(), 'suggest');
@@ -430,9 +438,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         artistInspiration: artistInspiration || undefined,
         videoStyle: generateVideo ? videoStyle : undefined,
         tempoBpm, mood: mood || undefined,
+        subgenre: selectedSubgenres,
         vocalStructure, vocalStyle: vocalStyle || undefined,
         vocalIntensity, vocalEffects: selectedVocalEffects,
         songStructure: songStructure || undefined,
+        lyricTheme: lyricTheme || undefined,
       });
     }
   };
@@ -664,6 +674,21 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                 />
               </motion.div>
 
+              {/* Subgenres */}
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }} className="glass-card rounded-xl p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
+                  <Label className="text-foreground font-medium">Subgenres / Styles</Label>
+                  <AiToolbar field="subgenre" />
+                </div>
+                <SmartSearchInput
+                  value={selectedSubgenres}
+                  onChange={(val: string[]) => setSelectedSubgenres(val)}
+                  options={[]} // Dynamically populated by AI or empty for custom
+                  placeholder="e.g., Deep, Melodic, Industrial..."
+                  multiSelect
+                />
+              </motion.div>
+
               {/* Tempo */}
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }} className="glass-card rounded-xl p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
@@ -823,6 +848,20 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                 />
               </motion.div>
 
+              {/* Lyric Theme */}
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.38 }} className="glass-card rounded-xl p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
+                  <Label className="text-foreground font-medium">Lyric Theme</Label>
+                  <AiToolbar field="lyricTheme" />
+                </div>
+                <SmartSearchInput
+                  value={lyricTheme}
+                  onChange={(val: string) => setLyricTheme(val)}
+                  options={PRESET_LYRIC_THEMES}
+                  placeholder="e.g., Cyberpunk Future, Nature & Peace..."
+                />
+              </motion.div>
+
               {/* Lyrics */}
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass-card rounded-xl p-4 sm:p-6">
                 <div className="flex flex-col gap-2 mb-3">
@@ -835,7 +874,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                   <AiToolbar field="lyrics" />
                 </div>
-                <Textarea placeholder="e.g., A story about finding hope after loss..." value={lyrics} onChange={e => updateSongPrompt({ lyrics: e.target.value })} className="bg-input border-border min-h-32 resize-none" />
+                <Textarea placeholder="e.g., A story about finding hope after loss..." value={lyrics} onChange={e => setLyrics(e.target.value)} className="bg-input border-border min-h-32 resize-none" />
               </motion.div>
 
               {/* Artist Inspiration */}

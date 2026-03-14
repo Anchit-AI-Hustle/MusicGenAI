@@ -8,14 +8,20 @@
 export interface GenerationOptions {
   prompt: string;
   genre: string;
+  subgenre?: string[];
   mood?: string;
   tempo?: number;
   durationSeconds?: number;
   lyrics?: string;
   vocalStyle?: string;
   vocalLanguage?: string;
+  vocalIntensity?: number;
+  vocalEffects?: string[];
+  vocalStructure?: string;
+  lyricTheme?: string;
   isInstrumental?: boolean;
   videoStyle?: string;
+  generationDNA?: any;
 }
 
 export interface GenerationStatus {

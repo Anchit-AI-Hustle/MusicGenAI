@@ -21,7 +21,8 @@ import {
   PRESET_VIDEO_STYLES, 
   VOCAL_STRUCTURE_PRESETS,
   SONG_STRUCTURE_PRESETS,
-  VOCAL_EFFECTS_OPTIONS
+  VOCAL_EFFECTS_OPTIONS,
+  PRESET_LYRIC_THEMES
 } from '@/data/form-presets';
 import type { AiSuggestionResult } from '@/contexts/MusicContext';
 
@@ -40,6 +41,8 @@ export interface TrackConfig {
   lyrics: string;
   artistInspiration: string;
   songStructure: string;
+  subgenre: string[];
+  lyricTheme: string;
   generateVideo: boolean;
   videoStyle: string;
 }
@@ -59,6 +62,8 @@ export const defaultTrackConfig = (index: number): TrackConfig => ({
   lyrics: '',
   artistInspiration: '',
   songStructure: '',
+  subgenre: [],
+  lyricTheme: '',
   generateVideo: false,
   videoStyle: '',
 });
@@ -95,6 +100,8 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
       case 'vocalEffects': return config.vocalEffects.join(', ');
       case 'vocalLanguage': return config.vocalLanguages.join(', ');
       case 'songStructure': return config.songStructure;
+      case 'subgenre': return config.subgenre.join(', ');
+      case 'lyricTheme': return config.lyricTheme;
       default: return '';
     }
   };
@@ -122,6 +129,8 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
         if (langs.length > 0) update({ vocalLanguages: Array.from(new Set([...config.vocalLanguages, ...langs])) });
         break;
       case 'songStructure': update({ songStructure: value }); break;
+      case 'subgenre': update({ subgenre: Array.from(new Set([...config.subgenre, ...value.split(',').map(s => s.trim()).filter(Boolean)])) }); break;
+      case 'lyricTheme': update({ lyricTheme: value }); break;
     }
   };
 
@@ -156,6 +165,8 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
       case 'vocalEffects': update({ vocalEffects: [] }); break;
       case 'vocalLanguage': update({ vocalLanguages: [] }); break;
       case 'songStructure': update({ songStructure: '' }); break;
+      case 'subgenre': update({ subgenre: [] }); break;
+      case 'lyricTheme': update({ lyricTheme: '' }); break;
     }
   };
 
@@ -163,14 +174,16 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
     const val = action === 'new' ? '' : getFieldValue(field);
     const result = await aiSuggest(field, val, { ...getContext(), genres: genreOptionsToLabels(config.genres) }, action);
     if (result?.structured && field === 'prompt') {
-      const { genre, mood, tempo, artist_inspiration, lyrics, description } = result.structured;
+      const { genre, mood, tempo, artist_inspiration, lyrics, description, subgenre, lyricTheme } = result.structured;
       update({
-        genres: genre.length > 0 ? normalizeGenreOptions([...config.genres, ...genre]) : config.genres,
+        genres: genre && genre.length > 0 ? normalizeGenreOptions([...config.genres, ...genre]) : config.genres,
         mood: mood || config.mood,
         tempoBpm: tempo ? Math.max(60, Math.min(200, parseInt(tempo) || config.tempoBpm)) : config.tempoBpm,
         artistInspiration: artist_inspiration || config.artistInspiration,
         lyrics: lyrics || config.lyrics,
         musicPrompt: description || result.suggestion || config.musicPrompt,
+        subgenre: subgenre || config.subgenre,
+        lyricTheme: lyricTheme || config.lyricTheme,
       });
       return;
     }
@@ -268,6 +281,21 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   onChange={(val: string[]) => update({ genres: normalizeGenreOptions(val) })}
                   options={GENRE_OPTIONS.map(g => g.label)}
                   placeholder="Type or select genres..."
+                  multiSelect
+                />
+              </div>
+
+              {/* Subgenres */}
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <Label className="text-foreground font-medium text-sm">Subgenres / Styles</Label>
+                  <AiToolbar field="subgenre" />
+                </div>
+                <SmartSearchInput
+                  value={config.subgenre}
+                  onChange={(val: string[]) => update({ subgenre: val })}
+                  options={[]}
+                  placeholder="e.g., Deep, Melodic, Industrial..."
                   multiSelect
                 />
               </div>
@@ -392,6 +420,20 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   options={LANGUAGES}
                   placeholder="Select or type languages..."
                   multiSelect
+                />
+              </div>
+
+              {/* Lyric Theme */}
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <Label className="text-foreground font-medium text-sm">Lyric Theme</Label>
+                  <AiToolbar field="lyricTheme" />
+                </div>
+                <SmartSearchInput
+                  value={config.lyricTheme}
+                  onChange={(val: string) => update({ lyricTheme: val })}
+                  options={PRESET_LYRIC_THEMES}
+                  placeholder="e.g., Cyberpunk Future, Nature & Peace..."
                 />
               </div>
 
