@@ -1277,7 +1277,7 @@ function generateDefaultLyricsInternal(
     let targetSyllablesPerBar = 8;
     const isRap = options.vocalStyle === 'rap' || options.vocalStyle === 'spoken_word';
     const isAmbient = options.vocalStyle === 'whisper';
-    
+
     if (isRap) {
       targetSyllablesPerBar = 14; // Center of 12-16
     } else if (isAmbient) {

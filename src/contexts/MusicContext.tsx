@@ -210,18 +210,18 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const mapTrack = (t: Track): Track =>
           t.id === updated.id
             ? {
-                ...t,
-                status: updated.status,
-                audioUrl: updated.audio_url || undefined,
-                videoUrl: updated.video_url || undefined,
-                progress: updated.progress ?? 0,
-                totalSegments: updated.total_segments ?? 1,
-                completedSegments: updated.completed_segments ?? 0,
-                errorMessage: updated.error_message || undefined,
-                duration: updated.duration_seconds,
-                currentStage: updated.current_stage || undefined,
-                estimatedTimeLeft: updated.estimated_time_left ?? 0,
-              }
+              ...t,
+              status: updated.status,
+              audioUrl: updated.audio_url || undefined,
+              videoUrl: updated.video_url || undefined,
+              progress: updated.progress ?? 0,
+              totalSegments: updated.total_segments ?? 1,
+              completedSegments: updated.completed_segments ?? 0,
+              errorMessage: updated.error_message || undefined,
+              duration: updated.duration_seconds,
+              currentStage: updated.current_stage || undefined,
+              estimatedTimeLeft: updated.estimated_time_left ?? 0,
+            }
             : t;
 
         setCreations(prev => prev.map(c => {
@@ -459,7 +459,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
 
       const { musicIntent } = await analyzeResponse.json() as { musicIntent: MusicIntent };
-      
+
       // Inject DNA into intent for downstream engines
       musicIntent.generationDNA = dna;
 
@@ -510,7 +510,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const isInstrumental = (input.vocalStructure || '').toLowerCase() === 'instrumental';
       let finalBuffer: AudioBuffer = trackResult.instrumentalBuffer;
       let lyricCues: LyricCue[] = [];
-      
+
       if (!isInstrumental && (input.lyrics || input.musicPrompt)) {
         try {
           updateTrackLocal(creationId, trackId, { status: 'generating_vocals', currentStage: 'Generating vocals', progress: 0.66 });
@@ -541,7 +541,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
           if (input.type === 'song') {
             updateCreationLocal(creationId, { lyrics: lyricsText });
-            supabase.from('music_creations').update({ lyrics: lyricsText }).eq('id', creationId).then().catch(console.warn);
+            Promise.resolve(supabase.from('music_creations').update({ lyrics: lyricsText }).eq('id', creationId)).catch(console.warn);
           }
 
           const vocalConfig: VocalConfig = {
@@ -600,10 +600,10 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       // Step 6: Professional Mastering (Exactly once at end of chain)
       updateTrackLocal(creationId, trackId, { status: 'mastering_track', currentStage: 'Mastering final production', progress: 0.76 });
       await updateTrackDB(trackId, creationId, 'Mastering final production', 0.76, 'mastering_track');
-      
+
       const masterResult = masterAudio(finalBuffer, 2);
       const finalBlob = masterResult.blob;
-      
+
       console.log(`[Production] Mastering complete — Peak: ${masterResult.stats.peakDb.toFixed(1)} dB, LUFS: ${masterResult.stats.lufs.toFixed(1)}`);
 
       // Step 7: Upload audio
@@ -744,7 +744,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const statuses = (finalTracks || []).map(t => t.status);
     const albumStatus = statuses.every(s => s === 'completed') ? 'completed'
       : statuses.some(s => s === 'failed') ? 'completed' // album is "done" even if some tracks failed
-      : 'completed';
+        : 'completed';
 
     await supabase.from('music_creations').update({ status: albumStatus, progress: 1 }).eq('id', creationId);
     toast.success('Album generation complete!');
@@ -865,9 +865,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // Session suggestion history
   const suggestionHistoryRef = useRef<Record<string, string[]>>({});
   const suggestionGenreFamilyHistoryRef = useRef<string[]>([]);
-  
+
   const GENRE_FAMILIES = [
-    'Electronic (Techno/House)', 'Hip Hop / Trap', 'Pop / Dance', 
+    'Electronic (Techno/House)', 'Hip Hop / Trap', 'Pop / Dance',
     'Rock / Metal', 'Jazz / Blues', 'Classical / Orchestral',
     'World / Global', 'Ambient / Lo-fi', 'R&B / Soul',
     'Latin / Reggaeton', 'Country / Folk', 'Experimental / Noise'
@@ -894,28 +894,28 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-            // Track genre family rotation
-            const lastFam = suggestionGenreFamilyHistoryRef.current[suggestionGenreFamilyHistoryRef.current.length - 1];
-            const nextFamIndex = (GENRE_FAMILIES.indexOf(lastFam || '') + 1) % GENRE_FAMILIES.length;
-            const targetGenreFamily = GENRE_FAMILIES[nextFamIndex];
+          // Track genre family rotation
+          const lastFam = suggestionGenreFamilyHistoryRef.current[suggestionGenreFamilyHistoryRef.current.length - 1];
+          const nextFamIndex = (GENRE_FAMILIES.indexOf(lastFam || '') + 1) % GENRE_FAMILIES.length;
+          const targetGenreFamily = GENRE_FAMILIES[nextFamIndex];
 
-            const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-suggest`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-                'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-              },
-              body: JSON.stringify({
-                field, value, context, action,
-                previousSuggestions,
-                previousGenreFamilies: suggestionGenreFamilyHistoryRef.current.slice(-12),
-                targetGenreFamily, // Force rotation
-                randomSeed,
-                requestNonce,
-                generationDNA: dna,
-              }),
-            });
+          const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-suggest`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify({
+              field, value, context, action,
+              previousSuggestions,
+              previousGenreFamilies: suggestionGenreFamilyHistoryRef.current.slice(-12),
+              targetGenreFamily, // Force rotation
+              randomSeed,
+              requestNonce,
+              generationDNA: dna,
+            }),
+          });
 
           if (response.status === 429 && attempt < maxRetries) {
             const retryJitter = createRng(randomSeed ^ ((attempt + 1) * 0x9e3779b9));
@@ -958,7 +958,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
       return null;
     });
-    aiSuggestQueueRef.current = result.then(() => {}, () => {});
+    aiSuggestQueueRef.current = result.then(() => { }, () => { });
     return result;
   };
 

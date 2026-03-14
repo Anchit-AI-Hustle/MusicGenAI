@@ -1,7 +1,7 @@
 import { audioBufferToWav, measurePeak, masterAudio } from './audio-utils';
-import { createGenerationDNA, generateTrack, type MusicIntent, type SectionPlan } from './music-engine';
+import { createGenerationDNA, generateTrack, mixStems, type MusicIntent, type SectionPlan } from './music-engine';
 import { analyzeAudioVisualDiagnosticsFromUrl, generateVideoFromAudio } from './video-generator';
-import { inferVocalStyle, generateDefaultLyrics, generateLyricCues, generateVocals, mixVocalsIntoInstrumental, type LyricCue, type VocalConfig } from './vocal-engine';
+import { inferVocalStyle, generateDefaultLyrics, generateLyricCues, generateVocals, type LyricCue, type VocalConfig } from './vocal-engine';
 import type { AiSuggestionResult } from '@/contexts/MusicContext';
 import type { PlayerLyricCue, PlayerTrack } from '@/contexts/PlayerContext';
 
@@ -167,10 +167,10 @@ async function createDemoTrackArtifacts(): Promise<DemoTrackArtifacts> {
     language: 'English',
   };
   const vocalBuffer = await generateVocals(vocalConfig, () => undefined, () => Math.random());
-  const mixedBuffer = vocalBuffer
-    ? mixVocalsIntoInstrumental(instrumentalResult.instrumentalBuffer, vocalBuffer, 1.08)
-    : instrumentalResult.instrumentalBuffer;
-  const finalBlob = vocalBuffer ? masterAudio(mixedBuffer, 2).blob : instrumentalResult.blob;
+
+  // New Production Pipeline Mixing logic
+  const mixedBuffer = await mixStems(instrumentalResult.stems, vocalBuffer, 1.1);
+  const finalBlob = masterAudio(mixedBuffer, 1).blob;
   const audioUrl = URL.createObjectURL(finalBlob);
 
   return {
