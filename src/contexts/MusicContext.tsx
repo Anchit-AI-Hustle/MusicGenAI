@@ -2,10 +2,14 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
-import { generateTrack, MusicIntent, createRng, createGenerationDNA, getGenerationSeedNumber, type GenerationDNA, mixStems } from '@/lib/music-engine';
+import {
+  midiToFreq, getScaleMidi, parseKey,
+  masterAudio, INTERNAL_SAMPLE_RATE,
+} from '@/lib/audio-utils';
+import { generateTrack, type AudioStems, type GenerateTrackResult, MusicIntent, createRng, createGenerationDNA, getGenerationSeedNumber, mixStems, type GenerationDNA } from '@/lib/music-engine';
 import { generateVideoFromAudio } from '@/lib/video-generator';
 import { generateVocals, generateLyricCues, inferVocalStyle, generateDefaultLyrics, type LyricCue, type VocalConfig } from '@/lib/vocal-engine';
-import { masterAudio } from '@/lib/audio-utils';
+import { aiMusicClient } from '@/lib/ai-music-client';
 import type { TrackConfig } from '@/components/AlbumTrackForm';
 import { genreOptionsToLabels } from '@/data/genres';
 
@@ -448,11 +452,6 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       // Step 1: Analyze with AI
       updateTrackLocal(creationId, trackId, { status: 'analyzing', currentStage: 'Analyzing prompt', progress: 0.03 });
       await updateTrackDB(trackId, creationId, 'Analyzing prompt', 0.03, 'analyzing');
-      trackLastUpdateRef.current[trackId] = Date.now();
-
-      // Step 1b: Create GenerationDNA for this request
-      updateTrackLocal(creationId, trackId, { status: 'seeding', currentStage: 'Creating GenerationDNA', progress: 0.05 });
-      await updateTrackDB(trackId, creationId, 'Creating GenerationDNA', 0.05, 'seeding');
 
       const analyzeResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-music`, {
         method: 'POST',
@@ -479,151 +478,66 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }),
       });
 
-      trackLastUpdateRef.current[trackId] = Date.now();
-
       if (!analyzeResponse.ok) {
         const err = await analyzeResponse.json().catch(() => ({ error: 'Analysis failed' }));
         throw new Error(err.error || 'AI analysis failed');
       }
 
       const { musicIntent } = await analyzeResponse.json() as { musicIntent: MusicIntent };
-
-      // Inject DNA into intent for downstream engines
       musicIntent.generationDNA = dna;
 
-      // Step 2: Inferring style
-      updateTrackLocal(creationId, trackId, { status: 'inferring', currentStage: 'Inferring musical style', progress: 0.08 });
-      await updateTrackDB(trackId, creationId, 'Inferring musical style', 0.08, 'inferring');
+      // Step 2 & 3: Neural Generation (AI Music Model)
+      updateTrackLocal(creationId, trackId, { status: 'generating_neural', currentStage: 'Triggering neural engine', progress: 0.2 });
+      await updateTrackDB(trackId, creationId, 'Triggering neural engine', 0.2, 'generating_neural');
 
-      // Step 3: Planning
-      updateTrackLocal(creationId, trackId, { status: 'planning_structure', currentStage: 'Planning arrangement', progress: 0.10 });
-      await updateTrackDB(trackId, creationId, 'Planning arrangement', 0.10, 'planning_structure');
-      trackLastUpdateRef.current[trackId] = Date.now();
-
-      // Step 3-5: Generate instrumental audio (segmented rendering)
-      const totalSegments = Math.ceil(input.durationSeconds / 20);
-      const onProgress = (stage: string, progress: number) => {
-        const stageLabels: Record<string, string> = {
-          generating_melody: 'Generating melody',
-          synthesizing_instruments: 'Synthesizing instruments',
-          mixing_audio: 'Mixing audio',
-          mastering_track: 'Mastering track',
-          generating_vocals: 'Generating vocals',
-          vocal_alignment: 'Aligning vocals to music',
-          analyzing_beat_structure: 'Analyzing beats',
-          rendering_video: 'Rendering visuals',
-          finalizing: 'Finalizing track',
-        };
-        let label = stageLabels[stage] || stage;
-
-        // Add segment info during rendering
-        if (stage === 'synthesizing_instruments' && totalSegments > 1) {
-          const segIdx = Math.min(totalSegments, Math.floor(((progress - 0.20) / 0.35) * totalSegments) + 1);
-          label = `Synthesizing instrument layers ${Math.max(1, segIdx)} / ${totalSegments}`;
-        }
-
-        updateTrackLocal(creationId, trackId, {
-          status: stage, currentStage: label, progress,
-          totalSegments: stage === 'synthesizing_instruments' ? totalSegments : undefined,
-          completedSegments: stage === 'synthesizing_instruments' ? Math.floor(((progress - 0.20) / 0.35) * totalSegments) : undefined,
-        });
-        updateTrackDB(trackId, creationId, label, progress, stage).catch(console.warn);
-        trackLastUpdateRef.current[trackId] = Date.now();
-      };
-
-      const trackResult = await generateTrack(musicIntent, onProgress);
-      trackLastUpdateRef.current[trackId] = Date.now();
-
-      // Step 5b: Vocal synthesis (if lyrics provided and not purely instrumental)
+      let finalBuffer: AudioBuffer | null = null;
       const isInstrumental = (input.vocalStructure || '').toLowerCase() === 'instrumental';
-      let finalBuffer: AudioBuffer = trackResult.instrumentalBuffer;
       let lyricCues: LyricCue[] = [];
 
-      if (!isInstrumental && (input.lyrics || input.musicPrompt)) {
-        try {
-          updateTrackLocal(creationId, trackId, { status: 'generating_vocals', currentStage: 'Generating vocals', progress: 0.66 });
-          await updateTrackDB(trackId, creationId, 'Generating vocals', 0.66, 'generating_vocals');
+      try {
+        const neuralAudioUrl = await aiMusicClient.generateMusic({
+          prompt: input.musicPrompt,
+          genre: input.genres.join(', '),
+          mood: input.mood,
+          tempo: input.tempoBpm ?? 120,
+          durationSeconds: input.durationSeconds,
+          lyrics: input.lyrics,
+          vocalStyle: input.vocalStyle,
+          vocalLanguage: input.vocalLanguages[0] || 'English',
+          isInstrumental: isInstrumental,
+          videoStyle: input.videoStyle,
+        }, (progress, stage) => {
+          updateTrackLocal(creationId, trackId, { currentStage: stage, progress: 0.2 + (progress * 0.5) });
+          updateTrackDB(trackId, creationId, stage, 0.2 + (progress * 0.5), 'generating_neural').catch(console.warn);
+        });
 
-          const vocalStyle = inferVocalStyle(input.genres, input.vocalStyle);
-          const vocalIntensity = input.vocalIntensity || 5;
-          const vocalLanguage = input.vocalLanguages[0] || 'English';
-          const lyricsText = input.lyrics || generateDefaultLyrics(
-            input.musicPrompt, input.genres, input.mood || '', musicIntent.structure,
-            {
-              tempo: musicIntent.tempo,
-              durationSeconds: input.durationSeconds,
-              vocalStyle,
-              vocalIntensity,
-              language: vocalLanguage,
-            },
-          );
-          lyricCues = generateLyricCues(lyricsText, musicIntent.structure, input.durationSeconds, {
-            tempo: musicIntent.tempo,
-            vocalStyle,
-            vocalIntensity,
-          });
-          updateTrackLocal(creationId, trackId, {
-            lyrics: lyricsText,
-            lyricCues,
-          });
+        const audioResponse = await fetch(neuralAudioUrl);
+        const arrayBuffer = await audioResponse.arrayBuffer();
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        finalBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
-          if (input.type === 'song') {
-            updateCreationLocal(creationId, { lyrics: lyricsText });
-            Promise.resolve(supabase.from('music_creations').update({ lyrics: lyricsText }).eq('id', creationId)).catch(console.warn);
-          }
-
-          const vocalConfig: VocalConfig = {
-            lyrics: lyricsText,
-            tempo: musicIntent.tempo,
-            key: musicIntent.key,
-            scale: musicIntent.scale,
-            structure: musicIntent.structure,
-            durationSeconds: input.durationSeconds,
-            vocalStyle,
-            vocalIntensity,
-            vocalEffects: input.vocalEffects || [],
-            genres: input.genres,
-            mood: input.mood || '',
-            language: vocalLanguage,
-          };
-
-          const vocalBuffer = await generateVocals(vocalConfig, (p) => {
-            const vocalProgress = 0.66 + p.progress * 0.08;
-            const vocalStageLabels: Record<string, string> = {
-              parsing: 'Parsing lyrics into syllables',
-              aligning: 'Aligning vocals to structure',
-              melody: 'Mapping lyrics to melody',
-              generating: 'Synthesizing singing vocals',
-              mixing: 'Mixing vocals into track',
-            };
-            updateTrackLocal(creationId, trackId, {
-              status: 'generating_vocals',
-              currentStage: vocalStageLabels[p.stage] || 'Generating vocals',
-              progress: vocalProgress,
-            });
-            updateTrackDB(trackId, creationId, vocalStageLabels[p.stage] || 'Generating vocals', vocalProgress, 'generating_vocals').catch(console.warn);
-            trackLastUpdateRef.current[trackId] = Date.now();
-          }, createRng(trackResult.rngState));
-
-          if (vocalBuffer) {
-            updateTrackLocal(creationId, trackId, { status: 'vocal_alignment', currentStage: 'Mixing vocals into track', progress: 0.74 });
-            await updateTrackDB(trackId, creationId, 'Mixing vocals into track', 0.74, 'vocal_alignment');
-
-            // NEW Production Pipeline: Mix instrument stems + vocal stem using Pro Engine
-            finalBuffer = await mixStems(trackResult.stems, vocalBuffer, 1.08);
-            console.log(`[Vocals] Multi-stem mix completed with ducking.`);
-          } else {
-            console.warn(`[${trackId}] Vocal synthesis returned no audible buffer; continuing with instrumental mix.`);
-          }
-        } catch (vocalError) {
-          console.error(`[${trackId}] Vocal generation failed:`, vocalError);
-          toast.error(`Vocal synthesis failed — continuing with instrumental version.`);
-          // Continue with instrumental buffer
-          finalBuffer = trackResult.instrumentalBuffer;
+        // Mock lyric cues for neural audio based on prompt (since we don't have exact word-level timing from all APIs)
+        if (!isInstrumental) {
+          lyricCues = generateLyricCues(input.lyrics || '', musicIntent.structure, input.durationSeconds);
         }
+
+      } catch (neuralError) {
+        console.error(`[${trackId}] Neural generation failed:`, neuralError);
+        toast.error(`Neural synthesis failed — falling back to procedural engine.`);
+
+        // FALLBACK: Use original procedural engine if API fails
+        updateTrackLocal(creationId, trackId, { status: 'procedural_fallback', currentStage: 'Falling back to local engine', progress: 0.25 });
+
+        const trackResult = await generateTrack(musicIntent, (stage, progress) => {
+          const mappedProgress = 0.25 + progress * 0.4;
+          updateTrackLocal(creationId, trackId, { status: stage, progress: mappedProgress });
+          updateTrackDB(trackId, creationId, stage, mappedProgress, stage).catch(console.warn);
+        });
+
+        finalBuffer = trackResult.instrumentalBuffer;
       }
 
-      trackLastUpdateRef.current[trackId] = Date.now();
+      if (!finalBuffer) throw new Error('Generation produced no audio buffer');
 
       // Step 6: Professional Mastering (Exactly once at end of chain)
       updateTrackLocal(creationId, trackId, { status: 'mastering_track', currentStage: 'Mastering final production', progress: 0.76 });
@@ -648,15 +562,6 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const { data: urlData } = supabase.storage.from('music-files').getPublicUrl(filePath);
       const audioUrl = urlData.publicUrl;
 
-      // Also upload instrumental version separately if vocals were added
-      if (!isInstrumental) {
-        const instPath = `tracks/${trackId}/instrumental.wav`;
-        const instMaster = masterAudio(trackResult.instrumentalBuffer, 1);
-        await supabase.storage.from('music-files')
-          .upload(instPath, instMaster.blob, { contentType: 'audio/wav', upsert: true })
-          .catch(e => console.warn('Instrumental upload failed:', e));
-      }
-
       // Update track with audio URL
       await supabase.from('tracks').update({
         audio_url: audioUrl, progress: 0.82,
@@ -664,7 +569,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         current_stage: 'Audio complete',
       }).eq('id', trackId);
 
-      updateTrackLocal(creationId, trackId, { audioUrl, progress: 0.82 });
+      updateTrackLocal(creationId, trackId, { audioUrl, progress: 0.82, lyricCues });
       trackLastUpdateRef.current[trackId] = Date.now();
 
       if (input.generateVideo) {
