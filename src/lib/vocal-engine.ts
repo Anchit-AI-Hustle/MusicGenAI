@@ -27,6 +27,7 @@ export interface VocalConfig {
   vocalEffects: string[];
   genres: string[];
   mood: string;
+  language?: string;
 }
 
 export type VocalStyleType =
@@ -46,6 +47,32 @@ export interface LyricCue {
   sectionName: string;
   startTime: number;
   endTime: number;
+}
+
+interface LyricTimingSyllable {
+  text: string;
+  startTime: number;
+  endTime: number;
+}
+
+interface LyricTimingLine extends VocalSegment {
+  syllables: string[];
+  syllableTimings: LyricTimingSyllable[];
+}
+
+interface LyricTimingMap {
+  lines: LyricTimingLine[];
+}
+
+interface LyricTimingOptions {
+  tempo: number;
+  vocalStyle: VocalStyleType;
+  vocalIntensity: number;
+}
+
+interface DefaultLyricOptions extends LyricTimingOptions {
+  durationSeconds: number;
+  language?: string;
 }
 
 export interface VocalProgress {
@@ -324,9 +351,9 @@ function parseLyrics(lyrics: string): LyricLine[] {
   for (const raw of lyrics.split('\n')) {
     const line = raw.trim();
     if (!line) continue;
-    const sectionMatch = line.match(/^\[?(verse|chorus|bridge|intro|outro|hook|pre-chorus|post-chorus)\s*\d*\]?$/i);
+    const sectionMatch = line.match(/^\[?(verse|chorus|bridge|intro|outro|hook|pre-chorus|post-chorus|drop|break|instrumental break)\s*\d*\]?$/i);
     if (sectionMatch) { currentSection = sectionMatch[1].toLowerCase(); continue; }
-    const implicitSection = line.match(/^(verse|chorus|bridge|intro|outro|hook)\s*\d*$/i);
+    const implicitSection = line.match(/^(verse|chorus|bridge|intro|outro|hook|drop|break)\s*\d*$/i);
     if (implicitSection) { currentSection = implicitSection[1].toLowerCase(); continue; }
 
     const syllables = lineToSyllables(line);
@@ -337,90 +364,392 @@ function parseLyrics(lyrics: string): LyricLine[] {
   return lines;
 }
 
-// ===== Align Lyrics to Song Structure =====
+// ===== Lyric Timing Planning =====
+
+function normalizeSectionName(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.includes('pre')) return 'pre-chorus';
+  if (lower.includes('post')) return 'post-chorus';
+  if (lower.includes('chorus')) return 'chorus';
+  if (lower.includes('hook')) return 'hook';
+  if (lower.includes('verse')) return 'verse';
+  if (lower.includes('bridge')) return 'bridge';
+  if (lower.includes('drop')) return 'drop';
+  if (lower.includes('intro')) return 'intro';
+  if (lower.includes('outro')) return 'outro';
+  if (lower.includes('break')) return 'break';
+  return lower;
+}
+
+function buildSectionTimeline(structure: SectionPlan[]) {
+  const timeline: { name: string; normalizedName: string; start: number; end: number; duration: number; energy: number }[] = [];
+  let time = 0;
+  for (const section of structure) {
+    const normalizedName = normalizeSectionName(section.name);
+    timeline.push({
+      name: section.name,
+      normalizedName,
+      start: time,
+      end: time + section.duration,
+      duration: section.duration,
+      energy: section.energy,
+    });
+    time += section.duration;
+  }
+  return timeline;
+}
+
+function isVocalSection(name: string): boolean {
+  return !['intro', 'outro', 'break'].includes(normalizeSectionName(name));
+}
+
+function getSyllablePacing(style: VocalStyleType, intensity: number) {
+  const intensityFactor = Math.max(0.8, Math.min(1.25, 0.9 + intensity / 20));
+  switch (style) {
+    case 'rap':
+      return { min: Math.round(12 * intensityFactor), max: Math.round(16 * intensityFactor), preferredLineBars: 2, silenceRatio: 0.1 };
+    case 'whisper':
+      return { min: 4, max: 6, preferredLineBars: 2, silenceRatio: 0.25 };
+    case 'robotic_vocoder':
+      return { min: 6, max: 9, preferredLineBars: 2, silenceRatio: 0.16 };
+    case 'choir':
+      return { min: 5, max: 8, preferredLineBars: 4, silenceRatio: 0.22 };
+    case 'male_electronic':
+      return { min: 6, max: 10, preferredLineBars: 2, silenceRatio: 0.14 };
+    case 'female_melodic':
+    case 'melodic_singing':
+    default:
+      return { min: 6, max: 10, preferredLineBars: 2, silenceRatio: 0.18 };
+  }
+}
+
+function estimateSectionBars(durationSeconds: number, tempo: number) {
+  const secondsPerBar = (60 / tempo) * 4;
+  return Math.max(1, Math.round(durationSeconds / secondsPerBar));
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function distributeEvenly(total: number, count: number): number[] {
+  if (count <= 0) return [];
+  const base = Math.floor(total / count);
+  const remainder = total % count;
+  return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
+}
+
+function allocateWeightedDurations(totalDuration: number, weights: number[], minimum = 0.12): number[] {
+  if (weights.length === 0) return [];
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0) || weights.length;
+  const durations = weights.map((weight) => Math.max(minimum, (weight / totalWeight) * totalDuration));
+  const currentTotal = durations.reduce((sum, value) => sum + value, 0);
+  if (currentTotal === 0) return Array(weights.length).fill(totalDuration / weights.length);
+  const scale = totalDuration / currentTotal;
+  return durations.map((value) => value * scale);
+}
+
+function fitLineToSyllableTarget(base: string, targetSyllables: number, fillerWords: string[]): string {
+  const tokens = base.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return base;
+  let current = tokens.join(' ');
+  let syllableCount = lineToSyllables(current).length;
+  let fillerIndex = 0;
+
+  while (syllableCount < targetSyllables - 1 && fillerIndex < fillerWords.length * 2) {
+    current += ` ${fillerWords[fillerIndex % fillerWords.length]}`;
+    fillerIndex++;
+    syllableCount = lineToSyllables(current).length;
+  }
+
+  while (syllableCount > targetSyllables + 1 && current.includes(' ')) {
+    current = current.split(' ').slice(0, -1).join(' ');
+    syllableCount = lineToSyllables(current).length;
+  }
+
+  return current;
+}
+
+function detectLanguage(language?: string) {
+  const lower = (language || 'english').toLowerCase();
+  if (lower.includes('spanish') || lower.includes('espanol')) return 'spanish';
+  if (lower.includes('hindi')) return 'hindi';
+  return 'english';
+}
+
+function sanitizePromptWords(prompt: string): string[] {
+  return prompt
+    .toLowerCase()
+    .replace(/[^a-z0-9\s'-]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 2)
+    .slice(0, 12);
+}
+
+function buildHookSeed(prompt: string, mood: string, genres: string[], language: string) {
+  const promptWords = sanitizePromptWords(prompt);
+  const detectedLanguage = detectLanguage(language);
+  const promptLead = promptWords.slice(0, 4).join(' ');
+
+  if (detectedLanguage === 'spanish') {
+    return promptLead || `${mood || 'fuego'} en la noche`;
+  }
+  if (detectedLanguage === 'hindi') {
+    return promptLead || `${mood || 'raat'} ki dhadkan`;
+  }
+  return promptLead || `${mood || genres[0] || 'midnight'} in motion`;
+}
+
+function buildLanguageLexicon(language?: string) {
+  const detectedLanguage = detectLanguage(language);
+  if (detectedLanguage === 'spanish') {
+    return {
+      fillers: ['ahora', 'todavia', 'siempre', 'despacio', 'encima', 'adentro'],
+      verseOpeners: ['Cruzo la niebla', 'Sigo el pulso', 'Bajo la lluvia', 'Miro las luces'],
+      chorusOpeners: ['Sube conmigo', 'No cae el fuego', 'Siente el ritmo', 'Gira la noche'],
+      bridgeOpeners: ['Cambio la marea', 'Rompo el silencio', 'Toco el borde'],
+      imagery: ['neon', 'humo', 'calle', 'mar', 'latido', 'sombra'],
+    };
+  }
+  if (detectedLanguage === 'hindi') {
+    return {
+      fillers: ['abhi', 'phir', 'dhire', 'andar', 'upar', 'saath'],
+      verseOpeners: ['Dhool mein chalun', 'Raat ko sunun', 'Shehar jagta hai', 'Dil ki sadak par'],
+      chorusOpeners: ['Saath utho', 'Yeh dhadkan', 'Roshni bolo', 'Aaj ki raat'],
+      bridgeOpeners: ['Saans rukti hai', 'Khamoshi tode', 'Pal badalta hai'],
+      imagery: ['raat', 'shehar', 'saans', 'dhadkan', 'roshni', 'dhuaan'],
+    };
+  }
+  return {
+    fillers: ['tonight', 'inside', 'again', 'forever', 'slowly', 'higher'],
+    verseOpeners: ['I chase the signal', 'Through the smoke', 'Under streetlight static', 'I feel the pressure'],
+    chorusOpeners: ['Hold that fire', 'We stay alive', 'Hear the whole room', 'Feel this pull'],
+    bridgeOpeners: ['Everything bends', 'Silence opens', 'The ceiling turns'],
+    imagery: ['neon', 'echo', 'shadow', 'pulse', 'fever', 'tide'],
+  };
+}
+
+function getStyleVoiceTokens(style: VocalStyleType) {
+  switch (style) {
+    case 'rap':
+      return {
+        verseClosers: ['hit hard', 'cut clean', 'talk sharp', 'run deep'],
+        chorusClosers: ['bring it back', 'lock that in', 'stay on beat'],
+      };
+    case 'whisper':
+      return {
+        verseClosers: ['fade slow', 'drift near', 'breathe low', 'stay soft'],
+        chorusClosers: ['hold me near', 'float with me', 'stay in light'],
+      };
+    case 'robotic_vocoder':
+      return {
+        verseClosers: ['coded heat', 'chrome skin', 'signal bloom', 'wired light'],
+        chorusClosers: ['pulse in sync', 'system glow', 'stay online'],
+      };
+    default:
+      return {
+        verseClosers: ['fall through', 'burn bright', 'keep close', 'move free'],
+        chorusClosers: ['come alive', 'lift me up', 'bring me home'],
+      };
+  }
+}
+
+function buildSectionLineTargets(
+  sectionName: string,
+  sectionDuration: number,
+  tempo: number,
+  style: VocalStyleType,
+  intensity: number,
+) {
+  const pacing = getSyllablePacing(style, intensity);
+  const bars = estimateSectionBars(sectionDuration, tempo);
+  const effectiveBars = Math.max(1, Math.floor(bars * (1 - pacing.silenceRatio)));
+  const normalizedSection = normalizeSectionName(sectionName);
+  const lineBars = normalizedSection === 'chorus' || normalizedSection === 'hook' || normalizedSection === 'drop'
+    ? Math.max(1, pacing.preferredLineBars)
+    : pacing.preferredLineBars;
+  const lineCount = clamp(
+    normalizedSection === 'bridge' ? Math.max(2, Math.round(effectiveBars / 2)) : Math.max(2, Math.round(effectiveBars / lineBars)),
+    normalizedSection === 'chorus' || normalizedSection === 'hook' ? 2 : 1,
+    normalizedSection === 'chorus' || normalizedSection === 'hook' ? 4 : 6,
+  );
+  const totalSyllables = clamp(
+    Math.round(effectiveBars * ((pacing.min + pacing.max) / 2)),
+    lineCount * pacing.min,
+    lineCount * pacing.max,
+  );
+  return {
+    bars,
+    lineCount,
+    syllablesPerLine: distributeEvenly(totalSyllables, lineCount).map((value) => clamp(value, pacing.min, pacing.max)),
+  };
+}
+
+function buildSectionLine(
+  sectionName: string,
+  lineIndex: number,
+  hookSeed: string,
+  promptWords: string[],
+  mood: string,
+  lexicon: ReturnType<typeof buildLanguageLexicon>,
+  styleTokens: ReturnType<typeof getStyleVoiceTokens>,
+  genres: string[],
+): string {
+  const section = normalizeSectionName(sectionName);
+  const detailWord = promptWords[lineIndex % Math.max(1, promptWords.length)] || lexicon.imagery[lineIndex % lexicon.imagery.length];
+  const moodWord = mood || lexicon.imagery[(lineIndex + 1) % lexicon.imagery.length];
+  const genreWord = genres[0]?.toLowerCase() || lexicon.imagery[(lineIndex + 2) % lexicon.imagery.length];
+
+  if (section === 'chorus' || section === 'hook' || section === 'drop') {
+    const opener = lexicon.chorusOpeners[lineIndex % lexicon.chorusOpeners.length];
+    const closer = styleTokens.chorusClosers[lineIndex % styleTokens.chorusClosers.length];
+    return `${opener} ${hookSeed} ${closer}`;
+  }
+
+  if (section === 'bridge') {
+    const opener = lexicon.bridgeOpeners[lineIndex % lexicon.bridgeOpeners.length];
+    return `${opener} through ${moodWord} ${detailWord}`;
+  }
+
+  if (section === 'intro' || section === 'outro') {
+    return `${hookSeed} ${moodWord}`;
+  }
+
+  const opener = lexicon.verseOpeners[lineIndex % lexicon.verseOpeners.length];
+  const closer = styleTokens.verseClosers[lineIndex % styleTokens.verseClosers.length];
+  return `${opener} ${detailWord} in ${genreWord} ${closer}`;
+}
+
+function buildLyricTimingMap(
+  lyricLines: LyricLine[],
+  structure: SectionPlan[],
+  durationSeconds: number,
+  options: LyricTimingOptions,
+): LyricTimingMap {
+  const timeline = buildSectionTimeline(structure);
+  const vocalSections = timeline.filter((section) => isVocalSection(section.normalizedName));
+  if (vocalSections.length === 0 || lyricLines.length === 0) return { lines: [] };
+
+  const groupedLines = new Map<string, LyricLine[]>();
+  const ungrouped: LyricLine[] = [];
+  for (const line of lyricLines) {
+    const key = normalizeSectionName(line.section);
+    if (key) {
+      if (!groupedLines.has(key)) groupedLines.set(key, []);
+      groupedLines.get(key)!.push(line);
+    } else {
+      ungrouped.push(line);
+    }
+  }
+
+  const chorusFallback = groupedLines.get('chorus') || groupedLines.get('hook') || [];
+  const plannedLines: LyricTimingLine[] = [];
+  let sequentialIndex = 0;
+  const groupedOffsets = new Map<string, number>();
+
+  for (const section of vocalSections) {
+    const grouped = groupedLines.get(section.normalizedName) || [];
+    const groupedOffset = groupedOffsets.get(section.normalizedName) || 0;
+    let sectionLines = grouped.slice(groupedOffset);
+
+    if (sectionLines.length === 0 && (section.normalizedName === 'chorus' || section.normalizedName === 'drop' || section.normalizedName === 'hook')) {
+      sectionLines = chorusFallback.slice(0, 2);
+    }
+
+    if (sectionLines.length === 0) {
+      const target = buildSectionLineTargets(section.name, section.duration, options.tempo, options.vocalStyle, options.vocalIntensity).lineCount;
+      sectionLines = lyricLines.slice(sequentialIndex, sequentialIndex + target);
+      sequentialIndex += sectionLines.length;
+    } else {
+      const target = buildSectionLineTargets(section.name, section.duration, options.tempo, options.vocalStyle, options.vocalIntensity).lineCount;
+      sectionLines = sectionLines.slice(0, target);
+      groupedOffsets.set(section.normalizedName, groupedOffset + sectionLines.length);
+    }
+
+    if (sectionLines.length === 0 && ungrouped.length > 0) {
+      sectionLines = [ungrouped.shift()!];
+    }
+
+    if (sectionLines.length === 0) continue;
+
+    const margin = Math.min(0.4, section.duration * 0.08);
+    const usableStart = section.start + margin;
+    const usableEnd = Math.min(durationSeconds, section.end - margin * 0.5);
+    const usableDuration = Math.max(0.25, usableEnd - usableStart);
+    const lineWeights = sectionLines.map((line) => Math.max(1, line.syllables.length));
+    const lineDurations = allocateWeightedDurations(usableDuration, lineWeights, Math.min(usableDuration / (sectionLines.length * 2), 0.35));
+
+    let cursor = usableStart;
+    for (let index = 0; index < sectionLines.length; index++) {
+      const line = sectionLines[index];
+      const lineStart = cursor;
+      const lineEnd = index === sectionLines.length - 1 ? usableEnd : Math.min(usableEnd, cursor + lineDurations[index]);
+      const lineDuration = Math.max(0.12, lineEnd - lineStart);
+      const syllableWeights = line.syllables.map((syllable, syllableIndex) => {
+        const base = Math.max(1, syllable.replace(/[^a-z]/gi, '').length);
+        if (options.vocalStyle === 'rap') return 1;
+        if (options.vocalStyle === 'whisper') return base + 0.8;
+        return syllableIndex === line.syllables.length - 1 ? base + 1.2 : base;
+      });
+      const syllableDurations = allocateWeightedDurations(lineDuration, syllableWeights, Math.min(lineDuration / Math.max(1, line.syllables.length * 2), 0.05));
+
+      let syllableCursor = lineStart;
+      const syllableTimings = line.syllables.map((syllable, syllableIndex) => {
+        const syllableStart = syllableCursor;
+        const syllableEnd = syllableIndex === line.syllables.length - 1 ? lineEnd : Math.min(lineEnd, syllableCursor + syllableDurations[syllableIndex]);
+        syllableCursor = syllableEnd;
+        return { text: syllable, startTime: syllableStart, endTime: syllableEnd };
+      });
+
+      plannedLines.push({
+        text: line.text,
+        sectionName: section.name,
+        startTime: lineStart,
+        endTime: lineEnd,
+        energy: section.energy,
+        syllables: line.syllables,
+        syllableTimings,
+      });
+
+      cursor = lineEnd;
+    }
+  }
+
+  return { lines: plannedLines };
+}
 
 function alignLyricsToStructure(
   lyricLines: LyricLine[],
   structure: SectionPlan[],
-  _durationSeconds: number,
+  durationSeconds: number,
+  options: LyricTimingOptions,
 ): VocalSegment[] {
-  const segments: VocalSegment[] = [];
-
-  const sectionTimeline: { name: string; start: number; end: number; energy: number }[] = [];
-  let t = 0;
-  for (const section of structure) {
-    sectionTimeline.push({ name: section.name.toLowerCase(), start: t, end: t + section.duration, energy: section.energy });
-    t += section.duration;
-  }
-
-  // Only place vocals in vocal-appropriate sections
-  const vocalSections = sectionTimeline.filter(s =>
-    !s.name.includes('intro') && !s.name.includes('outro') && !s.name.includes('break')
-  );
-
-  if (vocalSections.length === 0 || lyricLines.length === 0) return segments;
-
-  let lineIdx = 0;
-  for (const section of vocalSections) {
-    if (lineIdx >= lyricLines.length) break;
-
-    const matchingLines: LyricLine[] = [];
-    const maxLines = Math.max(2, Math.floor((section.end - section.start) / 3));
-    while (lineIdx < lyricLines.length && matchingLines.length < maxLines) {
-      matchingLines.push(lyricLines[lineIdx]);
-      lineIdx++;
-    }
-    if (matchingLines.length === 0) continue;
-
-    const margin = 0.5;
-    const sectionDur = (section.end - section.start) - margin * 2;
-    const lineSpacing = sectionDur / matchingLines.length;
-
-    for (let i = 0; i < matchingLines.length; i++) {
-      const startTime = section.start + margin + i * lineSpacing;
-      const endTime = Math.min(startTime + lineSpacing * 0.85, section.end - 0.1);
-      segments.push({
-        text: matchingLines[i].text,
-        sectionName: section.name,
-        startTime,
-        endTime,
-        energy: section.energy,
-      });
-    }
-  }
-
-  // Wrap leftover lines back into sections
-  if (lineIdx < lyricLines.length && vocalSections.length > 0) {
-    let sIdx = 0;
-    while (lineIdx < lyricLines.length) {
-      const section = vocalSections[sIdx % vocalSections.length];
-      segments.push({
-        text: lyricLines[lineIdx].text,
-        sectionName: section.name,
-        startTime: section.start + (section.end - section.start) * 0.5,
-        endTime: section.end - 0.2,
-        energy: section.energy,
-      });
-      lineIdx++;
-      sIdx++;
-    }
-  }
-
-  return segments;
+  return buildLyricTimingMap(lyricLines, structure, durationSeconds, options).lines.map((line) => ({
+    text: line.text,
+    sectionName: line.sectionName,
+    startTime: line.startTime,
+    endTime: line.endTime,
+    energy: line.energy,
+  }));
 }
 
 export function generateLyricCues(
   lyrics: string,
   structure: SectionPlan[],
   durationSeconds: number,
+  options: LyricTimingOptions = {
+    tempo: 120,
+    vocalStyle: 'melodic_singing',
+    vocalIntensity: 5,
+  },
 ): LyricCue[] {
   const lyricLines = parseLyrics(lyrics);
   if (lyricLines.length === 0) return [];
-  return alignLyricsToStructure(lyricLines, structure, durationSeconds).map((segment) => ({
-    text: segment.text,
-    sectionName: segment.sectionName,
-    startTime: segment.startTime,
-    endTime: segment.endTime,
+  return buildLyricTimingMap(lyricLines, structure, durationSeconds, options).lines.map((line) => ({
+    text: line.text,
+    sectionName: line.sectionName,
+    startTime: line.startTime,
+    endTime: line.endTime,
   }));
 }
 
@@ -591,35 +920,29 @@ function renderSungSyllable(
 function renderVocalLine(
   ctx: OfflineAudioContext,
   dest: AudioNode,
-  segment: VocalSegment,
+  segment: LyricTimingLine,
   melody: MelodyNote[],
-  syllables: string[],
   style: StyleParams,
-  tempo: number,
   rng: () => number,
 ) {
   const lineDuration = segment.endTime - segment.startTime;
   if (lineDuration <= 0) return;
 
-  const beatDuration = 60 / tempo;
   const volume = 0.48 * (segment.energy * 0.55 + 0.45);
-  let time = segment.startTime;
   let prevFreq: number | null = null;
 
-  const count = Math.min(syllables.length, melody.length);
+  const count = Math.min(segment.syllables.length, melody.length, segment.syllableTimings.length);
   for (let i = 0; i < count; i++) {
     const note = melody[i];
-    const sylDuration = note.durationBeats * beatDuration;
-    const endTime = Math.min(time + sylDuration, segment.endTime);
-    const actualDur = endTime - time;
+    const syllableWindow = segment.syllableTimings[i];
+    const startTime = Math.max(segment.startTime, syllableWindow.startTime);
+    const endTime = Math.min(segment.endTime, syllableWindow.endTime);
+    const actualDur = endTime - startTime;
 
     if (actualDur > 0.02) {
-      renderSungSyllable(ctx, dest, syllables[i], time, actualDur, note.frequency, prevFreq, volume, style, rng);
+      renderSungSyllable(ctx, dest, segment.syllables[i], startTime, actualDur, note.frequency, prevFreq, volume, style, rng);
       prevFreq = note.frequency;
     }
-
-    time = endTime;
-    if (time >= segment.endTime) break;
   }
 }
 
@@ -737,7 +1060,12 @@ export async function generateVocals(
   onProgress({ stage: 'parsing', progress: 0.15 });
 
   // 2. Align lyrics to song structure
-  const vocalSegments = alignLyricsToStructure(lyricLines, structure, durationSeconds);
+  const lyricTimingMap = buildLyricTimingMap(lyricLines, structure, durationSeconds, {
+    tempo,
+    vocalStyle,
+    vocalIntensity,
+  });
+  const vocalSegments = lyricTimingMap.lines;
   if (vocalSegments.length === 0) return null;
 
   onProgress({ stage: 'aligning', progress: 0.2 });
@@ -753,9 +1081,8 @@ export async function generateVocals(
   const lineMelodies: MelodyNote[][] = [];
   for (let i = 0; i < vocalSegments.length; i++) {
     const seg = vocalSegments[i];
-    const line = lyricLines.find(l => l.text === seg.text) || { text: seg.text, section: seg.sectionName, syllables: lineToSyllables(seg.text) };
     const melody = generateLineMelody(
-      line.syllables.length,
+      seg.syllables.length,
       scaleMidi,
       seg.energy,
       seg.sectionName,
@@ -786,13 +1113,12 @@ export async function generateVocals(
   for (let i = 0; i < vocalSegments.length; i++) {
     const seg = vocalSegments[i];
     const melody = lineMelodies[i];
-    const line = lyricLines.find(l => l.text === seg.text) || { text: seg.text, section: seg.sectionName, syllables: lineToSyllables(seg.text) };
 
     const startTime = Math.max(0, seg.startTime);
     const endTime = Math.min(durationSeconds, seg.endTime);
 
     if (endTime > startTime && melody.length > 0) {
-      renderVocalLine(ctx, vocalBus, { ...seg, startTime, endTime }, melody, line.syllables, styleParams, tempo, rng);
+      renderVocalLine(ctx, vocalBus, { ...seg, startTime, endTime }, melody, styleParams, rng);
     }
 
     const genProgress = 0.4 + (i / vocalSegments.length) * 0.5;
@@ -857,39 +1183,71 @@ export function mixVocalsIntoInstrumental(
 
 // ===== Auto-generate Lyrics from Prompt =====
 
-export function generateDefaultLyrics(prompt: string, genres: string[], mood: string, structure: SectionPlan[]): string {
+export function generateDefaultLyrics(
+  prompt: string,
+  genres: string[],
+  mood: string,
+  structure: SectionPlan[],
+  options?: Partial<DefaultLyricOptions>,
+): string {
+  return generateDefaultLyricsInternal(prompt, genres, mood, structure, {
+    tempo: 120,
+    durationSeconds: structure.reduce((sum, section) => sum + section.duration, 0),
+    vocalStyle: 'melodic_singing',
+    vocalIntensity: 5,
+    language: 'English',
+    ...options,
+  });
+}
+
+function generateDefaultLyricsInternal(
+  prompt: string,
+  genres: string[],
+  mood: string,
+  structure: SectionPlan[],
+  options: DefaultLyricOptions,
+): string {
   const lines: string[] = [];
-  let verseCount = 0;
-  let chorusCount = 0;
+  const hookSeed = buildHookSeed(prompt, mood, genres, options.language || 'English');
+  const promptWords = sanitizePromptWords(prompt);
+  const lexicon = buildLanguageLexicon(options.language);
+  const styleTokens = getStyleVoiceTokens(options.vocalStyle);
+  const chorusMemory: string[] = [];
 
+  let previousHeader = '';
   for (const section of structure) {
-    const name = section.name.toLowerCase();
-    if (name.includes('intro') || name.includes('outro') || name.includes('break')) continue;
+    if (!isVocalSection(section.name)) continue;
+    const normalizedName = normalizeSectionName(section.name);
+    const header = normalizedName.charAt(0).toUpperCase() + normalizedName.slice(1);
 
-    if (name.includes('verse')) {
-      verseCount++;
-      lines.push(`[Verse ${verseCount}]`);
-      lines.push(`Feel the rhythm in the ${mood || 'night'}`);
-      lines.push(`${genres[0] || 'Music'} taking over my soul`);
-      lines.push(`Moving through the sound and light`);
-      lines.push(`Let the melody make me whole`);
-      lines.push('');
-    } else if (name.includes('chorus') || name.includes('hook') || name.includes('drop')) {
-      chorusCount++;
-      lines.push('[Chorus]');
-      lines.push(`We are ${mood || 'alive'}, we are the sound`);
-      lines.push(`${prompt.split(' ').slice(0, 4).join(' ') || 'Feel the beat'}`);
-      lines.push(`Rising up, never coming down`);
-      lines.push('');
-    } else if (name.includes('bridge')) {
-      lines.push('[Bridge]');
-      lines.push(`Through the ${mood || 'dark'}ness we find our way`);
-      lines.push(`Every note a brand new day`);
-      lines.push('');
+    if (header !== previousHeader || normalizedName === 'verse') {
+      lines.push(`[${header}]`);
+      previousHeader = header;
     }
+
+    const targets = buildSectionLineTargets(section.name, section.duration, options.tempo, options.vocalStyle, options.vocalIntensity);
+    for (let index = 0; index < targets.lineCount; index++) {
+      let baseLine: string;
+
+      if ((normalizedName === 'chorus' || normalizedName === 'hook' || normalizedName === 'drop') && chorusMemory[index]) {
+        baseLine = index === targets.lineCount - 1
+          ? `${chorusMemory[index]} ${lexicon.fillers[index % lexicon.fillers.length]}`
+          : chorusMemory[index];
+      } else {
+        baseLine = buildSectionLine(normalizedName, index, hookSeed, promptWords, mood, lexicon, styleTokens, genres);
+        if (normalizedName === 'chorus' || normalizedName === 'hook' || normalizedName === 'drop') {
+          chorusMemory[index] = baseLine;
+        }
+      }
+
+      const fittedLine = fitLineToSyllableTarget(baseLine, targets.syllablesPerLine[index], lexicon.fillers);
+      lines.push(fittedLine);
+    }
+
+    lines.push('');
   }
 
-  return lines.join('\n');
+  return lines.join('\n').trim();
 }
 
 function sleep(ms: number): Promise<void> {

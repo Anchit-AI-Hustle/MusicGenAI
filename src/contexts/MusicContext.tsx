@@ -509,10 +509,23 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           await updateTrackDB(trackId, creationId, 'Generating vocals', 0.66, 'generating_vocals');
 
           const vocalStyle = inferVocalStyle(input.genres, input.vocalStyle);
+          const vocalIntensity = input.vocalIntensity || 5;
+          const vocalLanguage = input.vocalLanguages[0] || 'English';
           const lyricsText = input.lyrics || generateDefaultLyrics(
-            input.musicPrompt, input.genres, input.mood || '', musicIntent.structure
+            input.musicPrompt, input.genres, input.mood || '', musicIntent.structure,
+            {
+              tempo: musicIntent.tempo,
+              durationSeconds: input.durationSeconds,
+              vocalStyle,
+              vocalIntensity,
+              language: vocalLanguage,
+            },
           );
-          lyricCues = generateLyricCues(lyricsText, musicIntent.structure, input.durationSeconds);
+          lyricCues = generateLyricCues(lyricsText, musicIntent.structure, input.durationSeconds, {
+            tempo: musicIntent.tempo,
+            vocalStyle,
+            vocalIntensity,
+          });
 
           const vocalConfig: VocalConfig = {
             lyrics: lyricsText,
@@ -522,10 +535,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             structure: musicIntent.structure,
             durationSeconds: input.durationSeconds,
             vocalStyle,
-            vocalIntensity: input.vocalIntensity || 5,
+            vocalIntensity,
             vocalEffects: input.vocalEffects || [],
             genres: input.genres,
             mood: input.mood || '',
+            language: vocalLanguage,
           };
 
           const vocalBuffer = await generateVocals(vocalConfig, (p) => {
