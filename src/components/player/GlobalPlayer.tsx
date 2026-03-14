@@ -140,6 +140,7 @@ MiniProgress.displayName = 'MiniProgress';
 const StableVideoPlayer = memo<{ videoUrl: string; className?: string }>(({ videoUrl, className }) => {
   const { videoRef, audioRef, isPlaying } = usePlayer();
   const srcRef = useRef('');
+  const mountedRef = useRef(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -149,9 +150,13 @@ const StableVideoPlayer = memo<{ videoUrl: string; className?: string }>(({ vide
       video.src = videoUrl;
       video.load();
     }
+    // Mark as ready for play/pause control only after src is set
+    mountedRef.current = true;
   }, [videoRef, videoUrl]);
 
   useEffect(() => {
+    // Don't try to play/pause on first mount before src is loaded
+    if (!mountedRef.current) return;
     const video = videoRef.current;
     if (!video) return;
     if (isPlaying) video.play().catch(() => {});
@@ -173,6 +178,7 @@ const StableVideoPlayer = memo<{ videoUrl: string; className?: string }>(({ vide
   return <video ref={videoRef} className={className} muted playsInline preload="metadata" />;
 });
 StableVideoPlayer.displayName = 'StableVideoPlayer';
+
 
 const SyncedLyricsPanel: React.FC<{ track: PlayerTrack }> = ({ track }) => {
   const { currentTime } = usePlayerTime();
