@@ -71,7 +71,7 @@ const triggerDownload = async (url: string, filename: string) => {
   }
 };
 
-/** Single download button with dropdown for MP3/MP4 options */
+/** Single download button with dropdown for WAV/MP4 options */
 const SongDownloadMenu: React.FC<{ track: Track; triggerDownload: (url: string, filename: string) => Promise<void> }> = ({ track, triggerDownload }) => {
   const [open, setOpen] = useState(false);
   const triggerBtnRef = useRef<HTMLDivElement>(null);
@@ -81,7 +81,7 @@ const SongDownloadMenu: React.FC<{ track: Track; triggerDownload: (url: string, 
   // If only one type, download directly
   if (hasAudio && !hasVideo) {
     return (
-      <Button variant="outline" size="lg" onClick={() => triggerDownload(track.audioUrl!, `${track.title}.mp3`)}>
+      <Button variant="outline" size="lg" onClick={() => triggerDownload(track.audioUrl!, `${track.title}.wav`)}>
         <Download className="w-4 h-4" /> Download
       </Button>
     );
@@ -101,8 +101,8 @@ const SongDownloadMenu: React.FC<{ track: Track; triggerDownload: (url: string, 
         <Download className="w-4 h-4" /> Download
       </Button>
       <PortalDropdown open={open} onClose={() => setOpen(false)} triggerRef={triggerBtnRef as React.RefObject<HTMLElement>}>
-        <button onClick={() => { triggerDownload(track.audioUrl!, `${track.title}.mp3`); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary transition-colors">
-          <Music className="w-4 h-4" /> Download MP3
+        <button onClick={() => { triggerDownload(track.audioUrl!, `${track.title}.wav`); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary transition-colors">
+          <Music className="w-4 h-4" /> Download WAV
         </button>
         <button onClick={() => { triggerDownload(track.videoUrl!, `${track.title}.mp4`); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary transition-colors">
           <MonitorPlay className="w-4 h-4" /> Download MP4

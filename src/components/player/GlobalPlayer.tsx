@@ -422,10 +422,10 @@ export const GlobalPlayer: React.FC = () => {
                 <PortalDropdown open={showDownloadMenu} onClose={() => setShowDownloadMenu(false)} triggerRef={downloadBtnRef as React.RefObject<HTMLElement>} direction="up" align="right" minWidth={140}>
                   {currentTrack.audioUrl && (
                     <button
-                      onClick={() => { triggerDownload(currentTrack.audioUrl!, `${currentTrack.title || 'track'}.mp3`); setShowDownloadMenu(false); }}
+                      onClick={() => { triggerDownload(currentTrack.audioUrl!, `${currentTrack.title || 'track'}.wav`); setShowDownloadMenu(false); }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
                     >
-                      <Music className="w-4 h-4" /> Download Audio
+                      <Music className="w-4 h-4" /> Download WAV
                     </button>
                   )}
                   {currentTrack.videoUrl && (

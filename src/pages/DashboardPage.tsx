@@ -242,7 +242,7 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
           try {
             const res = await fetch(track.audioUrl);
             const blob = await res.blob();
-            zip.file(`${track.title}.mp3`, blob);
+            zip.file(`${track.title}.wav`, blob);
           } catch {}
         }
         if (track.videoUrl) {
