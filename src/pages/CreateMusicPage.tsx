@@ -81,7 +81,7 @@ interface SongPromptState {
 
 export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick }) => {
   const { isAuthenticated } = useAuth();
-  const { createMusic, currentCreation, isCreating, aiSuggest } = useMusic();
+  const { createMusic, currentCreation, isCreating, aiSuggest, updateFormState } = useMusic();
   const player = usePlayer();
   const [mode, setMode] = useState<'song' | 'album'>('song');
   
@@ -180,6 +180,27 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
     applySongPromptState(next);
   }, [applySongPromptState, getSongPromptState]);
+
+  // Sync with global FormState for AI suggestions
+  React.useEffect(() => {
+    updateFormState({
+      musicPrompt,
+      genres: genreOptionsToLabels(selectedGenres),
+      durationSeconds,
+      vocalLanguages: selectedLanguages,
+      lyrics,
+      artistInspiration,
+      videoStyle,
+      tempo: tempoBpm,
+      mood,
+      vocalStyle,
+      songStructure,
+    });
+  }, [
+    musicPrompt, selectedGenres, durationSeconds, selectedLanguages,
+    lyrics, artistInspiration, videoStyle, tempoBpm, mood,
+    vocalStyle, songStructure, updateFormState
+  ]);
 
   // Sync album track count
   React.useEffect(() => {
@@ -666,7 +687,23 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                 )}
                 <div className="relative" ref={genreInputRef}>
-                  <Input placeholder="Search genres..." value={genreSearch} onChange={e => setGenreSearch(e.target.value)} onFocus={() => setShowGenreDropdown(true)} className="bg-input border-border" />
+                  <Input 
+                    placeholder="Search or type custom genre..." 
+                    value={genreSearch} 
+                    onChange={e => setGenreSearch(e.target.value)} 
+                    onFocus={() => setShowGenreDropdown(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && genreSearch.trim()) {
+                        e.preventDefault();
+                        const newGenre = { label: genreSearch.trim(), value: genreSearch.trim().toLowerCase().replace(/\s+/g, '-') };
+                        if (!selectedGenres.some(g => g.value === newGenre.value)) {
+                          toggleGenre(newGenre);
+                          setGenreSearch('');
+                        }
+                      }
+                    }}
+                    className="bg-input border-border" 
+                  />
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <PortalDropdown open={showGenreDropdown} onClose={() => setShowGenreDropdown(false)} triggerRef={genreInputRef as React.RefObject<HTMLElement>} matchTriggerWidth>
                     {filteredGenres.slice(0, 50).map(genre => (

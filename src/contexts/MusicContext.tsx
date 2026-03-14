@@ -71,6 +71,21 @@ export interface CreateMusicInput {
   albumTracks?: TrackConfig[];
 }
 
+export interface FormState {
+  musicPrompt: string;
+  genres: string[];
+  durationSeconds: number;
+  generateVideo: boolean;
+  vocalLanguages: string[];
+  lyrics?: string;
+  artistInspiration?: string;
+  videoStyle?: string;
+  tempo?: number;
+  mood?: string;
+  vocalStyle?: string;
+  songStructure?: string;
+}
+
 type AiAction = 'suggest' | 'enhance' | 'new';
 
 export interface StructuredPromptSuggestion {
@@ -98,11 +113,13 @@ interface MusicContextType {
   currentCreation: MusicCreation | null;
   isLoading: boolean;
   isCreating: boolean;
+  formState: FormState;
+  updateFormState: (updates: Partial<FormState>) => void;
   createMusic: (input: CreateMusicInput) => Promise<MusicCreation | null>;
   setCurrentCreation: (creation: MusicCreation | null) => void;
   refreshCreations: () => Promise<void>;
   retryTrack: (trackId: string, creationId: string) => Promise<void>;
-  aiSuggest: (field: string, value: string, context: Record<string, any>, action?: AiAction) => Promise<AiSuggestionResult | null>;
+  aiSuggest: (field: string, value: string, context?: Record<string, any>, action?: AiAction) => Promise<AiSuggestionResult | null>;
 }
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
@@ -126,7 +143,18 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [currentCreation, setCurrentCreation] = useState<MusicCreation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [formState, setFormState] = useState<FormState>({
+    musicPrompt: '',
+    genres: [],
+    durationSeconds: 120,
+    generateVideo: true,
+    vocalLanguages: ['English'],
+  });
   const realtimeChannelRef = useRef<any>(null);
+
+  const updateFormState = useCallback((updates: Partial<FormState>) => {
+    setFormState(prev => ({ ...prev, ...updates }));
+  }, []);
 
   const fetchCreations = useCallback(async () => {
     if (!user?.id) { setCreations([]); return; }
@@ -867,15 +895,15 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const suggestionGenreFamilyHistoryRef = useRef<string[]>([]);
 
   const GENRE_FAMILIES = [
-    'Electronic (Techno/House)', 'Hip Hop / Trap', 'Pop / Dance',
-    'Rock / Metal', 'Jazz / Blues', 'Classical / Orchestral',
-    'World / Global', 'Ambient / Lo-fi', 'R&B / Soul',
-    'Latin / Reggaeton', 'Country / Folk', 'Experimental / Noise'
+    'Electronic', 'Hip Hop / Trap', 'Rock / Metal', 'Pop',
+    'Jazz / Blues', 'Classical / Orchestral', 'World',
+    'Ambient / Lo-fi', 'Reggae', 'Latin', 'Indian', 'Experimental'
   ];
 
   const aiSuggestQueueRef = useRef(Promise.resolve());
 
-  const aiSuggest = async (field: string, value: string, context: Record<string, any>, action: AiAction = 'suggest'): Promise<AiSuggestionResult | null> => {
+  const aiSuggest = async (field: string, value: string, context?: Record<string, any>, action: AiAction = 'suggest'): Promise<AiSuggestionResult | null> => {
+    const effectiveContext = context || formState;
     // Serialize requests to avoid flooding the API
     const result = aiSuggestQueueRef.current.then(async () => {
       const maxRetries = 2;
@@ -907,7 +935,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
               'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
             },
             body: JSON.stringify({
-              field, value, context, action,
+              field, value, context: effectiveContext, action,
               previousSuggestions,
               previousGenreFamilies: suggestionGenreFamilyHistoryRef.current.slice(-12),
               targetGenreFamily, // Force rotation
@@ -998,6 +1026,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   return (
     <MusicContext.Provider value={{
       creations, currentCreation, isLoading, isCreating,
+      formState, updateFormState,
       createMusic, setCurrentCreation, refreshCreations, retryTrack, aiSuggest,
     }}>
       {children}

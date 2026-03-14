@@ -248,6 +248,21 @@ const GENRE_PROFILES: Record<string, GenreProfile> = {
     rhythmStyle: 'polyrhythm', grooveTemplate: 'minimal', structureTemplate: ['section_a', 'section_b', 'section_c', 'section_a'],
     harmonicStyle: 'chromatic', energyCurve: 'through-composed', density: 0.5, swing: 0.1, characteristics: ['unpredictable', 'textural', 'avant-garde'],
   },
+  'indian': {
+    tempoRange: [75, 110], instruments: ['tabla', 'sitar', 'tanpura', 'flute', 'dhol', 'strings'],
+    rhythmStyle: 'polyrhythm', grooveTemplate: 'shuffle', structureTemplate: ['alap', 'jor', 'jhala', 'gat'],
+    harmonicStyle: 'modal', energyCurve: 'escalating', density: 0.6, swing: 0.1, characteristics: ['rhythmic', 'meditative', 'ornate', 'traditional'],
+  },
+  'world': {
+    tempoRange: [80, 120], instruments: ['percussion', 'kora', 'oud', 'flute', 'kalimba', 'bass'],
+    rhythmStyle: 'polyrhythm', grooveTemplate: 'shuffle', structureTemplate: ['intro', 'verse', 'chorus', 'verse', 'bridge', 'outro'],
+    harmonicStyle: 'modal', energyCurve: 'arc', density: 0.65, swing: 0.2, characteristics: ['organic', 'global', 'rhythmic', 'cultural'],
+  },
+  'latin': {
+    tempoRange: [90, 125], instruments: ['congas', 'timbales', 'piano', 'bass', 'brass', 'guitar'],
+    rhythmStyle: 'swing', grooveTemplate: 'swing', structureTemplate: ['intro', 'verse', 'chorus', 'montuno', 'mambo', 'outro'],
+    harmonicStyle: 'major', energyCurve: 'verse-chorus', density: 0.75, swing: 0.3, characteristics: ['passionate', 'rhythmic', 'danceable', 'vibrant'],
+  },
 };
 
 // Alias mapping for subgenres → parent profiles
@@ -275,8 +290,10 @@ const GENRE_ALIASES: Record<string, string> = {
   'synth pop': 'pop', 'electropop': 'pop', 'indie pop': 'pop', 'k-pop': 'pop',
   'disco': 'funk', 'nu-disco': 'funk',
   'folk': 'pop', 'country': 'pop',
-  'bossa nova': 'jazz', 'flamenco': 'jazz',
-  'reggaeton': 'reggae',
+  'bossa nova': 'jazz',
+  'reggaeton': 'latin', 'salsa': 'latin', 'bachata': 'latin', 'merengue': 'latin',
+  'bhangra': 'indian', 'bollywood': 'indian', 'hindustani': 'indian', 'carnatic': 'indian',
+  'afrobeat': 'world', 'highlife': 'world', 'flamenco': 'world',
   'gospel': 'r&b', 'new age': 'ambient', 'meditation': 'ambient',
   'lo-fi hip hop': 'hip hop',
 };

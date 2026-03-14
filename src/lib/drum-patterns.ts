@@ -160,6 +160,58 @@ function polyrhythm(energy: number, rng: () => number): DrumPattern {
   return hits;
 }
 
+function latinClave(energy: number, rng: () => number): DrumPattern {
+  const hits: DrumPattern = [];
+  // 3-2 Son Clave: 0, 3, 6, 10, 12
+  const clave = [0, 3, 6, 10, 12];
+  clave.forEach(step => hits.push({ step, velocity: 0.8, instrument: 'perc' }));
+  // Kick on 0 and 8
+  hits.push({ step: 0, velocity: 0.85, instrument: 'kick' });
+  hits.push({ step: 8, velocity: 0.8, instrument: 'kick' });
+  // Dynamic hats/shakers
+  for (let i = 0; i < 16; i += 2) {
+    if (rng() < 0.4 + energy * 0.5) {
+      hits.push({ step: i, velocity: 0.3 + rng() * 0.2, instrument: 'hihat_closed' });
+    }
+  }
+  return hits;
+}
+
+function indianTala(energy: number, rng: () => number): DrumPattern {
+  const hits: DrumPattern = [];
+  // Teental (16 beats) simulated logic - accents on 0, 4, 8, 12
+  const accents = [0, 4, 8, 12];
+  accents.forEach(step => hits.push({ step, velocity: 0.9, instrument: 'perc' }));
+  // Tabla-like filler
+  for (let i = 0; i < 16; i++) {
+    if (rng() < 0.3 + energy * 0.4) {
+      hits.push({ step: i, velocity: 0.2 + rng() * 0.3, instrument: 'perc' });
+    }
+  }
+  // Low end support
+  hits.push({ step: 0, velocity: 0.7, instrument: 'kick' });
+  hits.push({ step: 8, velocity: 0.6, instrument: 'kick' });
+  return hits;
+}
+
+function syncopated(energy: number, rng: () => number): DrumPattern {
+  const hits: DrumPattern = [];
+  // Kick on off-beats
+  hits.push({ step: 0, velocity: 0.9, instrument: 'kick' });
+  hits.push({ step: 3, velocity: 0.7, instrument: 'kick' });
+  hits.push({ step: 9, velocity: 0.75, instrument: 'kick' });
+  // Snare on 6 and 14 (delayed 4 and 12)
+  hits.push({ step: 6, velocity: 0.8, instrument: 'snare' });
+  hits.push({ step: 14, velocity: 0.8, instrument: 'snare' });
+  // Busy hats
+  for (let i = 0; i < 16; i++) {
+    if (rng() < 0.6) {
+      hits.push({ step: i, velocity: 0.3 + rng() * 0.3, instrument: 'hihat_closed' });
+    }
+  }
+  return hits;
+}
+
 const PATTERN_GENERATORS: Record<string, PatternGenerator> = {
   'four-on-floor': fourOnFloor,
   'breakbeat': breakbeat,
@@ -167,9 +219,33 @@ const PATTERN_GENERATORS: Record<string, PatternGenerator> = {
   'halftime': halftime,
   'swing': swingPattern,
   'shuffle': shufflePattern,
-  'straight': fourOnFloor, // straight uses four-on-floor variant
+  'straight': fourOnFloor,
   'polyrhythm': polyrhythm,
+  'latin-clave': latinClave,
+  'indian-tala': indianTala,
+  'syncopated': syncopated,
 };
+
+/**
+ * Mutates a pattern using DNA-driven randomness to ensure variation.
+ */
+function mutatePattern(pattern: DrumPattern, rng: () => number, intensity: number): DrumPattern {
+  return pattern.map(hit => {
+    // 1. Randomly skip hits (higher intensity = more likely)
+    if (intensity > 0.2 && rng() < intensity * 0.1) return null;
+    
+    // 2. Velocity jitter
+    const velocity = Math.max(0.1, Math.min(1.0, hit.velocity * (0.9 + rng() * 0.2)));
+    
+    // 3. Occasionally swap percussion instruments
+    let instrument = hit.instrument;
+    if (hit.instrument === 'perc' && rng() < 0.2) {
+      instrument = rng() < 0.5 ? 'clap' : 'tom';
+    }
+
+    return { ...hit, velocity, instrument };
+  }).filter((h): h is DrumHit => h !== null);
+}
 
 /**
  * Get a drum pattern for the given rhythm style and energy level.
@@ -178,7 +254,9 @@ export function getDrumPattern(
   rhythmStyle: string, energy: number, rng: () => number
 ): DrumPattern {
   const gen = PATTERN_GENERATORS[rhythmStyle] || PATTERN_GENERATORS['four-on-floor'];
-  return gen(Math.max(0, Math.min(1, energy)), rng);
+  const basePattern = gen(Math.max(0, Math.min(1, energy)), rng);
+  // Apply DNA-based mutation to ensure unique variation per bar/generation
+  return mutatePattern(basePattern, rng, energy);
 }
 
 /**
