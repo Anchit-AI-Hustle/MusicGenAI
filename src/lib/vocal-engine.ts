@@ -179,7 +179,7 @@ function generateLineMelody(
 
   const beatDuration = 60 / tempo; // seconds per beat
   const totalBeats = lineDurationSec / beatDuration;
-  
+
   // Distribute beats across syllables with musical rhythm
   const rhythmPatterns = isRap
     ? generateRapRhythm(numSyllables, totalBeats, rng)
@@ -365,7 +365,7 @@ function parseLyrics(lyrics: string): LyricLine[] {
     let explicitStartTime: number | undefined;
     const timeMatch = line.match(/^\[(\d{2}):(\d{2})\]\s*(.*)$/);
     let textToProcess = line;
-    
+
     if (timeMatch) {
       const minutes = parseInt(timeMatch[1], 10);
       const seconds = parseInt(timeMatch[2], 10);
@@ -671,13 +671,13 @@ function buildLyricTimingMap(
       // If it explicitly belongs here or is untagged but fits chronologically
       const fitsChronos = line.explicitStartTime !== undefined && line.explicitStartTime >= section.start && line.explicitStartTime < section.end;
       const fitsTag = normalizeSectionName(line.section) === section.normalizedName;
-      
+
       if (fitsChronos || (fitsTag && line.explicitStartTime === undefined)) {
         sectionLines.push(line);
         lineIdx++;
       } else if (line.explicitStartTime !== undefined && line.explicitStartTime < section.start) {
-         // Orphaned past line, skip
-         lineIdx++;
+        // Orphaned past line, skip
+        lineIdx++;
       } else {
         break; // Reached next section's lines
       }
@@ -687,35 +687,35 @@ function buildLyricTimingMap(
 
     for (let index = 0; index < sectionLines.length; index++) {
       const line = sectionLines[index];
-      
+
       // Calculate specific start and end for the line
       let lineStart = line.explicitStartTime !== undefined ? line.explicitStartTime : usableStart + (index * secondsPerBar);
       // Ensure we don't start before the section's usable window unless told to by explicit time
       if (line.explicitStartTime === undefined) {
-         lineStart = Math.min(lineStart, usableEnd - 1); 
+        lineStart = Math.min(lineStart, usableEnd - 1);
       }
 
       // Next line's boundary or section end
-      const nextLineStart = (index + 1 < sectionLines.length) 
-          ? (sectionLines[index+1].explicitStartTime ?? lineStart + (secondsPerBar * 2))
-          : usableEnd;
+      const nextLineStart = (index + 1 < sectionLines.length)
+        ? (sectionLines[index + 1].explicitStartTime ?? lineStart + (secondsPerBar * 2))
+        : usableEnd;
 
       let lineEnd = Math.min(usableEnd, nextLineStart);
-      
+
       // Ensure minimum vocal duration
       if (lineEnd - lineStart < 0.25) {
-          lineEnd = lineStart + Math.max(0.25, line.syllables.length * 0.2);
+        lineEnd = lineStart + Math.max(0.25, line.syllables.length * 0.2);
       }
 
       const lineDuration = lineEnd - lineStart;
-      
+
       const syllableWeights = line.syllables.map((syllable, syllableIndex) => {
         const base = Math.max(1, syllable.replace(/[^a-z]/gi, '').length);
         if (options.vocalStyle === 'rap') return 1;
         if (options.vocalStyle === 'whisper') return base + 0.8;
         return syllableIndex === line.syllables.length - 1 ? base + 1.2 : base;
       });
-      
+
       // Sub-allocate the line duration into individual syllables
       const syllableDurations = allocateWeightedDurations(lineDuration, syllableWeights, Math.min(lineDuration / Math.max(1, line.syllables.length * 2), 0.05));
 
@@ -1255,14 +1255,15 @@ function generateDefaultLyricsInternal(
   for (const section of structure) {
     const isVocal = isVocalSection(section.name);
     const sectionBars = Math.max(1, Math.round(section.duration / secondsPerBar));
-    
-    // We update the clock regardless if it's instrumental or vocal
-    let sectionStartTime = currentGlobalTimeSeconds;
-    
+
     if (!isVocal || sectionBars < 1) {
       currentGlobalTimeSeconds += section.duration;
       continue;
     }
+
+    // Capture start time AFTER non-vocal sections have already advanced the clock
+    // so timestamps are correct for every vocal section's position in the song
+    const sectionStartTime = currentGlobalTimeSeconds;
 
     const normalizedName = normalizeSectionName(section.name);
     const header = normalizedName.charAt(0).toUpperCase() + normalizedName.slice(1);
@@ -1275,12 +1276,12 @@ function generateDefaultLyricsInternal(
     // Syllable Constraint Engine
     let targetSyllablesPerBar = 8;
     if (options.vocalStyle === 'rap' || options.vocalStyle === 'spoken_word') {
-      targetSyllablesPerBar = 14; 
+      targetSyllablesPerBar = 14;
     } else if (options.vocalStyle === 'whisper') {
       targetSyllablesPerBar = 5;
     } else if (normalizedName === 'chorus' || normalizedName === 'drop' || normalizedName === 'hook') {
-      // Choruses are often slightly more sustained/sparser
-      targetSyllablesPerBar = 7;
+      // Choruses: sustained melodic lines; 8 syl/bar is centre of the 6–10 spec range
+      targetSyllablesPerBar = 8;
     }
 
     // Allocate lyric lines
@@ -1288,14 +1289,14 @@ function generateDefaultLyricsInternal(
     // To keep it simple and fulfill "Generate lyrics one bar at a time":
     // we'll attempt 1 line per 2 bars for singing, and 1 line per 1 bar for rap.
     const stepsPerLine = (options.vocalStyle === 'rap' || options.vocalStyle === 'spoken_word') ? 1 : 2;
-    
+
     // We iterate over the section in chunks of `stepsPerLine` bars
     for (let barIdx = 0; barIdx < sectionBars; barIdx += stepsPerLine) {
       const barsToUse = Math.min(stepsPerLine, sectionBars - barIdx);
       const syllablesTarget = targetSyllablesPerBar * barsToUse;
-      
+
       const lineTimeSeconds = sectionStartTime + (barIdx * secondsPerBar);
-      
+
       const minutes = Math.floor(lineTimeSeconds / 60);
       const seconds = Math.floor(lineTimeSeconds % 60);
       const timeStr = `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}]`;
@@ -1311,21 +1312,21 @@ function generateDefaultLyricsInternal(
       } else {
         baseLine = buildSectionLine(normalizedName, memoryIdx, hookSeed, promptWords, mood, lexicon, styleTokens, genres);
         if (normalizedName === 'chorus' || normalizedName === 'hook' || normalizedName === 'drop') {
-           // Hook rules: save phrase for chorus repeat
+          // Hook rules: save phrase for chorus repeat
           chorusMemory[memoryIdx] = baseLine;
         }
       }
 
       // Generate up to exact syllable limits length
       let fittedLine = fitLineToSyllableTarget(baseLine, syllablesTarget, lexicon.fillers);
-      
+
       // Validation check (enforced here since it's a synchronous generation)
       const currentSyllables = lineToSyllables(fittedLine).length;
       if (currentSyllables > syllablesTarget + 2) {
         // simplistic re-fit/trim if validation fails
         const words = fittedLine.split(' ');
-        while(words.length > 2 && lineToSyllables(words.join(' ')).length > syllablesTarget + 1) {
-            words.pop();
+        while (words.length > 2 && lineToSyllables(words.join(' ')).length > syllablesTarget + 1) {
+          words.pop();
         }
         fittedLine = words.join(' ');
       }
@@ -1337,7 +1338,7 @@ function generateDefaultLyricsInternal(
     currentGlobalTimeSeconds += section.duration;
   }
 
-  return lines.join('\\n').trim();
+  return lines.join('\n').trim();
 }
 
 function sleep(ms: number): Promise<void> {
