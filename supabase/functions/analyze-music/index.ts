@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { buildUniversalMusicKnowledgePrompt } from "../_shared/universal-music-knowledge.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -102,6 +103,13 @@ serve(async (req) => {
     const seedSummary = generationDNA
       ? `Generation seed=${generationDNA.seed}, timestamp=${generationDNA.timestamp}, entropy=${generationDNA.entropy}, motifShape=${generationDNA.motifShape}, grooveBias=${generationDNA.grooveBias}, harmonicMood=${generationDNA.harmonicMood}, textureDensity=${generationDNA.textureDensity}, visualEnergy=${generationDNA.visualEnergy}, colorSignature=${(generationDNA.colorSignature || []).join("/")}, arrangementStyle=${generationDNA.arrangementStyle}`
       : "No generation seed provided";
+    const universalKnowledgePrompt = buildUniversalMusicKnowledgePrompt({
+      musicPrompt,
+      genres,
+      mood,
+      artistInspiration,
+      generationDNA,
+    });
 
     // ===== STEP 1: StyleProfile + Production Brief (combined AI call) =====
     const aiSeed = generationDNA?.seed || `${Date.now()}`;
@@ -111,6 +119,7 @@ serve(async (req) => {
 Infer a complete StyleProfile from the user's prompt, even if they never name a genre.
 Support ALL musical styles dynamically. Do not rely on fixed song templates, fixed keys, or canned genre defaults.
 The GenerationSeed must influence your choices so identical prompts still create different productions.
+${universalKnowledgePrompt}
 
 Return both:
 1. A user-facing StyleProfile using these semantic fields:
@@ -156,6 +165,7 @@ Vocal Style: ${vocalStyle || "Instrumental"}
 Lyrics: "${lyrics ? lyrics.substring(0, 200) : "None"}"
 Song structure hint: "${songStructure || "generate dynamically"}"
 ${seedSummary}
+${universalKnowledgePrompt}
 
 Generate a complete StyleProfile with:
 1. The actual inferred genre and subgenre (even if user didn't specify)
@@ -222,6 +232,7 @@ Energy curve type: ${styleResult?.energyCurve || "verse-chorus"}.
 Structure template hint: ${(styleResult?.structureTemplate || []).join(" → ") || "generate freely"}.
 Song structure request: "${songStructure || "dynamic"}".
 ${seedSummary}
+${universalKnowledgePrompt}
 
 Return sections with name, duration (seconds), energy (0.0-1.0), and description.
 Durations MUST sum to exactly ${durationSeconds}. Create a UNIQUE structure.`,

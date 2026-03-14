@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { GENRES, LANGUAGES } from '@/data/genres';
+import type { AiSuggestionResult } from '@/contexts/MusicContext';
 
 export interface TrackConfig {
   trackName: string;
@@ -74,7 +75,7 @@ interface AlbumTrackFormProps {
   config: TrackConfig;
   onChange: (config: TrackConfig) => void;
   albumVibe?: string;
-  aiSuggest: (field: string, value: string, context: Record<string, any>, action?: 'suggest' | 'enhance') => Promise<string | null>;
+  aiSuggest: (field: string, value: string, context: Record<string, any>, action?: 'suggest' | 'enhance' | 'new') => Promise<AiSuggestionResult | null>;
 }
 
 export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, onChange, albumVibe, aiSuggest }) => {
@@ -165,9 +166,21 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
     const key = `${action}-${field}`;
     startLoading(key);
     const val = action === 'new' ? '' : getFieldValue(field);
-    const suggestion = await aiSuggest(field, val, getContext(), action === 'new' ? 'suggest' : action);
+    const result = await aiSuggest(field, val, getContext(), action);
     stopLoading(key);
-    if (suggestion) applyToField(field, suggestion);
+    if (result?.structured && field === 'prompt') {
+      const { genre, mood, tempo, artist_inspiration, lyrics, description } = result.structured;
+      update({
+        genres: genre.length > 0 ? Array.from(new Set([...config.genres, ...genre])) : config.genres,
+        mood: mood || config.mood,
+        tempoBpm: tempo ? Math.max(60, Math.min(200, parseInt(tempo) || config.tempoBpm)) : config.tempoBpm,
+        artistInspiration: artist_inspiration || config.artistInspiration,
+        lyrics: lyrics || config.lyrics,
+        musicPrompt: description || result.suggestion || config.musicPrompt,
+      });
+      return;
+    }
+    if (result?.suggestion) applyToField(field, result.suggestion);
   };
 
   const isFieldLoading = (field: string) =>

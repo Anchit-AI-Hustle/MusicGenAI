@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { buildUniversalMusicKnowledgePrompt } from "../_shared/universal-music-knowledge.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -58,7 +59,12 @@ function createSeededRng(seed: string) {
 }
 
 function pickRandom<T>(arr: T[], seed: number, count = 1): T[] {
-  const shuffled = [...arr].sort(() => Math.sin(seed++) - 0.5);
+  const rng = createSeededRng(`${seed}:${arr.length}`);
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
   return shuffled.slice(0, count);
 }
 
@@ -100,6 +106,26 @@ const ENHANCE_PROMPTS: Record<string, string> = {
   vocalEffects: "Refine these vocal effects — add complementary effects or replace with better-fitting ones. Return as comma-separated list.",
   mood: "Enhance this mood description — make it more vivid, specific, and evocative.",
   songStructure: "Refine this song structure — add or adjust sections for better dynamics. Return sections connected by ' → '.",
+};
+
+const NEW_PROMPTS: Record<string, string> = {
+  albumName: "Invent a completely fresh album title unrelated to previous ideas. Return ONLY the title.",
+  albumVibe: "Generate a completely fresh album concept with new sonic identity, emotional arc, and production direction.",
+  trackName: "Invent a completely fresh track title unrelated to previous ideas. Return ONLY the title.",
+  prompt: "Generate a completely fresh music prompt with a new stylistic combination, vivid atmosphere, instrument ideas, arrangement direction, and production cues.",
+  genres: "Generate a completely fresh set of 2-4 genres or hybrid styles from any musical tradition worldwide. Return as comma-separated list.",
+  lyrics: "Generate a completely fresh lyrical premise or lyric fragment with a different emotional angle.",
+  artistInspiration: "Generate a completely fresh set of artist inspirations with wider stylistic contrast.",
+  vocalLanguage: "Generate a completely fresh language palette for the vocals. Return as comma-separated list.",
+  videoStyle: "Generate a completely fresh procedural visual direction with different motion, palette, and geometry.",
+  tempoBpm: "Generate a completely fresh BPM choice that leads to a different musical feel. Return ONLY a number.",
+  duration: "Generate a completely fresh duration choice that implies a different structural pacing. Return ONLY a number.",
+  vocalStructure: "Generate a completely fresh vocal structure using section names separated by ' – '.",
+  vocalStyle: "Generate a completely fresh vocal style. Return ONLY a short description.",
+  vocalIntensity: "Generate a completely fresh vocal intensity between 1 and 10. Return ONLY a number.",
+  vocalEffects: "Generate a completely fresh vocal effects chain. Return as comma-separated list.",
+  mood: "Generate a completely fresh mood description that does not resemble prior ideas.",
+  songStructure: "Generate a completely fresh song structure using section names connected by ' → '.",
 };
 
 function buildContext(context: any): string {
@@ -147,6 +173,43 @@ function buildEntropyDirective(seed: number, previousSuggestions: string[], requ
   return directive;
 }
 
+function buildStructuredSuggestion(field: string, suggestion: string, context: any) {
+  const structured = {
+    genre: Array.isArray(context?.genres) ? [...context.genres] : [],
+    mood: context?.mood || "",
+    energy: context?.energy || "",
+    tempo: context?.tempoBpm != null ? String(context.tempoBpm) : "",
+    artist_inspiration: context?.artistInspiration || "",
+    lyrics: context?.lyrics || "",
+    description: context?.musicPrompt || "",
+    prompt: context?.musicPrompt || "",
+  };
+
+  switch (field) {
+    case "genres":
+      structured.genre = suggestion.split(",").map((item: string) => item.trim()).filter(Boolean);
+      break;
+    case "mood":
+      structured.mood = suggestion;
+      break;
+    case "tempoBpm":
+      structured.tempo = suggestion;
+      break;
+    case "artistInspiration":
+      structured.artist_inspiration = suggestion;
+      break;
+    case "lyrics":
+      structured.lyrics = suggestion;
+      break;
+    case "prompt":
+      structured.description = suggestion;
+      structured.prompt = suggestion;
+      break;
+  }
+
+  return structured;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -158,12 +221,20 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const isEnhance = action === "enhance";
-    const prompts = isEnhance ? ENHANCE_PROMPTS : FIELD_PROMPTS;
+    const isNew = action === "new";
+    const prompts = isEnhance ? ENHANCE_PROMPTS : isNew ? NEW_PROMPTS : FIELD_PROMPTS;
     const fieldPrompt = prompts[field] || (isEnhance ? "Improve and enhance this value." : "Provide a helpful suggestion for this music creation field.");
 
     const contextStr = buildContext(context);
     const fallbackSeed = randomSeed || hashSeed(`${requestNonce || crypto.randomUUID()}:${Date.now()}`);
     const entropyDirective = buildEntropyDirective(fallbackSeed, previousSuggestions || [], requestNonce);
+    const universalKnowledgePrompt = buildUniversalMusicKnowledgePrompt({
+      musicPrompt: context?.musicPrompt || value,
+      genres: context?.genres || [],
+      mood: context?.mood || "",
+      artistInspiration: context?.artistInspiration || "",
+      generationDNA,
+    });
     const dnaDirective = generationDNA
       ? `\nGenerationDNA seed: ${generationDNA.seed}
 Motif shape: ${generationDNA.motifShape}
@@ -177,22 +248,26 @@ Arrangement style: ${generationDNA.arrangementStyle}`
 
     let userContent: string;
     if (isEnhance) {
-      userContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}${dnaDirective}${entropyDirective}`;
+      userContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}${dnaDirective}\n${universalKnowledgePrompt}${entropyDirective}`;
+    } else if (isNew) {
+      userContent = `${fieldPrompt}${contextStr}${dnaDirective}\n${universalKnowledgePrompt}\n\nCreate something substantially different from any prior phrasing or idea.${entropyDirective}`;
     } else {
       const currentValueNote = value
         ? `\n\nThe user has already entered: "${value}". Generate a completely NEW and DIFFERENT suggestion. Do NOT repeat or slightly modify their input.`
         : "\n\nThe field is empty. Suggest a creative starting point.";
-      userContent = `${fieldPrompt}${contextStr}${dnaDirective}${currentValueNote}${entropyDirective}`;
+      userContent = `${fieldPrompt}${contextStr}${dnaDirective}\n${universalKnowledgePrompt}${currentValueNote}${entropyDirective}`;
     }
 
     const systemPrompt = `You are a music production AI assistant. You help users craft their musical vision.
 CRITICAL RULES:
+- You have access to UniversalMusicKnowledge across historical eras, world regions, vocal traditions, production lineages, and hybrid genres.
 - Generate ALL outputs dynamically. NEVER return example text, template phrases, or placeholder content.
 - Every response MUST be unique. Use completely different wording, vocabulary, phrasing, and creative angles each time.
 - Treat each request nonce as a hard requirement for novelty. Never reuse previous wording even when the field and context are similar.
 - If previous suggestions are listed, you MUST avoid repeating any of them — not even paraphrased versions.
 - Draw from the variation directive's descriptors and style pattern to ensure novelty.
 - Analyze the user's filled fields deeply: genre influences mood, mood influences lyrics, BPM influences energy.
+- For "new" actions, do not preserve the current wording. Invent a new concept with different imagery, production cues, and stylistic framing.
 - Be specific, vivid, and inspiring. Avoid generic or cliché descriptions.
 - Keep output concise (1-3 sentences max for text fields, or a short comma-separated list for selection fields).
 - For "albumName": return ONLY a short album title (2-5 words). No descriptions, no genre labels, no dashes or subtitles.
@@ -215,12 +290,14 @@ CRITICAL RULES:
       
       let freshUserContent: string;
       if (isEnhance) {
-        freshUserContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}${dnaDirective}${entropyRefresh}`;
+        freshUserContent = `${fieldPrompt}\n\nCurrent value: "${value}"${contextStr}${dnaDirective}\n${universalKnowledgePrompt}${entropyRefresh}`;
+      } else if (isNew) {
+        freshUserContent = `${fieldPrompt}${contextStr}${dnaDirective}\n${universalKnowledgePrompt}\n\nCreate a brand new concept that avoids all previous ideas.${entropyRefresh}`;
       } else {
         const currentValueNote = value
           ? `\n\nThe user has already entered: "${value}". Generate a completely NEW and DIFFERENT suggestion. Do NOT repeat or slightly modify their input.`
           : "\n\nThe field is empty. Suggest a creative starting point.";
-        freshUserContent = `${fieldPrompt}${contextStr}${dnaDirective}${currentValueNote}${entropyRefresh}`;
+        freshUserContent = `${fieldPrompt}${contextStr}${dnaDirective}\n${universalKnowledgePrompt}${currentValueNote}${entropyRefresh}`;
       }
       
       return JSON.stringify({
@@ -241,6 +318,20 @@ CRITICAL RULES:
                 type: "object",
                 properties: {
                   suggestion: { type: "string", description: "The suggested or enhanced value for the field" },
+                  structured: {
+                    type: "object",
+                    properties: {
+                      genre: { type: "array", items: { type: "string" } },
+                      mood: { type: "string" },
+                      energy: { type: "string" },
+                      tempo: { type: "string" },
+                      artist_inspiration: { type: "string" },
+                      lyrics: { type: "string" },
+                      description: { type: "string" },
+                      prompt: { type: "string" },
+                    },
+                    additionalProperties: false,
+                  },
                 },
                 required: ["suggestion"],
                 additionalProperties: false,
@@ -299,11 +390,21 @@ CRITICAL RULES:
       if (toolCall?.function?.arguments) {
         const args = JSON.parse(toolCall.function.arguments);
         suggestion = args.suggestion || "";
+        const structured = args.structured || buildStructuredSuggestion(field, suggestion, context);
+        return new Response(JSON.stringify({ suggestion, field, action, seed: generationDNA?.seed || String(fallbackSeed), structured }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       } else {
         suggestion = data.choices?.[0]?.message?.content || "";
       }
 
-      return new Response(JSON.stringify({ suggestion, field }), {
+      return new Response(JSON.stringify({
+        suggestion,
+        field,
+        action,
+        seed: generationDNA?.seed || String(fallbackSeed),
+        structured: buildStructuredSuggestion(field, suggestion, context),
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

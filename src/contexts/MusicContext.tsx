@@ -68,7 +68,26 @@ export interface CreateMusicInput {
   albumTracks?: TrackConfig[];
 }
 
-type AiAction = 'suggest' | 'enhance';
+type AiAction = 'suggest' | 'enhance' | 'new';
+
+export interface StructuredPromptSuggestion {
+  genre: string[];
+  mood: string;
+  energy: string;
+  tempo: string;
+  artist_inspiration: string;
+  lyrics: string;
+  description: string;
+  prompt: string;
+}
+
+export interface AiSuggestionResult {
+  field: string;
+  action: AiAction;
+  suggestion: string | null;
+  seed?: string;
+  structured?: StructuredPromptSuggestion | null;
+}
 
 interface MusicContextType {
   creations: MusicCreation[];
@@ -79,7 +98,7 @@ interface MusicContextType {
   setCurrentCreation: (creation: MusicCreation | null) => void;
   refreshCreations: () => Promise<void>;
   retryTrack: (trackId: string, creationId: string) => Promise<void>;
-  aiSuggest: (field: string, value: string, context: Record<string, any>, action?: AiAction) => Promise<string | null>;
+  aiSuggest: (field: string, value: string, context: Record<string, any>, action?: AiAction) => Promise<AiSuggestionResult | null>;
 }
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
@@ -807,7 +826,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const aiSuggestQueueRef = useRef(Promise.resolve());
 
-  const aiSuggest = async (field: string, value: string, context: Record<string, any>, action: AiAction = 'suggest'): Promise<string | null> => {
+  const aiSuggest = async (field: string, value: string, context: Record<string, any>, action: AiAction = 'suggest'): Promise<AiSuggestionResult | null> => {
     // Serialize requests to avoid flooding the API
     const result = aiSuggestQueueRef.current.then(async () => {
       const maxRetries = 2;
@@ -865,7 +884,13 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             suggestionHistoryRef.current.__global__.push(suggestion);
           }
 
-          return suggestion;
+          return {
+            field: data.field || field,
+            action: data.action || action,
+            suggestion,
+            seed: data.seed,
+            structured: data.structured || null,
+          };
         } catch (e) {
           if (attempt === maxRetries) { toast.error('Failed to get AI suggestion'); return null; }
           await new Promise(r => setTimeout(r, (attempt + 1) * 2000));

@@ -16,7 +16,7 @@ import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/contexts/AuthContext';
-import { useMusic } from '@/contexts/MusicContext';
+import { useMusic, type AiSuggestionResult } from '@/contexts/MusicContext';
 import { usePlayer, PlayerTrack } from '@/contexts/PlayerContext';
 import { GENRES, LANGUAGES } from '@/data/genres';
 import { toast } from 'sonner';
@@ -61,6 +61,23 @@ const VOCAL_STRUCTURE_PRESETS = [
 
 const VOCAL_STYLE_PRESETS = ['Male Vocal', 'Female Vocal', 'Robotic Vocal', 'Rap Vocal', 'Choir Vocal', 'Whisper Vocal'];
 const VOCAL_EFFECTS_OPTIONS = ['Reverb', 'Delay', 'Chorus', 'Distortion', 'Autotune', 'Vocoder'];
+
+interface SongPromptState {
+  genre: string[];
+  mood: string;
+  energy: string;
+  tempo: number;
+  artist_inspiration: string;
+  lyrics: string;
+  description: string;
+  vocalLanguages: string[];
+  videoStyle: string;
+  vocalStructure: string;
+  vocalStyle: string;
+  vocalIntensity: number;
+  vocalEffects: string[];
+  songStructure: string;
+}
 
 export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick }) => {
   const { isAuthenticated } = useAuth();
@@ -121,6 +138,49 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
 
+  const getSongPromptState = useCallback((): SongPromptState => ({
+    genre: selectedGenres,
+    mood,
+    energy: mood,
+    tempo: tempoBpm,
+    artist_inspiration: artistInspiration,
+    lyrics,
+    description: musicPrompt,
+    vocalLanguages: selectedLanguages,
+    videoStyle,
+    vocalStructure,
+    vocalStyle,
+    vocalIntensity,
+    vocalEffects: selectedVocalEffects,
+    songStructure,
+  }), [
+    selectedGenres, mood, tempoBpm, artistInspiration, lyrics, musicPrompt,
+    selectedLanguages, videoStyle, vocalStructure, vocalStyle, vocalIntensity,
+    selectedVocalEffects, songStructure,
+  ]);
+
+  const applySongPromptState = useCallback((next: SongPromptState) => {
+    setSelectedGenres(next.genre);
+    setMood(next.mood);
+    setTempoBpm(next.tempo);
+    setArtistInspiration(next.artist_inspiration);
+    setLyrics(next.lyrics);
+    setMusicPrompt(next.description);
+    setSelectedLanguages(next.vocalLanguages);
+    setVideoStyle(next.videoStyle);
+    setVocalStructure(next.vocalStructure);
+    setVocalStyle(next.vocalStyle);
+    setVocalIntensity(next.vocalIntensity);
+    setSelectedVocalEffects(next.vocalEffects);
+    setSongStructure(next.songStructure);
+  }, []);
+
+  const updateSongPrompt = useCallback((updater: Partial<SongPromptState> | ((prev: SongPromptState) => SongPromptState)) => {
+    const prev = getSongPromptState();
+    const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
+    applySongPromptState(next);
+  }, [applySongPromptState, getSongPromptState]);
+
   // Sync album track count
   React.useEffect(() => {
     setAlbumTracks(prev => {
@@ -142,51 +202,69 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     vocalLanguages: selectedLanguages, lyrics, artistInspiration, videoStyle,
     tempoBpm, mood, vocalStructure, vocalStyle, vocalIntensity, vocalEffects: selectedVocalEffects,
     songStructure,
+    prompt: getSongPromptState(),
   });
+
+  const applyStructuredPromptSuggestion = (result: AiSuggestionResult) => {
+    const structured = result.structured;
+    if (!structured) return false;
+
+    updateSongPrompt(prev => ({
+      ...prev,
+      genre: structured.genre?.length ? Array.from(new Set([...prev.genre, ...structured.genre])) : prev.genre,
+      mood: structured.mood || prev.mood,
+      energy: structured.energy || prev.energy,
+      tempo: structured.tempo ? Math.max(60, Math.min(200, parseInt(structured.tempo) || prev.tempo)) : prev.tempo,
+      artist_inspiration: structured.artist_inspiration || prev.artist_inspiration,
+      lyrics: structured.lyrics || prev.lyrics,
+      description: structured.description || structured.prompt || result.suggestion || prev.description,
+    }));
+    return true;
+  };
 
   const applyToField = (field: string, value: string) => {
     switch (field) {
       case 'trackName': setTitle(value); break;
       case 'albumName': setAlbumName(value); break;
       case 'albumVibe': setAlbumVibe(value); break;
-      case 'prompt': setMusicPrompt(value); break;
+      case 'prompt': updateSongPrompt({ description: value }); break;
       case 'genres':
         // MERGE AI-suggested genres into existing selection instead of replacing
         const suggested = value.split(',').map(g => g.trim()).filter(Boolean);
         const validSuggested = suggested.filter(g => GENRES.includes(g));
         if (validSuggested.length > 0) {
-          setSelectedGenres(prev => {
-            const merged = new Set([...prev, ...validSuggested]);
-            return Array.from(merged);
-          });
+          updateSongPrompt(prev => ({
+            ...prev,
+            genre: Array.from(new Set([...prev.genre, ...validSuggested])),
+          }));
         }
         break;
-      case 'lyrics': setLyrics(value); break;
-      case 'artistInspiration': setArtistInspiration(value); break;
+      case 'lyrics': updateSongPrompt({ lyrics: value }); break;
+      case 'artistInspiration': updateSongPrompt({ artist_inspiration: value }); break;
       case 'vocalLanguage':
         // MERGE languages instead of replacing
         const langs = value.split(',').map(l => l.trim()).filter(l => LANGUAGES.includes(l));
         if (langs.length > 0) {
-          setSelectedLanguages(prev => {
-            const merged = new Set([...prev, ...langs]);
-            return Array.from(merged);
-          });
+          updateSongPrompt(prev => ({
+            ...prev,
+            vocalLanguages: Array.from(new Set([...prev.vocalLanguages, ...langs])),
+          }));
         }
         break;
-      case 'videoStyle': setVideoStyle(value); break;
-      case 'tempoBpm': { const p = parseInt(value); if (!isNaN(p)) setTempoBpm(Math.max(60, Math.min(200, p))); break; }
-      case 'mood': setMood(value); break;
-      case 'songStructure': setSongStructure(value); break;
-      case 'vocalStructure': setVocalStructure(value); break;
-      case 'vocalStyle': setVocalStyle(value); break;
-      case 'vocalIntensity': { const p = parseInt(value); if (!isNaN(p)) setVocalIntensity(Math.max(1, Math.min(10, p))); break; }
+      case 'videoStyle': updateSongPrompt({ videoStyle: value }); break;
+      case 'tempoBpm': { const p = parseInt(value); if (!isNaN(p)) updateSongPrompt({ tempo: Math.max(60, Math.min(200, p)) }); break; }
+      case 'mood': updateSongPrompt({ mood: value, energy: value }); break;
+      case 'songStructure': updateSongPrompt({ songStructure: value }); break;
+      case 'vocalStructure': updateSongPrompt({ vocalStructure: value }); break;
+      case 'vocalStyle': updateSongPrompt({ vocalStyle: value }); break;
+      case 'vocalIntensity': { const p = parseInt(value); if (!isNaN(p)) updateSongPrompt({ vocalIntensity: Math.max(1, Math.min(10, p)) }); break; }
       case 'vocalEffects':
         // MERGE effects instead of replacing
         const newEffects = value.split(',').map(e => e.trim()).filter(Boolean);
-        setSelectedVocalEffects(prev => {
-          const merged = new Set([...prev, ...newEffects]);
-          return Array.from(merged);
-        });
+        updateSongPrompt(prev => ({
+          ...prev,
+          vocalEffects: Array.from(new Set([...prev.vocalEffects, ...newEffects])),
+        }));
         break;
       case 'duration': { const p = parseInt(value); if (!isNaN(p)) { const clamped = Math.max(30, Math.min(600, p)); setDurationSeconds(clamped); setHours(Math.floor(clamped / 3600)); setMinutes(Math.floor((clamped % 3600) / 60)); setSeconds(clamped % 60); } break; }
     }
@@ -221,9 +299,13 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const handleAiSuggest = async (field: string) => {
     const key = `suggest-${field}`;
     startLoading(key);
-    const suggestion = await aiSuggest(field, getFieldValue(field), getFormContext(), 'suggest');
+    const result = await aiSuggest(field, getFieldValue(field), getFormContext(), 'suggest');
     stopLoading(key);
-    if (suggestion) applyToField(field, suggestion);
+    if (field === 'prompt' && result?.structured) {
+      applyStructuredPromptSuggestion(result);
+      return;
+    }
+    if (result?.suggestion) applyToField(field, result.suggestion);
   };
 
   const handleEnhance = async (field: string) => {
@@ -231,17 +313,25 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     if (!currentVal.trim()) { toast.error('Nothing to enhance'); return; }
     const key = `enhance-${field}`;
     startLoading(key);
-    const enhanced = await aiSuggest(field, currentVal, getFormContext(), 'enhance');
+    const result = await aiSuggest(field, currentVal, getFormContext(), 'enhance');
     stopLoading(key);
-    if (enhanced) applyToField(field, enhanced);
+    if (field === 'prompt' && result?.structured) {
+      applyStructuredPromptSuggestion(result);
+      return;
+    }
+    if (result?.suggestion) applyToField(field, result.suggestion);
   };
 
   const handleNewSuggestion = async (field: string) => {
     const key = `new-${field}`;
     startLoading(key);
-    const suggestion = await aiSuggest(field, '', getFormContext(), 'suggest');
+    const result = await aiSuggest(field, '', getFormContext(), 'new');
     stopLoading(key);
-    if (suggestion) applyToField(field, suggestion);
+    if (field === 'prompt' && result?.structured) {
+      applyStructuredPromptSuggestion(result);
+      return;
+    }
+    if (result?.suggestion) applyToField(field, result.suggestion);
   };
 
   const handleClear = (field: string) => {
@@ -249,19 +339,19 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'trackName': setTitle(''); break;
       case 'albumName': setAlbumName(''); break;
       case 'albumVibe': setAlbumVibe(''); break;
-      case 'prompt': setMusicPrompt(''); break;
-      case 'genres': setSelectedGenres([]); break;
-      case 'lyrics': setLyrics(''); break;
-      case 'artistInspiration': setArtistInspiration(''); break;
-      case 'vocalLanguage': setSelectedLanguages([]); break;
-      case 'videoStyle': setVideoStyle(''); break;
-      case 'tempoBpm': setTempoBpm(120); break;
-      case 'mood': setMood(''); break;
-      case 'songStructure': setSongStructure(''); break;
-      case 'vocalStructure': setVocalStructure('Instrumental'); break;
-      case 'vocalStyle': setVocalStyle(''); break;
-      case 'vocalIntensity': setVocalIntensity(5); break;
-      case 'vocalEffects': setSelectedVocalEffects([]); break;
+      case 'prompt': updateSongPrompt({ description: '' }); break;
+      case 'genres': updateSongPrompt({ genre: [] }); break;
+      case 'lyrics': updateSongPrompt({ lyrics: '' }); break;
+      case 'artistInspiration': updateSongPrompt({ artist_inspiration: '' }); break;
+      case 'vocalLanguage': updateSongPrompt({ vocalLanguages: [] }); break;
+      case 'videoStyle': updateSongPrompt({ videoStyle: '' }); break;
+      case 'tempoBpm': updateSongPrompt({ tempo: 120 }); break;
+      case 'mood': updateSongPrompt({ mood: '', energy: '' }); break;
+      case 'songStructure': updateSongPrompt({ songStructure: '' }); break;
+      case 'vocalStructure': updateSongPrompt({ vocalStructure: 'Instrumental' }); break;
+      case 'vocalStyle': updateSongPrompt({ vocalStyle: '' }); break;
+      case 'vocalIntensity': updateSongPrompt({ vocalIntensity: 5 }); break;
+      case 'vocalEffects': updateSongPrompt({ vocalEffects: [] }); break;
       case 'duration': { setDurationSeconds(180); setHours(0); setMinutes(3); setSeconds(0); break; }
     }
   };
@@ -281,9 +371,18 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   React.useEffect(() => { updateFromInputs(); }, [hours, minutes, seconds, updateFromInputs]);
 
-  const toggleGenre = (genre: string) => setSelectedGenres(prev => prev.includes(genre) ? prev.filter(g => g !== genre) : [...prev, genre]);
-  const toggleLanguage = (lang: string) => setSelectedLanguages(prev => prev.includes(lang) ? prev.filter(l => l !== lang) : [...prev, lang]);
-  const toggleVocalEffect = (effect: string) => setSelectedVocalEffects(prev => prev.includes(effect) ? prev.filter(e => e !== effect) : [...prev, effect]);
+  const toggleGenre = (genre: string) => updateSongPrompt(prev => ({
+    ...prev,
+    genre: prev.genre.includes(genre) ? prev.genre.filter(g => g !== genre) : [...prev.genre, genre],
+  }));
+  const toggleLanguage = (lang: string) => updateSongPrompt(prev => ({
+    ...prev,
+    vocalLanguages: prev.vocalLanguages.includes(lang) ? prev.vocalLanguages.filter(l => l !== lang) : [...prev.vocalLanguages, lang],
+  }));
+  const toggleVocalEffect = (effect: string) => updateSongPrompt(prev => ({
+    ...prev,
+    vocalEffects: prev.vocalEffects.includes(effect) ? prev.vocalEffects.filter(e => e !== effect) : [...prev.vocalEffects, effect],
+  }));
 
   const filteredGenres = GENRES.filter(g => g.toLowerCase().includes(genreSearch.toLowerCase()));
 
@@ -532,7 +631,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                   <AiToolbar field="prompt" />
                 </div>
-                <Textarea placeholder="e.g., A dreamy nostalgic sunset vibe with warm synths..." value={musicPrompt} onChange={e => setMusicPrompt(e.target.value)} className="bg-input border-border min-h-32 resize-none" />
+                <Textarea placeholder="e.g., A dreamy nostalgic sunset vibe with warm synths..." value={musicPrompt} onChange={e => updateSongPrompt({ description: e.target.value })} className="bg-input border-border min-h-32 resize-none" />
               </motion.div>
 
               {/* Genres */}
@@ -569,7 +668,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                   <AiToolbar field="tempoBpm" />
                 </div>
-                <Slider value={[tempoBpm]} onValueChange={v => setTempoBpm(v[0])} min={60} max={200} step={1} className="mb-3" />
+                <Slider value={[tempoBpm]} onValueChange={v => updateSongPrompt({ tempo: v[0] })} min={60} max={200} step={1} className="mb-3" />
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>60 BPM (Slow)</span><span>200 BPM (Fast)</span>
                 </div>
@@ -610,7 +709,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <Label className="text-foreground font-medium">Mood</Label>
                   <AiToolbar field="mood" />
                 </div>
-                <Input placeholder="e.g., Dark, euphoric, melancholic, aggressive..." value={mood} onChange={e => setMood(e.target.value)} className="bg-input border-border" />
+                <Input placeholder="e.g., Dark, euphoric, melancholic, aggressive..." value={mood} onChange={e => updateSongPrompt({ mood: e.target.value, energy: e.target.value })} className="bg-input border-border" />
               </motion.div>
 
               {/* Song Structure */}
@@ -619,10 +718,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <Label className="text-foreground font-medium">Song Structure</Label>
                   <AiToolbar field="songStructure" />
                 </div>
-                <Input placeholder="e.g., Intro → Verse → Chorus → Outro" value={songStructure} onChange={e => setSongStructure(e.target.value)} className="bg-input border-border" />
+                <Input placeholder="e.g., Intro → Verse → Chorus → Outro" value={songStructure} onChange={e => updateSongPrompt({ songStructure: e.target.value })} className="bg-input border-border" />
                 <div className="flex flex-wrap gap-1.5 mt-3">
                   {SONG_STRUCTURE_PRESETS.map(p => (
-                    <button key={p} onClick={() => setSongStructure(p)} className={`px-2 py-1 text-xs rounded-md border transition-smooth ${songStructure === p ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>{p.length > 40 ? p.slice(0, 40) + '...' : p}</button>
+                    <button key={p} onClick={() => updateSongPrompt({ songStructure: p })} className={`px-2 py-1 text-xs rounded-md border transition-smooth ${songStructure === p ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>{p.length > 40 ? p.slice(0, 40) + '...' : p}</button>
                   ))}
                 </div>
               </motion.div>
@@ -637,11 +736,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <AiToolbar field="vocalStructure" />
                 </div>
                 <div className="relative" ref={vocalStructureRef}>
-                  <Input placeholder="Type or select..." value={vocalStructure} onChange={e => setVocalStructure(e.target.value)} onFocus={() => setShowVocalStructureDropdown(true)} className="bg-input border-border" />
+                  <Input placeholder="Type or select..." value={vocalStructure} onChange={e => updateSongPrompt({ vocalStructure: e.target.value })} onFocus={() => setShowVocalStructureDropdown(true)} className="bg-input border-border" />
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <PortalDropdown open={showVocalStructureDropdown} onClose={() => setShowVocalStructureDropdown(false)} triggerRef={vocalStructureRef as React.RefObject<HTMLElement>} matchTriggerWidth>
                     {VOCAL_STRUCTURE_PRESETS.map(preset => (
-                      <button key={preset} onClick={() => { setVocalStructure(preset); setShowVocalStructureDropdown(false); }} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${vocalStructure === preset ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{preset}</button>
+                      <button key={preset} onClick={() => { updateSongPrompt({ vocalStructure: preset }); setShowVocalStructureDropdown(false); }} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${vocalStructure === preset ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{preset}</button>
                     ))}
                   </PortalDropdown>
                 </div>
@@ -657,11 +756,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <AiToolbar field="vocalStyle" />
                 </div>
                 <div className="relative" ref={vocalStyleRef}>
-                  <Input placeholder="Type or select..." value={vocalStyle} onChange={e => setVocalStyle(e.target.value)} onFocus={() => setShowVocalStyleDropdown(true)} className="bg-input border-border" />
+                  <Input placeholder="Type or select..." value={vocalStyle} onChange={e => updateSongPrompt({ vocalStyle: e.target.value })} onFocus={() => setShowVocalStyleDropdown(true)} className="bg-input border-border" />
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <PortalDropdown open={showVocalStyleDropdown} onClose={() => setShowVocalStyleDropdown(false)} triggerRef={vocalStyleRef as React.RefObject<HTMLElement>} matchTriggerWidth>
                     {VOCAL_STYLE_PRESETS.map(preset => (
-                      <button key={preset} onClick={() => { setVocalStyle(preset); setShowVocalStyleDropdown(false); }} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${vocalStyle === preset ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{preset}</button>
+                      <button key={preset} onClick={() => { updateSongPrompt({ vocalStyle: preset }); setShowVocalStyleDropdown(false); }} className={`w-full text-left px-4 py-2 hover:bg-secondary transition-smooth ${vocalStyle === preset ? 'bg-primary/10 text-primary' : 'text-foreground'}`}>{preset}</button>
                     ))}
                   </PortalDropdown>
                 </div>
@@ -677,7 +776,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                   <AiToolbar field="vocalIntensity" />
                 </div>
-                <Slider value={[vocalIntensity]} onValueChange={v => setVocalIntensity(v[0])} min={1} max={10} step={1} className="mb-3" />
+                <Slider value={[vocalIntensity]} onValueChange={v => updateSongPrompt({ vocalIntensity: v[0] })} min={1} max={10} step={1} className="mb-3" />
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>1 — Soft whisper</span><span>10 — Powerful performance</span>
                 </div>
@@ -753,7 +852,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                   <AiToolbar field="lyrics" />
                 </div>
-                <Textarea placeholder="e.g., A story about finding hope after loss..." value={lyrics} onChange={e => setLyrics(e.target.value)} className="bg-input border-border min-h-32 resize-none" />
+                <Textarea placeholder="e.g., A story about finding hope after loss..." value={lyrics} onChange={e => updateSongPrompt({ lyrics: e.target.value })} className="bg-input border-border min-h-32 resize-none" />
               </motion.div>
 
               {/* Artist Inspiration */}
@@ -765,7 +864,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                   <AiToolbar field="artistInspiration" />
                 </div>
-                <Input placeholder="e.g., Tame Impala, Daft Punk, Billie Eilish..." value={artistInspiration} onChange={e => setArtistInspiration(e.target.value)} className="bg-input border-border" />
+                <Input placeholder="e.g., Tame Impala, Daft Punk, Billie Eilish..." value={artistInspiration} onChange={e => updateSongPrompt({ artist_inspiration: e.target.value })} className="bg-input border-border" />
               </motion.div>
 
               {/* Video */}
@@ -790,7 +889,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                         </div>
                         <AiToolbar field="videoStyle" />
                       </div>
-                      <Input placeholder="e.g., Abstract geometric visuals, neon colors..." value={videoStyle} onChange={e => setVideoStyle(e.target.value)} className="bg-input border-border" />
+                      <Input placeholder="e.g., Abstract geometric visuals, neon colors..." value={videoStyle} onChange={e => updateSongPrompt({ videoStyle: e.target.value })} className="bg-input border-border" />
                     </motion.div>
                   )}
                 </AnimatePresence>
