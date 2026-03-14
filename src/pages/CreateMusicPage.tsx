@@ -80,7 +80,7 @@ interface SongPromptState {
 
 export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick }) => {
   const { isAuthenticated } = useAuth();
-  const { createMusic, currentCreation, isCreating, aiSuggest, updateFormState } = useMusic();
+  const { createMusic, currentCreation, isCreating, aiSuggest, updateFormState, suggestionState } = useMusic();
   const player = usePlayer();
   const [mode, setMode] = useState<'song' | 'album'>('song');
   
@@ -123,8 +123,6 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const vocalStyleRef = useRef<HTMLDivElement>(null);
   const vocalEffectsRef = useRef<HTMLDivElement>(null);
   const languageRef = useRef<HTMLDivElement>(null);
-
-  const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
 
   const getSongPromptState = useCallback((): SongPromptState => ({
     genre: selectedGenres,
@@ -305,10 +303,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const stopLoading = (key: string) => setLoadingActions(prev => { const next = new Set(prev); next.delete(key); return next; });
 
   const handleAiSuggest = async (field: string) => {
-    const key = `suggest-${field}`;
-    startLoading(key);
     const result = await aiSuggest(field, getFieldValue(field), getFormContext(), 'suggest');
-    stopLoading(key);
     if (field === 'prompt' && result?.structured) {
       applyStructuredPromptSuggestion(result);
       return;
@@ -319,10 +314,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const handleEnhance = async (field: string) => {
     const currentVal = getFieldValue(field);
     if (!currentVal.trim()) { toast.error('Nothing to enhance'); return; }
-    const key = `enhance-${field}`;
-    startLoading(key);
     const result = await aiSuggest(field, currentVal, getFormContext(), 'enhance');
-    stopLoading(key);
     if (field === 'prompt' && result?.structured) {
       applyStructuredPromptSuggestion(result);
       return;
@@ -331,10 +323,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   };
 
   const handleNewSuggestion = async (field: string) => {
-    const key = `new-${field}`;
-    startLoading(key);
     const result = await aiSuggest(field, '', getFormContext(), 'new');
-    stopLoading(key);
     if (field === 'prompt' && result?.structured) {
       applyStructuredPromptSuggestion(result);
       return;
@@ -474,29 +463,20 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     }
   };
 
-  const isFieldLoading = (field: string) => 
-    loadingActions.has(`suggest-${field}`) || loadingActions.has(`enhance-${field}`) || loadingActions.has(`new-${field}`);
-  const getActiveAction = (field: string): string => {
-    if (loadingActions.has(`suggest-${field}`)) return 'suggest';
-    if (loadingActions.has(`enhance-${field}`)) return 'enhance';
-    if (loadingActions.has(`new-${field}`)) return 'new';
-    return '';
-  };
-
   const AiToolbar: React.FC<{ field: string }> = ({ field }) => {
-    const currentAction = getActiveAction(field);
+    const isLoading = !!suggestionState.loading[field];
     return (
       <div className="flex items-center gap-1.5 flex-wrap">
-        <Button variant="outline" size="sm" onClick={() => handleAiSuggest(field)} disabled={currentAction === 'suggest'} className="text-xs h-7 px-2 border-primary/30 text-primary hover:bg-primary/10">
-          {currentAction === 'suggest' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Wand2 className="w-3 h-3 mr-1" />} AI Suggest
+        <Button variant="outline" size="sm" onClick={() => handleAiSuggest(field)} disabled={isLoading} className="text-xs h-7 px-2 border-primary/30 text-primary hover:bg-primary/10">
+          {isLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Wand2 className="w-3 h-3 mr-1" />} AI Suggest
         </Button>
-        <Button variant="outline" size="sm" onClick={() => handleEnhance(field)} disabled={currentAction === 'enhance'} className="text-xs h-7 px-2 border-accent/30 text-accent hover:bg-accent/10">
-          {currentAction === 'enhance' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Zap className="w-3 h-3 mr-1" />} Enhance
+        <Button variant="outline" size="sm" onClick={() => handleEnhance(field)} disabled={isLoading} className="text-xs h-7 px-2 border-accent/30 text-accent hover:bg-accent/10">
+          {isLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Zap className="w-3 h-3 mr-1" />} Enhance
         </Button>
-        <Button variant="outline" size="sm" onClick={() => handleNewSuggestion(field)} disabled={currentAction === 'new'} className="text-xs h-7 px-2 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50">
-          {currentAction === 'new' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />} New
+        <Button variant="outline" size="sm" onClick={() => handleNewSuggestion(field)} disabled={isLoading} className="text-xs h-7 px-2 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50">
+          {isLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />} New
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => handleClear(field)} disabled={isFieldLoading(field)} className="text-xs h-7 px-2 text-muted-foreground hover:text-destructive">
+        <Button variant="ghost" size="sm" onClick={() => handleClear(field)} disabled={isLoading} className="text-xs h-7 px-2 text-muted-foreground hover:text-destructive">
           <Trash2 className="w-3 h-3 mr-1" /> Clear
         </Button>
       </div>

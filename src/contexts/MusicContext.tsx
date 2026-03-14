@@ -112,6 +112,12 @@ export interface AiSuggestionResult {
   structured?: StructuredPromptSuggestion | null;
 }
 
+export interface AiSuggestionState {
+  loading: Record<string, boolean>;
+  results: Record<string, AiSuggestionResult | null>;
+  lastRequestId: Record<string, string>;
+}
+
 interface MusicContextType {
   creations: MusicCreation[];
   currentCreation: MusicCreation | null;
@@ -124,6 +130,7 @@ interface MusicContextType {
   refreshCreations: () => Promise<void>;
   retryTrack: (trackId: string, creationId: string) => Promise<void>;
   aiSuggest: (field: string, value: string, context?: Record<string, any>, action?: AiAction) => Promise<AiSuggestionResult | null>;
+  suggestionState: AiSuggestionState;
 }
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
@@ -153,8 +160,19 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     durationSeconds: 120,
     generateVideo: true,
     vocalLanguages: ['English'],
+    tempo: 120,
+    mood: '',
+    vocalStyle: '',
+    songStructure: '',
   });
+  const [suggestionState, setSuggestionState] = useState<AiSuggestionState>({
+    loading: {},
+    results: {},
+    lastRequestId: {},
+  });
+
   const realtimeChannelRef = useRef<any>(null);
+  const abortControllersRef = useRef<Record<string, AbortController>>({});
 
   const updateFormState = useCallback((updates: Partial<FormState>) => {
     setFormState(prev => ({ ...prev, ...updates }));
@@ -846,34 +864,50 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const suggestionGenreFamilyHistoryRef = useRef<string[]>([]);
 
   const GENRE_FAMILIES = [
-    'Electronic', 'Hip Hop / Trap', 'Rock / Metal', 'Pop',
+    'Electronic / Dance', 'Rock / Alternative', 'Hip-Hop / Rap', 'Pop',
     'Jazz / Blues', 'Classical / Orchestral', 'World',
     'Ambient / Lo-fi', 'Reggae', 'Latin', 'Indian', 'Experimental'
   ];
 
-  const aiSuggestQueueRef = useRef(Promise.resolve());
-
-  const aiSuggest = async (field: string, value: string, context?: Record<string, any>, action: AiAction = 'suggest'): Promise<AiSuggestionResult | null> => {
+  const aiSuggest = async (
+    field: string, 
+    value: string, 
+    context?: Record<string, any>, 
+    action: AiAction = 'suggest'
+  ): Promise<AiSuggestionResult | null> => {
     const effectiveContext = context || formState;
-    // Serialize requests to avoid flooding the API
-    const result = aiSuggestQueueRef.current.then(async () => {
-      const maxRetries = 2;
+    
+    // 1. Cancel previous request for THIS field
+    if (abortControllersRef.current[field]) {
+      abortControllersRef.current[field].abort();
+    }
+    const controller = new AbortController();
+    abortControllersRef.current[field] = controller;
+
+    // 2. Generate unique Request ID
+    const requestId = crypto.randomUUID();
+    setSuggestionState(prev => ({
+      ...prev,
+      loading: { ...prev.loading, [field]: true },
+      lastRequestId: { ...prev.lastRequestId, [field]: requestId }
+    }));
+
+    try {
       const history = suggestionHistoryRef.current[field] || [];
       const globalHistory = suggestionHistoryRef.current.__global__ || [];
       const dna = createGenerationDNA();
-      // Use crypto-grade random seed for each suggestion request
       const randomSeed = getGenerationSeedNumber(dna);
-      const requestNonce = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${randomSeed}`;
+      
       const previousSuggestions = Array.from(new Set([
         ...history.slice(-10),
         ...globalHistory.slice(-25),
       ]));
 
+      const maxRetries = 2;
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        if (controller.signal.aborted) return null;
+
         try {
-          // Track genre family rotation
           const lastFam = suggestionGenreFamilyHistoryRef.current[suggestionGenreFamilyHistoryRef.current.length - 1];
           const nextFamIndex = (GENRE_FAMILIES.indexOf(lastFam || '') + 1) % GENRE_FAMILIES.length;
           const targetGenreFamily = GENRE_FAMILIES[nextFamIndex];
@@ -885,60 +919,91 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
               'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
               'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
             },
+            signal: controller.signal,
             body: JSON.stringify({
               field, value, context: effectiveContext, action,
               previousSuggestions,
               previousGenreFamilies: suggestionGenreFamilyHistoryRef.current.slice(-12),
-              targetGenreFamily, // Force rotation
+              targetGenreFamily,
               randomSeed,
-              requestNonce,
+              requestNonce: requestId,
               generationDNA: dna,
             }),
           });
 
           if (response.status === 429 && attempt < maxRetries) {
-            const retryJitter = createRng(randomSeed ^ ((attempt + 1) * 0x9e3779b9));
-            const delay = Math.min(1000 * Math.pow(2, attempt) + retryJitter() * 500, 5000);
+            const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 5000);
             await new Promise(r => setTimeout(r, delay));
             continue;
           }
 
           if (!response.ok) {
             const err = await response.json();
-            toast.error(err.error || 'AI suggestion failed');
-            return null;
+            throw new Error(err.error || 'AI suggestion failed');
           }
 
           const data = await response.json();
-          const suggestion = data.suggestion || null;
+          
+          // 3. VALIDATE REQUEST ID BEFORE UPDATING STATE
+          setSuggestionState(prev => {
+            if (prev.lastRequestId[field] !== requestId) {
+              console.log(`[MusicContext] Ignoring stale response for ${field}`);
+              return prev;
+            }
+            
+            const result: AiSuggestionResult = {
+              field: data.field || field,
+              action: data.action || action,
+              suggestion: data.suggestion || null,
+              seed: data.seed,
+              genreFamily: data.genreFamily,
+              structured: data.structured || null,
+            };
 
-          if (suggestion) {
+            return {
+              ...prev,
+              loading: { ...prev.loading, [field]: false },
+              results: { ...prev.results, [field]: result }
+            };
+          });
+
+          if (data.suggestion) {
             if (!suggestionHistoryRef.current[field]) suggestionHistoryRef.current[field] = [];
-            suggestionHistoryRef.current[field].push(suggestion);
+            suggestionHistoryRef.current[field].push(data.suggestion);
             if (!suggestionHistoryRef.current.__global__) suggestionHistoryRef.current.__global__ = [];
-            suggestionHistoryRef.current.__global__.push(suggestion);
+            suggestionHistoryRef.current.__global__.push(data.suggestion);
           }
           if (data.genreFamily) {
             suggestionGenreFamilyHistoryRef.current.push(data.genreFamily);
           }
 
+          // Return result directly for immediate use if needed (e.g. prompt builder)
           return {
             field: data.field || field,
             action: data.action || action,
-            suggestion,
+            suggestion: data.suggestion || null,
             seed: data.seed,
             genreFamily: data.genreFamily,
             structured: data.structured || null,
           };
-        } catch (e) {
-          if (attempt === maxRetries) { toast.error('Failed to get AI suggestion'); return null; }
-          await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
+
+        } catch (e: any) {
+          if (e.name === 'AbortError') return null;
+          if (attempt === maxRetries) throw e;
+          await new Promise(r => setTimeout(r, (attempt + 1) * 1000));
         }
       }
       return null;
-    });
-    aiSuggestQueueRef.current = result.then(() => { }, () => { });
-    return result;
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        toast.error(err.message || 'Failed to get AI suggestion');
+      }
+      setSuggestionState(prev => ({
+        ...prev,
+        loading: { ...prev.loading, [field]: false }
+      }));
+      return null;
+    }
   };
 
   const refreshCreations = async () => { await fetchCreations(); };
@@ -979,6 +1044,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       creations, currentCreation, isLoading, isCreating,
       formState, updateFormState,
       createMusic, setCurrentCreation, refreshCreations, retryTrack, aiSuggest,
+      suggestionState,
     }}>
       {children}
     </MusicContext.Provider>

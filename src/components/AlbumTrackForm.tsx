@@ -13,6 +13,7 @@ import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { GENRE_OPTIONS, normalizeGenreOptions, genreOptionsToLabels, type GenreOption } from '@/data/genres';
 import { SmartSearchInput } from '@/components/ui/smart-search-input';
+import { useMusic } from '@/contexts/MusicContext';
 import { 
   LANGUAGES, 
   PRESET_MOODS, 
@@ -71,12 +72,9 @@ interface AlbumTrackFormProps {
 }
 
 export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, onChange, albumVibe, aiSuggest }) => {
+  const { suggestionState } = useMusic();
   const [expanded, setExpanded] = useState(index === 0);
-  const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
   const update = (partial: Partial<TrackConfig>) => onChange({ ...config, ...partial });
-
-  const startLoading = (key: string) => setLoadingActions(prev => new Set(prev).add(key));
-  const stopLoading = (key: string) => setLoadingActions(prev => { const n = new Set(prev); n.delete(key); return n; });
 
   const getContext = () => ({ ...config, trackIndex: index });
 
@@ -162,11 +160,8 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
   };
 
   const handleAiAction = async (field: string, action: 'suggest' | 'enhance' | 'new') => {
-    const key = `${action}-${field}`;
-    startLoading(key);
     const val = action === 'new' ? '' : getFieldValue(field);
     const result = await aiSuggest(field, val, { ...getContext(), genres: genreOptionsToLabels(config.genres) }, action);
-    stopLoading(key);
     if (result?.structured && field === 'prompt') {
       const { genre, mood, tempo, artist_inspiration, lyrics, description } = result.structured;
       update({
@@ -182,30 +177,27 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
     if (result?.suggestion) applyToField(field, result.suggestion);
   };
 
-  const isFieldLoading = (field: string) =>
-    loadingActions.has(`suggest-${field}`) || loadingActions.has(`enhance-${field}`) || loadingActions.has(`new-${field}`);
+  const isFieldLoading = (field: string) => !!suggestionState.loading[field];
 
   const getActiveAction = (field: string): string => {
-    if (loadingActions.has(`suggest-${field}`)) return 'suggest';
-    if (loadingActions.has(`enhance-${field}`)) return 'enhance';
-    if (loadingActions.has(`new-${field}`)) return 'new';
-    return '';
+    // This is a simplification; the context now handles loading generally for the field
+    return suggestionState.loading[field] ? 'loading' : '';
   };
 
   const AiToolbar: React.FC<{ field: string }> = ({ field }) => {
-    const currentAction = getActiveAction(field);
+    const isLoading = isFieldLoading(field);
     return (
       <div className="flex items-center gap-1.5 flex-wrap">
-        <Button variant="outline" size="sm" onClick={() => handleAiAction(field, 'suggest')} disabled={currentAction === 'suggest'} className="text-xs h-7 px-2 border-primary/30 text-primary hover:bg-primary/10">
-          {currentAction === 'suggest' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Wand2 className="w-3 h-3 mr-1" />} AI
+        <Button variant="outline" size="sm" onClick={() => handleAiAction(field, 'suggest')} disabled={isLoading} className="text-xs h-7 px-2 border-primary/30 text-primary hover:bg-primary/10">
+          {isLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Wand2 className="w-3 h-3 mr-1" />} AI
         </Button>
-        <Button variant="outline" size="sm" onClick={() => handleAiAction(field, 'enhance')} disabled={currentAction === 'enhance'} className="text-xs h-7 px-2 border-accent/30 text-accent hover:bg-accent/10">
-          {currentAction === 'enhance' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Zap className="w-3 h-3 mr-1" />} Enhance
+        <Button variant="outline" size="sm" onClick={() => handleAiAction(field, 'enhance')} disabled={isLoading} className="text-xs h-7 px-2 border-accent/30 text-accent hover:bg-accent/10">
+          {isLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Zap className="w-3 h-3 mr-1" />} Enhance
         </Button>
-        <Button variant="outline" size="sm" onClick={() => handleAiAction(field, 'new')} disabled={currentAction === 'new'} className="text-xs h-7 px-2 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50">
-          {currentAction === 'new' ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />} New
+        <Button variant="outline" size="sm" onClick={() => handleAiAction(field, 'new')} disabled={isLoading} className="text-xs h-7 px-2 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50">
+          {isLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />} New
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => handleClearField(field)} disabled={isFieldLoading(field)} className="text-xs h-7 px-2 text-muted-foreground hover:text-destructive">
+        <Button variant="ghost" size="sm" onClick={() => handleClearField(field)} disabled={isLoading} className="text-xs h-7 px-2 text-muted-foreground hover:text-destructive">
           <Trash2 className="w-3 h-3 mr-1" /> Clear
         </Button>
       </div>
