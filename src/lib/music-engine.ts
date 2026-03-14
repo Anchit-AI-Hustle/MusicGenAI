@@ -684,6 +684,13 @@ export interface GenerateTrackResult {
   blob: Blob;
   instrumentalBuffer: AudioBuffer;
   rngState: number;
+  diagnostics: {
+    stemFamilies: string[];
+    arrangementSignature: string;
+    instrumentationSignature: string;
+    tempo: number;
+    sectionNames: string[];
+  };
 }
 
 export async function generateTrack(
@@ -808,7 +815,18 @@ export async function generateTrack(
 
   onProgress('mastering_track', 0.65);
 
-  return { blob: masterResult.blob, instrumentalBuffer, rngState: seedVal };
+  return {
+    blob: masterResult.blob,
+    instrumentalBuffer,
+    rngState: seedVal,
+    diagnostics: {
+      stemFamilies: ['drums', 'bass', 'melody', 'effects', ...(profile.instruments.some((instrument) => /pad|strings|keys|organ/i.test(instrument)) ? ['pads'] : [])],
+      arrangementSignature: sections.map((section) => `${section.name}:${section.duration.toFixed(2)}:${section.energy.toFixed(2)}`).join('|'),
+      instrumentationSignature: profile.instruments.join('|'),
+      tempo: effectiveTempo,
+      sectionNames: sections.map((section) => section.name),
+    },
+  };
 }
 
 function copyAudioBuffer(buffer: AudioBuffer): AudioBuffer {

@@ -5,6 +5,7 @@ import { PlayerProvider, usePlayer } from '@/contexts/PlayerContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { GlobalPlayer } from '@/components/player/GlobalPlayer';
+import { SystemDemoDiagnostics } from '@/components/system/SystemDemoDiagnostics';
 import { HomePage } from './HomePage';
 import { CreateMusicPage } from './CreateMusicPage';
 import { DashboardPage } from './DashboardPage';
@@ -64,6 +65,7 @@ const AppContent: React.FC = () => {
       <main className={`${isMobile ? "pt-16" : "ml-64 transition-all duration-300"} ${currentTrack ? 'pb-24' : ''}`}>
         {renderPage()}
       </main>
+      <SystemDemoDiagnostics />
       <GlobalPlayer />
       <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </div>

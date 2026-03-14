@@ -229,6 +229,14 @@ interface AudioVisualAnalysis {
   transitionFlags: boolean[];
 }
 
+export interface AudioVisualDiagnostics {
+  averageEnergy: number;
+  averageBeatStrength: number;
+  transitionCount: number;
+  bassVariance: number;
+  spectrumVariance: number;
+}
+
 export interface VideoGenerationProgress {
   stage: string;
   progress: number;
@@ -330,6 +338,38 @@ function analyzeAudioForVisuals(
     beatStrengths,
     transitionFlags,
   };
+}
+
+export async function analyzeAudioVisualDiagnosticsFromUrl(
+  audioUrl: string,
+  durationSeconds: number,
+): Promise<AudioVisualDiagnostics> {
+  const audioContext = new AudioContext();
+  try {
+    const audioResponse = await fetch(audioUrl);
+    const audioArrayBuffer = await audioResponse.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(audioArrayBuffer);
+    const analysis = analyzeAudioForVisuals(audioBuffer, durationSeconds);
+
+    const averageEnergy = analysis.frameEnergies.reduce((sum, value) => sum + value, 0) / Math.max(1, analysis.frameEnergies.length);
+    const averageBeatStrength = analysis.beatStrengths.reduce((sum, value) => sum + value, 0) / Math.max(1, analysis.beatStrengths.length);
+    const transitionCount = analysis.transitionFlags.filter(Boolean).length;
+    const bassMean = analysis.frameBass.reduce((sum, value) => sum + value, 0) / Math.max(1, analysis.frameBass.length);
+    const bassVariance = analysis.frameBass.reduce((sum, value) => sum + Math.pow(value - bassMean, 2), 0) / Math.max(1, analysis.frameBass.length);
+    const spectrumCombined = analysis.frameBass.map((bass, index) => bass + (analysis.frameMid[index] || 0) + (analysis.frameHigh[index] || 0));
+    const spectrumMean = spectrumCombined.reduce((sum, value) => sum + value, 0) / Math.max(1, spectrumCombined.length);
+    const spectrumVariance = spectrumCombined.reduce((sum, value) => sum + Math.pow(value - spectrumMean, 2), 0) / Math.max(1, spectrumCombined.length);
+
+    return {
+      averageEnergy,
+      averageBeatStrength,
+      transitionCount,
+      bassVariance,
+      spectrumVariance,
+    };
+  } finally {
+    await audioContext.close().catch(() => undefined);
+  }
 }
 
 /**
