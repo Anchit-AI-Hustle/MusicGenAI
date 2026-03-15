@@ -6,7 +6,7 @@
 import { CreativeContext } from "@/types/creative-context";
 import { findVocalProfileByGenreAndLanguage, VOCAL_PROFILES } from "@/lib/musicData/vocals";
 import { shouldRecommendHighQualityVocals } from "@/types/creative-context";
-import { modelVault } from "./model-vault";
+import { validateModelHash } from "./model-vault";
 
 export interface VocalSynthesisResponse {
   audioUrl: string;
@@ -38,14 +38,13 @@ export async function synthesizeVocals(
     };
   } else {
     // PATH 2: ACE-Step (Integrated, faster but varies in quality)
-    const modelId = "lucataco/ace-step";
-    const version = "e0b7496564917f46658097d7f7e91266ed0a1f09c6cd43685e985b2e6cb2aefb";
-    const validatedVersion = modelVault.validateModelHash(modelId, version);
+    const providerModelId = "lucataco/ace-step";
+    const validatedVersion = await validateModelHash("ace-step-vocal");
 
     return {
-      audioUrl: `https://replicate.com/${modelId}`,
+      audioUrl: `https://replicate.com/${providerModelId}`,
       provider: "replicate",
-      modelId: `${modelId}:${validatedVersion}`,
+      modelId: `${providerModelId}:${validatedVersion}`,
       isDualPath: false
     };
   }
