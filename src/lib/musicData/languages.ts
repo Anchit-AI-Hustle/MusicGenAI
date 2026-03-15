@@ -2,9 +2,16 @@ export interface LanguageDefinition {
   name: string;
   nativeScript: string;
   romanizationStyle: string;
+  // aceSupportTier: how reliably ACE-Step produces correct phonemes for this language.
+  // "primary" = trained heavily on this language, reliable output.
+  // "supported" = in training data, but phoneme accuracy varies run-to-run.
+  // "limited" = minimal training data, output often garbled or approximated.
   aceSupportTier: "primary" | "supported" | "limited";
   minimaxSupport: boolean;
-  syllableDensity: number; // relative to English = 1.0. Higher = more syllables per phrase
+  // elevenLabsMultilingualSupport: whether eleven_multilingual_v2 reliably handles
+  // this language. This is the high-quality vocal path for non-primary ACE languages.
+  elevenLabsMultilingualSupport: boolean;
+  syllableDensity: number;
   codemixPartners: string[];
   associatedGenres: string[];
   lyricsPromptInstruction: string;
@@ -20,6 +27,7 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Romanized Punjabi (no Gurmukhi script)",
     aceSupportTier: "supported",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 1.0,
     codemixPartners: ["English"],
     associatedGenres: ["Bhangra", "Punjabi Pop", "Punjabi Drill", "Desi Hip Hop"],
@@ -32,6 +40,7 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Romanized Hindi (Hinglish)",
     aceSupportTier: "primary",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 1.1,
     codemixPartners: ["English"],
     associatedGenres: ["Bollywood", "Desi Hip Hop", "Hindi Pop"],
@@ -44,6 +53,7 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Romanized Urdu",
     aceSupportTier: "supported",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 1.1,
     codemixPartners: ["English", "Hindi"],
     associatedGenres: ["Ghazal", "Qawwali", "Urdu Pop", "Pakistani Pop"],
@@ -56,6 +66,7 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Romanized Bengali",
     aceSupportTier: "supported",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 1.2,
     codemixPartners: ["English"],
     associatedGenres: ["Bangla Pop", "Rabindra Sangeet", "Bangla Rock"],
@@ -68,10 +79,11 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Romanized Tamil",
     aceSupportTier: "supported",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 1.3,
     codemixPartners: ["English"],
     associatedGenres: ["Tamil Pop", "Kollywood", "Tamil Folk"],
-    lyricsPromptInstruction: "Write in Tamil using romanized transliteration. Tamil cinema and pop music tradition. Words: en (my), nee (you), kadhal (love), vaanam (sky), manasu (heart), paadal (song), paarvaiyil (in sight), azhagu (beauty). Tamil lyrics have melodic cadence.",
+    lyricsPromptInstruction: "Write in Tamil using romanized transliteration. Tamil cinema and pop music tradition. Words: en (my), nee (you), kadhal (love), vaanam (sky), manasu (heart), paadal (song), azhagu (beauty). Tamil lyrics have melodic cadence.",
     exampleCodemix: "En manasu nee thaan, you are my everything, kadhal konjam crazy",
   },
   {
@@ -80,11 +92,12 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Romanized Telugu",
     aceSupportTier: "supported",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 1.3,
     codemixPartners: ["English"],
     associatedGenres: ["Tollywood", "Telugu Pop", "Telugu Folk"],
     lyricsPromptInstruction: "Write in Telugu using romanized transliteration. Telugu songs are known for poetic beauty. Words: nee, nenu, premalo, manasu, akasam, prema, navvulu, kallu, gundelu.",
-    exampleCodemix: "Nee kళla lo prema chusa, fell in love with your eyes, manasu maatladutondi",
+    exampleCodemix: "Nee kallalo prema chusa, fell in love with your eyes, manasu maatladutondi",
   },
 
   // ─── EAST ASIAN ──────────────────────────────────────────────────────────────
@@ -94,11 +107,12 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Romanized Korean (no Hangul script)",
     aceSupportTier: "primary",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 0.9,
     codemixPartners: ["English"],
     associatedGenres: ["K-Pop", "Korean R&B", "Korean Hip Hop"],
     lyricsPromptInstruction: "Write primarily in Korean using romanized romanization (no actual Hangul characters). Korean-English codemixing is standard in K-pop. Common words: saranghae (I love you), nae maeum (my heart), gateun (same), honja (alone), bimil (secret), haengbok (happy). At least 60% Korean phonetically.",
-    exampleCodemix: "Nae maeum sok gipeun곳 where only you exist, saranghae baby",
+    exampleCodemix: "Nae maeum gipeun gose where only you exist, saranghae baby",
   },
   {
     name: "Japanese",
@@ -106,6 +120,7 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Romaji (romanized Japanese)",
     aceSupportTier: "primary",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 1.5,
     codemixPartners: ["English"],
     associatedGenres: ["J-Pop", "Anime", "City Pop", "Japanese Rock"],
@@ -118,6 +133,7 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Pinyin romanization",
     aceSupportTier: "primary",
     minimaxSupport: true,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 0.8,
     codemixPartners: ["English"],
     associatedGenres: ["Mandopop", "Chinese R&B", "Chinese Hip Hop"],
@@ -132,6 +148,7 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Standard English",
     aceSupportTier: "primary",
     minimaxSupport: true,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 1.0,
     codemixPartners: [],
     associatedGenres: ["Pop", "Rock", "Hip Hop", "R&B", "Country", "EDM", "Metal"],
@@ -144,6 +161,7 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Standard Spanish",
     aceSupportTier: "primary",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 1.2,
     codemixPartners: ["English"],
     associatedGenres: ["Latin Pop", "Reggaeton", "Salsa", "Bachata", "Flamenco"],
@@ -156,6 +174,7 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Standard French",
     aceSupportTier: "primary",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 1.2,
     codemixPartners: ["English"],
     associatedGenres: ["French Pop", "Chanson", "French Hip Hop", "Electronic"],
@@ -164,14 +183,15 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
   },
   {
     name: "Portuguese",
-    nativeScript: "Latin alphabet",
-    romanizationStyle: "Standard Portuguese (Brazilian or European)",
+    nativeScript: "Latin alphabet (Standard Portuguese (Brazilian or European))",
+    romanizationStyle: "Standard Portuguese",
     aceSupportTier: "supported",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 1.2,
     codemixPartners: ["English", "Spanish"],
     associatedGenres: ["Bossa Nova", "Sertanejo", "Funk Carioca", "Brazilian Pop"],
-    lyricsPromptInstruction: "Write in Portuguese. Specify Brazilian Portuguese (softer, nasal vowels, more open) or European Portuguese. Bossa nova lyrics are poetic and understated. Funk Carioca (Brazilian funk) is more street-level.",
+    lyricsPromptInstruction: "Write in Portuguese. Specify Brazilian Portuguese (softer, nasal vowels, more open) or European Portuguese. Bossa nova lyrics are poetic and understated.",
     exampleCodemix: "Meu amor, meu coração, you are everything to me, sem você não vivo",
   },
   {
@@ -180,10 +200,11 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Standard German",
     aceSupportTier: "supported",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 0.9,
     codemixPartners: ["English"],
-    associatedGenres: ["Schlager", "German Hip Hop", "Neue Deutsche Welle", "Rammstein-style"],
-    lyricsPromptInstruction: "Write in German. German has compound words and strong consonants that can be used rhythmically. German hip hop (Deutschrap) is very popular. German rock has a powerful gutural quality.",
+    associatedGenres: ["Schlager", "German Hip Hop", "Neue Deutsche Welle"],
+    lyricsPromptInstruction: "Write in German. German has compound words and strong consonants that can be used rhythmically. German hip hop (Deutschrap) is very popular.",
     exampleCodemix: "Mein Herz schlägt nur für dich, you are my everything, ich liebe dich so sehr",
   },
   {
@@ -192,10 +213,11 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Standard Italian",
     aceSupportTier: "supported",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 1.3,
     codemixPartners: ["English"],
     associatedGenres: ["Italian Pop", "Cantautore", "Italian Opera", "Italian Rock"],
-    lyricsPromptInstruction: "Write in Italian. Italian is highly melodic and vowel-rich, making it naturally musical. Italian pop values romance and poetic imagery. Opera tradition influences vocal ornamentation.",
+    lyricsPromptInstruction: "Write in Italian. Italian is highly melodic and vowel-rich, making it naturally musical. Italian pop values romance and poetic imagery.",
     exampleCodemix: "Amore mio, sei il mio sole, you make me feel alive, voglio stare con te",
   },
   {
@@ -204,6 +226,7 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Romanized Russian (no Cyrillic script)",
     aceSupportTier: "supported",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 0.9,
     codemixPartners: ["English"],
     associatedGenres: ["Russian Pop", "Russian Hip Hop", "Russian Electronic"],
@@ -216,10 +239,11 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Romanized Arabic",
     aceSupportTier: "supported",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 0.9,
     codemixPartners: ["English", "French"],
     associatedGenres: ["Arabic Pop", "Khaleeji", "Raï", "Arabic Hip Hop"],
-    lyricsPromptInstruction: "Write in Arabic using romanized transliteration. Arabic music uses maqam modal scales which create specific emotional colors. Quarter tone ornaments in the melody match ornamental vocal delivery. Words: habibi/habibti (my love), albi (my heart), ain (eye), shams (sun), leila (night), wein (where).",
+    lyricsPromptInstruction: "Write in Arabic using romanized transliteration. Arabic music uses maqam modal scales. Words: habibi/habibti (my love), albi (my heart), ain (eye), shams (sun), leila (night), wein (where).",
     exampleCodemix: "Habibi albi kello lak, you have my whole heart, ma baada gheirak",
   },
   {
@@ -228,6 +252,7 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Standard Turkish",
     aceSupportTier: "supported",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: true,
     syllableDensity: 1.0,
     codemixPartners: ["English"],
     associatedGenres: ["Turkish Pop", "Arabesk", "Turkish Hip Hop", "Turkish Folk"],
@@ -242,10 +267,11 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Standard Yoruba",
     aceSupportTier: "limited",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: false,
     syllableDensity: 1.1,
     codemixPartners: ["English", "Pidgin"],
     associatedGenres: ["Afrobeats", "Fuji", "Juju", "Afropop"],
-    lyricsPromptInstruction: "Write in Yoruba with natural English and Nigerian Pidgin codemixing. Yoruba is tonal and rhythmically rich. Common in Nigerian afrobeats. Words: ife (love), opolopo (plenty), awa (we), ire (good things), ore mi (my friend), ololufe (beloved).",
+    lyricsPromptInstruction: "Write in Yoruba with natural English and Nigerian Pidgin codemixing. Words: ife (love), opolopo (plenty), awa (we), ire (good things), ore mi (my friend), ololufe (beloved).",
     exampleCodemix: "Ife mi, you are my everything, awa go dance all night, ire ni o",
   },
   {
@@ -254,10 +280,11 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Standard Swahili",
     aceSupportTier: "limited",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: false,
     syllableDensity: 1.2,
     codemixPartners: ["English"],
     associatedGenres: ["Bongo Flava", "East African Pop", "Afrobeats"],
-    lyricsPromptInstruction: "Write in Swahili with natural English codemixing. Bongo Flava (Tanzanian music) is the main context. Words: nakupenda (I love you), moyo (heart), usiku (night), ndoto (dream), rafiki (friend), nzuri (good/beautiful).",
+    lyricsPromptInstruction: "Write in Swahili with natural English codemixing. Words: nakupenda (I love you), moyo (heart), usiku (night), ndoto (dream), rafiki (friend), nzuri (good/beautiful).",
     exampleCodemix: "Nakupenda sana baby, moyo wangu ni wako, you make me complete",
   },
   {
@@ -266,15 +293,14 @@ export const LANGUAGE_DATABASE: LanguageDefinition[] = [
     romanizationStyle: "Romanized Amharic",
     aceSupportTier: "limited",
     minimaxSupport: false,
+    elevenLabsMultilingualSupport: false,
     syllableDensity: 1.1,
     codemixPartners: ["English"],
     associatedGenres: ["Ethiopian Pop", "Ethio-jazz", "Ethiopian Hip Hop"],
-    lyricsPromptInstruction: "Write in Amharic using romanized transliteration. Ethiopian music has pentatonic scales and unique rhythms. Words: ewedihalehu (I love you), libi (heart), tizita (nostalgia/memory), amlak (God), konjo (beautiful).",
+    lyricsPromptInstruction: "Write in Amharic using romanized transliteration. Words: ewedihalehu (I love you), libi (heart), tizita (nostalgia/memory), amlak (God), konjo (beautiful).",
     exampleCodemix: "Ewedihalehu, you are my tizita, libi nachew libe",
   },
 ];
-
-// ─── LOOKUP AND UTILITY FUNCTIONS ────────────────────────────────────────────
 
 export function findLanguage(name: string): LanguageDefinition | null {
   return LANGUAGE_DATABASE.find(l =>
@@ -285,7 +311,6 @@ export function findLanguage(name: string): LanguageDefinition | null {
 export function getLyricsInstruction(language: string, description: string): string {
   const lang = findLanguage(language);
   if (lang) return lang.lyricsPromptInstruction;
-  // Fallback for unlisted languages
   return `Write lyrics primarily in ${language}. Respect the natural rhythm, vocabulary, and musical conventions of ${language} popular music.`;
 }
 
@@ -294,11 +319,32 @@ export function LANGUAGE_NAMES(): string[] {
 }
 
 export function isMiniMaxCompatible(language: string): boolean {
-  const lang = findLanguage(language);
-  return lang?.minimaxSupport ?? false;
+  return findLanguage(language)?.minimaxSupport ?? false;
 }
 
 export function isAceStepPrimary(language: string): boolean {
+  return findLanguage(language)?.aceSupportTier === "primary";
+}
+
+export function isElevenLabsCompatible(language: string): boolean {
+  return findLanguage(language)?.elevenLabsMultilingualSupport ?? false;
+}
+
+// Returns a UI advisory when the language has low ACE-Step support.
+// Show this next to the language field when the user selects a limited language.
+export function getVocalQualityAdvisory(language: string): string | null {
   const lang = findLanguage(language);
-  return lang?.aceSupportTier === "primary";
+  if (!lang) return null;
+  if (lang.aceSupportTier === "limited") {
+    if (!lang.elevenLabsMultilingualSupport) {
+      return `${language} has limited AI vocal support. Lyrics will be generated in ${language} but integrated vocal synthesis may produce approximate phonemes. Instrumental-only mode recommended.`;
+    }
+    return `${language} vocal quality in fast generation mode may be approximate. Enable "High Quality Vocals" for better results via dedicated vocal synthesis.`;
+  }
+  if (lang.aceSupportTier === "supported") {
+    if (lang.elevenLabsMultilingualSupport) {
+      return `${language} vocal quality in fast mode varies by run. Enable "High Quality Vocals" for consistent, clear ${language} pronunciation.`;
+    }
+  }
+  return null;
 }

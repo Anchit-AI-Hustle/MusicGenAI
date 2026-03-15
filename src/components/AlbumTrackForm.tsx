@@ -11,8 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
-import { GENRE_DATABASE, GENRE_NAMES } from '@/lib/musicData/genres';
-import { LANGUAGE_DATABASE, LANGUAGE_NAMES } from '@/lib/musicData/languages';
+import { GENRE_DATABASE, GENRE_NAMES, getModelQualityWarning } from '@/lib/musicData/genres';
+import { LANGUAGE_DATABASE, LANGUAGE_NAMES, getVocalQualityAdvisory } from '@/lib/musicData/languages';
 import { MOOD_DATABASE, MOOD_NAMES } from '@/lib/musicData/moods';
 import { VOCAL_PROFILES, VOCAL_STYLE_LABELS } from '@/lib/musicData/vocals';
 import { ARTIST_DATABASE, ARTIST_NAMES } from '@/lib/musicData/artists';
@@ -48,6 +48,7 @@ export interface TrackConfig {
   generateVideo: boolean;
   videoStyle: string;
   vocalGender?: 'male' | 'female' | 'neutral';
+  useHighQualityVocals: boolean;
 }
 
 export const defaultTrackConfig = (index: number): TrackConfig => ({
@@ -70,6 +71,7 @@ export const defaultTrackConfig = (index: number): TrackConfig => ({
   generateVideo: false,
   videoStyle: '',
   vocalGender: 'neutral',
+  useHighQualityVocals: false,
 });
 
 interface AlbumTrackFormProps {
@@ -239,7 +241,10 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
           <span className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary">{index + 1}</span>
           <div className="text-left">
             <p className="font-medium text-foreground">{config.trackName || `Track ${index + 1}`}</p>
-            <p className="text-xs text-muted-foreground">{config.genres.length > 0 ? config.genres.slice(0, 3).map(g => g.label).join(', ') : 'No genres selected'} • {formatDuration(config.durationSeconds)}</p>
+            <p className="text-xs text-muted-foreground">
+              {config.genres.length > 0 ? config.genres.slice(0, 3).map(g => g.label).join(', ') : 'No genres selected'} • {formatDuration(config.durationSeconds)}
+              {config.useHighQualityVocals && <span className="text-accent ml-2 font-medium">• HQ Vocals</span>}
+            </p>
           </div>
         </div>
         {expanded ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
@@ -287,6 +292,11 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   placeholder="Type or select genres..."
                   multiSelect
                 />
+                {config.genres.map(g => getModelQualityWarning(g.label)).filter(Boolean).map((warning, i) => (
+                  <p key={i} className="text-[10px] text-amber-500 mt-1 leading-tight flex items-start gap-1">
+                    <Activity className="w-3 h-3 mt-0.5 shrink-0" /> {warning}
+                  </p>
+                ))}
               </div>
 
               {/* Subgenres */}
@@ -443,6 +453,23 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   placeholder="Select or type languages..."
                   multiSelect
                 />
+                {config.vocalLanguages.map(l => getVocalQualityAdvisory(l)).filter(Boolean).map((advisory, i) => (
+                  <p key={i} className="text-[10px] text-accent mt-1 leading-tight flex items-start gap-1">
+                    <Sparkles className="w-3 h-3 mt-0.5 shrink-0" /> {advisory}
+                  </p>
+                ))}
+
+                {/* HQ Vocals Toggle */}
+                <div className="mt-3 p-3 rounded-lg bg-accent/5 border border-accent/20 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-accent">High-Quality Vocal Path</p>
+                    <p className="text-[10px] text-muted-foreground">Routes via ElevenLabs for superior pronunciation.</p>
+                  </div>
+                  <Switch 
+                    checked={config.useHighQualityVocals} 
+                    onCheckedChange={v => update({ useHighQualityVocals: v })} 
+                  />
+                </div>
               </div>
 
               {/* Lyric Theme */}

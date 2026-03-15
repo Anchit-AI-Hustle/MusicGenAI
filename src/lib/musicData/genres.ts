@@ -12,6 +12,10 @@ export interface GenreDefinition {
   productionStyle: string;
   subgenres: string[];
   modelPromptKeywords: string[];
+  // aceSupportQuality: how well ACE-Step reproduces this genre's sound.
+  // "high" = reliable, "medium" = acceptable, "low" = often misses the mark.
+  // Use this to warn users when choosing genres ACE-Step handles poorly.
+  aceSupportQuality: "high" | "medium" | "low";
 }
 
 export const GENRE_DATABASE: GenreDefinition[] = [
@@ -29,6 +33,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "compressed, layered harmonies, four-on-the-floor kick, bright highs",
     subgenres: ["Electropop", "Synth-pop", "Dance-pop", "Indie pop", "Chamber pop"],
     modelPromptKeywords: ["pop music", "catchy melody", "polished production", "radio-ready"],
+    aceSupportQuality: "high",
   },
   {
     name: "Synth-pop",
@@ -42,6 +47,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "analog synth pads, sequenced bassline, gated reverb snare, 80s aesthetic",
     subgenres: ["Dark synth", "Chillwave", "Vaporwave", "Retrowave"],
     modelPromptKeywords: ["synthesizer", "electronic pop", "80s synth", "drum machine beats"],
+    aceSupportQuality: "high",
   },
   {
     name: "Indie Pop",
@@ -55,6 +61,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "warm, organic, room ambience, subtle reverb, dynamic range preserved",
     subgenres: ["Dream pop", "Shoegaze", "Chamber pop", "Jangle pop"],
     modelPromptKeywords: ["indie pop", "organic sound", "guitar-driven", "intimate vocals"],
+    aceSupportQuality: "high",
   },
 
   // ─── ROCK ────────────────────────────────────────────────────────────────────
@@ -70,6 +77,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "distorted guitars, punchy drums, room mics, mid-forward mix",
     subgenres: ["Classic rock", "Hard rock", "Alternative rock", "Garage rock", "Surf rock"],
     modelPromptKeywords: ["electric guitar", "rock drums", "distortion", "powerful vocals", "live band"],
+    aceSupportQuality: "high",
   },
   {
     name: "Metal",
@@ -83,6 +91,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "heavily distorted guitars, triggered drums, scooped mids, wall of sound",
     subgenres: ["Thrash", "Death metal", "Black metal", "Nu-metal", "Doom", "Metalcore"],
     modelPromptKeywords: ["heavy metal", "distorted guitars", "aggressive drums", "intense energy"],
+    aceSupportQuality: "medium",
   },
   {
     name: "Punk",
@@ -96,6 +105,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "lo-fi, fast chord changes, minimal production, aggressive energy",
     subgenres: ["Hardcore", "Pop punk", "Skate punk", "Post-punk"],
     modelPromptKeywords: ["punk rock", "fast guitar", "raw energy", "rebellious"],
+    aceSupportQuality: "medium",
   },
 
   // ─── ELECTRONIC & DANCE ──────────────────────────────────────────────────────
@@ -111,6 +121,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "four-on-the-floor kick, sidechain compression, buildups and drops, supersaw leads",
     subgenres: ["Progressive house", "Big room", "Electro house", "Dubstep", "Trap EDM"],
     modelPromptKeywords: ["EDM", "electronic dance", "four-on-the-floor", "synthesizer drop", "club music"],
+    aceSupportQuality: "high",
   },
   {
     name: "House",
@@ -124,6 +135,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "four-on-the-floor kick, offbeat hi-hats, warm bass, lush chords",
     subgenres: ["Deep house", "Tech house", "Afro house", "Jackin house", "Vocal house"],
     modelPromptKeywords: ["house music", "four-on-the-floor", "soulful", "warm bass", "piano chords"],
+    aceSupportQuality: "high",
   },
   {
     name: "Techno",
@@ -137,6 +149,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "mechanical repetition, heavy kick, layered percussion, industrial textures",
     subgenres: ["Minimal techno", "Industrial techno", "Dub techno", "Acid techno"],
     modelPromptKeywords: ["techno", "mechanical drums", "industrial", "repetitive", "dark electronic"],
+    aceSupportQuality: "medium",
   },
   {
     name: "Ambient",
@@ -150,6 +163,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "long reverbs, slow evolution, no percussion or very subtle, spatial",
     subgenres: ["Dark ambient", "Space ambient", "Nature ambient", "Drone"],
     modelPromptKeywords: ["ambient", "atmospheric", "pads", "ethereal", "slow evolution", "spacious"],
+    aceSupportQuality: "medium",
   },
   {
     name: "Drum and Bass",
@@ -163,6 +177,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "breakbeat at 170+ BPM, heavy sub-bass, syncopated rhythms",
     subgenres: ["Liquid DnB", "Neurofunk", "Jump-up", "Techstep"],
     modelPromptKeywords: ["drum and bass", "breakbeat", "fast drums", "sub-bass", "170 BPM"],
+    aceSupportQuality: "medium",
   },
   {
     name: "Lo-fi",
@@ -176,6 +191,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "vinyl crackle, tape saturation, off-grid timing, warm filters",
     subgenres: ["Lo-fi hip hop", "Chillhop", "Jazz hop"],
     modelPromptKeywords: ["lo-fi", "vinyl crackle", "warm piano", "relaxed beats", "chill"],
+    aceSupportQuality: "high",
   },
   {
     name: "Synthwave",
@@ -189,6 +205,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "gated reverb, analog warmth, arpeggiated synths, neon aesthetic",
     subgenres: ["Darksynth", "Spacewave", "Vaporwave", "Cyberpunk"],
     modelPromptKeywords: ["synthwave", "retrowave", "80s synths", "neon", "analog warmth"],
+    aceSupportQuality: "high",
   },
 
   // ─── HIP HOP & RAP ───────────────────────────────────────────────────────────
@@ -204,6 +221,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "sampled breaks, boom bap drums, chopped soul loops",
     subgenres: ["Boom bap", "Conscious hip hop", "Trap", "Cloud rap", "Mumble rap"],
     modelPromptKeywords: ["hip hop", "rap beat", "boom bap", "sampled drums", "bass groove"],
+    aceSupportQuality: "high",
   },
   {
     name: "Trap",
@@ -217,6 +235,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "triplet hi-hats, rolling 808s, dark melodies, heavy reverb on snare",
     subgenres: ["Melodic trap", "Plugg", "SoundCloud rap", "Rage"],
     modelPromptKeywords: ["trap", "808 bass", "hi-hat rolls", "auto-tune", "dark melodic"],
+    aceSupportQuality: "high",
   },
   {
     name: "Drill",
@@ -230,6 +249,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "sample chops with pitch bends, sliding 808s, haunting melodies, dark minor key",
     subgenres: ["UK drill", "Chicago drill", "Brooklyn drill", "NY drill"],
     modelPromptKeywords: ["drill music", "dark minor melody", "sliding 808", "aggressive rap", "piano stabs"],
+    aceSupportQuality: "high",
   },
   {
     name: "Phonk",
@@ -243,6 +263,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "distorted 808s, cowbell pattern, chopped vocals, Memphis underground aesthetic",
     subgenres: ["Drift phonk", "Cowbell phonk", "Dark phonk"],
     modelPromptKeywords: ["phonk", "Memphis rap", "cowbell", "dark distorted 808", "chopped samples"],
+    aceSupportQuality: "medium",
   },
 
   // ─── R&B & SOUL ──────────────────────────────────────────────────────────────
@@ -258,6 +279,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "lush chords, smooth bass groove, layered harmonies, neo-soul warmth",
     subgenres: ["Neo-soul", "Alternative R&B", "Quiet storm", "New jack swing"],
     modelPromptKeywords: ["R&B", "soulful vocals", "smooth groove", "lush harmonies", "neo-soul"],
+    aceSupportQuality: "high",
   },
   {
     name: "Soul",
@@ -271,6 +293,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "Motown arrangement, horn punches, church organ, live band feel",
     subgenres: ["Motown", "Southern soul", "Chicago soul", "Blue-eyed soul"],
     modelPromptKeywords: ["soul music", "gospel", "organ", "brass section", "emotional vocals"],
+    aceSupportQuality: "high",
   },
   {
     name: "Funk",
@@ -284,6 +307,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "syncopated bass and drums locked together, guitar chops, horn stabs",
     subgenres: ["P-funk", "Funk rock", "Go-go", "Boogie"],
     modelPromptKeywords: ["funk", "syncopated bass", "guitar chops", "horn stabs", "groove"],
+    aceSupportQuality: "medium",
   },
 
   // ─── JAZZ & BLUES ────────────────────────────────────────────────────────────
@@ -299,6 +323,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "swing rhythm, walking bass, brushed drums, improvisational solos",
     subgenres: ["Bebop", "Cool jazz", "Fusion", "Smooth jazz", "Bossa nova", "Swing"],
     modelPromptKeywords: ["jazz", "swing rhythm", "improvisation", "piano trio", "saxophone"],
+    aceSupportQuality: "medium",
   },
   {
     name: "Blues",
@@ -312,6 +337,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "twelve-bar blues form, shuffled rhythm, guitar bends, dirty tone",
     subgenres: ["Delta blues", "Chicago blues", "Texas blues", "Jump blues"],
     modelPromptKeywords: ["blues", "twelve bar", "guitar bends", "harmonica", "shuffle rhythm"],
+    aceSupportQuality: "medium",
   },
   {
     name: "Classical",
@@ -325,6 +351,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "acoustic orchestral recording, dynamic range, concert hall reverb",
     subgenres: ["Baroque", "Romantic", "Modern classical", "Minimalist", "Neo-classical"],
     modelPromptKeywords: ["orchestral", "classical", "strings", "concert hall", "dynamic"],
+    aceSupportQuality: "low",
   },
   {
     name: "Folk",
@@ -338,6 +365,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "acoustic warmth, minimal production, real room sound, no click track",
     subgenres: ["Americana", "Celtic folk", "Contemporary folk", "Bluegrass"],
     modelPromptKeywords: ["folk music", "acoustic guitar", "storytelling", "organic", "fingerpicking"],
+    aceSupportQuality: "medium",
   },
   {
     name: "Country",
@@ -351,6 +379,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "pedal steel warmth, acoustic guitar strumming, Nashville sound",
     subgenres: ["Classic country", "Country pop", "Outlaw country", "Bro country"],
     modelPromptKeywords: ["country music", "pedal steel", "acoustic guitar", "twang", "Nashville"],
+    aceSupportQuality: "medium",
   },
 
   // ─── REGGAE & CARIBBEAN ──────────────────────────────────────────────────────
@@ -366,6 +395,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "offbeat guitar skank, heavy bass, one-drop drum pattern, dub effects",
     subgenres: ["Roots reggae", "Dancehall", "Dub", "Ska", "Rocksteady"],
     modelPromptKeywords: ["reggae", "offbeat rhythm", "heavy bass", "jamaican", "roots"],
+    aceSupportQuality: "medium",
   },
   {
     name: "Dancehall",
@@ -379,6 +409,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "electronic riddims, digital drums, skanking bass, digital production",
     subgenres: ["Ragga", "Digital dancehall", "Lovers rock"],
     modelPromptKeywords: ["dancehall", "riddim", "jamaican patois", "deejay style", "electronic bass"],
+    aceSupportQuality: "medium",
   },
 
   // ─── LATIN ───────────────────────────────────────────────────────────────────
@@ -394,6 +425,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "modern production with Latin rhythmic elements, crossover appeal",
     subgenres: ["Reggaeton", "Bachata", "Cumbia pop", "Tropical pop"],
     modelPromptKeywords: ["latin pop", "spanish vocals", "rhythmic", "passionate", "tropical"],
+    aceSupportQuality: "high",
   },
   {
     name: "Reggaeton",
@@ -407,6 +439,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "dembow rhythm (kick and snare on every beat), dark basslines, 808s",
     subgenres: ["Old school reggaeton", "Modern reggaeton", "Trapeton", "Champeta"],
     modelPromptKeywords: ["reggaeton", "dembow", "spanish urbano", "perreo beat", "latin trap"],
+    aceSupportQuality: "high",
   },
   {
     name: "Salsa",
@@ -420,6 +453,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "clave rhythm backbone, horn arrangements, montuno piano, call and response",
     subgenres: ["Salsa dura", "Salsa romantica", "Timba"],
     modelPromptKeywords: ["salsa", "clave rhythm", "brass horns", "cuban percussion", "hot dance"],
+    aceSupportQuality: "low",
   },
   {
     name: "Bossa Nova",
@@ -433,6 +467,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "syncopated samba-jazz guitar, gentle bass, brushed percussion, airy",
     subgenres: ["Traditional bossa nova", "Contemporary bossa nova"],
     modelPromptKeywords: ["bossa nova", "nylon guitar", "brazilian", "intimate", "jazz-samba"],
+    aceSupportQuality: "medium",
   },
 
   // ─── AFRICAN ─────────────────────────────────────────────────────────────────
@@ -448,6 +483,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "layered percussion, syncopated groove, talking drum influence, warm bass",
     subgenres: ["Afro-fusion", "Afro-pop", "Afroswing", "Afrobeats UK"],
     modelPromptKeywords: ["afrobeats", "west african percussion", "melodic groove", "rhythmic", "warm bass"],
+    aceSupportQuality: "medium",
   },
   {
     name: "Amapiano",
@@ -458,9 +494,10 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     primaryInstruments: ["log drum bass", "piano", "marimba", "percussion"],
     commonLanguages: ["Zulu", "Sotho", "English", "Xhosa"],
     vocalCharacteristics: "South African phrasing, melodic, gospel influence",
-    productionStyle: "log drum bassline, marimba leads, syncopated percussion, South African log drum",
+    productionStyle: "log drum bassline, marimba leads, syncopated percussion",
     subgenres: ["Piano music", "Amapiano deep", "Amapiano afro fusion"],
     modelPromptKeywords: ["amapiano", "log drum bass", "south african", "marimba", "piano groove"],
+    aceSupportQuality: "low",
   },
 
   // ─── SOUTH ASIAN ─────────────────────────────────────────────────────────────
@@ -476,6 +513,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "orchestral strings, electronic production, tabla patterns, dramatic dynamics",
     subgenres: ["Bollywood classical", "Bollywood pop", "Bollywood sad song", "Bollywood party"],
     modelPromptKeywords: ["bollywood", "hindi film music", "tabla", "orchestral strings", "emotional hindi vocals"],
+    aceSupportQuality: "medium",
   },
   {
     name: "Bhangra",
@@ -489,6 +527,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "dhol as backbone, tumbi leads, call and response choruses, festival energy",
     subgenres: ["Classic bhangra", "Modern bhangra", "Bhangra fusion"],
     modelPromptKeywords: ["bhangra", "dhol drums", "tumbi", "punjabi", "celebratory", "high energy"],
+    aceSupportQuality: "medium",
   },
   {
     name: "Punjabi Pop",
@@ -502,6 +541,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "modern electronic production fused with dhol and traditional elements",
     subgenres: ["Punjabi romantic", "Punjabi folk pop", "Punjabi sad song"],
     modelPromptKeywords: ["punjabi pop", "desi pop", "dhol beat", "punjabi vocals", "modern indian"],
+    aceSupportQuality: "medium",
   },
   {
     name: "Punjabi Drill",
@@ -515,6 +555,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "UK drill production fused with Punjabi melodies, sliding 808s, dark piano",
     subgenres: ["UK Punjabi drill", "Canadian Punjabi drill", "Indo drill"],
     modelPromptKeywords: ["punjabi drill", "desi drill", "808 bass", "punjabi rap", "dark melody drill"],
+    aceSupportQuality: "medium",
   },
   {
     name: "Desi Hip Hop",
@@ -528,6 +569,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "Western hip hop base with Indian sample flips, tabla pattern integration",
     subgenres: ["Mumbai hip hop", "Gully rap", "Punjabi rap"],
     modelPromptKeywords: ["desi hip hop", "hindi rap", "indian trap", "gully rap", "urban india"],
+    aceSupportQuality: "medium",
   },
 
   // ─── K-POP & EAST ASIAN ──────────────────────────────────────────────────────
@@ -543,6 +585,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "hyper-polished, layered vocal harmonies, dynamic drops, idol group arrangement",
     subgenres: ["K-pop ballad", "K-pop dance", "K-pop R&B", "K-pop hip hop"],
     modelPromptKeywords: ["k-pop", "korean pop", "polished production", "idol group", "chorus drop"],
+    aceSupportQuality: "high",
   },
   {
     name: "J-Pop",
@@ -556,6 +599,7 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "melodic, bright, sometimes dramatic, anime soundtrack feel",
     subgenres: ["J-pop ballad", "Anime song", "City pop", "Shibuya-kei"],
     modelPromptKeywords: ["j-pop", "japanese pop", "anime", "bright melody", "emotional"],
+    aceSupportQuality: "high",
   },
 
   // ─── MIDDLE EASTERN ──────────────────────────────────────────────────────────
@@ -571,10 +615,9 @@ export const GENRE_DATABASE: GenreDefinition[] = [
     productionStyle: "maqam modal scales, oud and electronic blend, darbuka percussion",
     subgenres: ["Khaleeji", "Egyptian pop", "Levantine pop", "Arabic R&B"],
     modelPromptKeywords: ["arabic pop", "oud", "maqam", "middle eastern", "ornamental vocals"],
+    aceSupportQuality: "low",
   },
 ];
-
-// ─── LOOKUP FUNCTIONS ─────────────────────────────────────────────────────────
 
 export function findGenreByName(name: string): GenreDefinition | null {
   const lower = name.toLowerCase();
@@ -589,11 +632,23 @@ export function getGenresByRegion(region: string): GenreDefinition[] {
 }
 
 export function getGenresByLanguage(language: string): GenreDefinition[] {
-  return GENRE_DATABASE.filter(g =>
-    g.commonLanguages.includes(language)
-  );
+  return GENRE_DATABASE.filter(g => g.commonLanguages.includes(language));
 }
 
 export function GENRE_NAMES(): string[] {
   return GENRE_DATABASE.map(g => g.name);
+}
+
+// Returns a UI warning string when ACE-Step quality for a genre is low or medium.
+// Show this warning below the genre field when the user selects a problematic genre.
+export function getModelQualityWarning(genre: string): string | null {
+  const def = findGenreByName(genre);
+  if (!def) return null;
+  if (def.aceSupportQuality === "low") {
+    return `Note: AI generation of ${genre} music is experimental. Results may vary significantly. Consider using Stable Audio (instrumental) for better results.`;
+  }
+  if (def.aceSupportQuality === "medium") {
+    return `Note: ${genre} generation quality is good but not perfect. Results may not fully capture genre nuances.`;
+  }
+  return null;
 }

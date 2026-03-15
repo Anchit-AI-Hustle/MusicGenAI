@@ -13,6 +13,9 @@
 import { applyGain, measurePeak, midiToFreq, getScaleMidi, normalizeAudio, parseKey, INTERNAL_SAMPLE_RATE } from './audio-utils';
 import type { SectionPlan } from './music-engine';
 
+import { synthesizeVocals, getVocalRoutingStatus } from './inference/vocal-engine';
+import { CreativeContext } from '@/types/creative-context';
+
 // ===== Types =====
 
 export interface VocalConfig {
@@ -596,7 +599,7 @@ function detectCulturalContext(prompt: string, genres: string[]): CulturalContex
 
 function calculateLanguageDistribution(genres: string[], context: CulturalContext): LanguageDistribution {
   const genreStr = genres.join(' ').toLowerCase();
-  
+
   // Default distribution
   let dist: LanguageDistribution = {
     primaryWeight: 0.8,
@@ -1263,7 +1266,23 @@ export async function generateVocals(
   onProgress: (p: VocalProgress) => void,
   rng: () => number,
 ): Promise<AudioBuffer | null> {
-  const { lyrics, tempo, key, scale, structure, durationSeconds, vocalStyle, vocalIntensity, vocalEffects, genres } = config;
+  const { lyrics, tempo, key, scale, structure, durationSeconds, vocalStyle, vocalIntensity, vocalEffects, genres, language } = config;
+
+  // v2: Dual-path routing check
+  const context: CreativeContext = {
+    genre: genres[0] || 'Pop',
+    mood: config.mood || 'Neutral',
+    vocalLanguage: language || 'English',
+    tempo: tempo,
+    duration: durationSeconds,
+    lyrics: lyrics,
+    useHighQualityVocals: (config as any).useHighQualityVocals || false,
+    songDescription: '',
+    vocalStyle: vocalStyle
+  };
+
+  const routingStatus = getVocalRoutingStatus(context);
+  console.log(`[VocalEngine V2] ${routingStatus}`);
 
   if (!lyrics || lyrics.trim().length === 0) return null;
 
@@ -1429,20 +1448,20 @@ function generateDefaultLyricsInternal(
   options: DefaultLyricOptions,
 ): string {
   const lines: string[] = [];
-  
+
   // Detect Cultural Context
   const culturalContext = detectCulturalContext(prompt, genres);
   const distribution = calculateLanguageDistribution(genres, culturalContext);
-  
+
   const primaryLang = options.language || culturalContext.primaryLanguage;
   const secondaryLang = culturalContext.secondaryLanguage || 'english';
 
   const hookSeed = buildHookSeed(prompt, mood, genres, primaryLang);
   const promptWords = sanitizePromptWords(prompt);
-  
+
   const primaryLexicon = buildLanguageLexicon(primaryLang);
   const secondaryLexicon = buildLanguageLexicon(secondaryLang);
-  
+
   const styleTokens = getStyleVoiceTokens(options.vocalStyle);
   const chorusMemory: string[] = [];
 
@@ -1493,7 +1512,7 @@ function generateDefaultLyricsInternal(
       const barsToUse = Math.min(stepsPerLine, sectionBars - barIdx);
       const syllablesTarget = targetSyllablesPerBar * barsToUse;
       const lineTimeSeconds = sectionStartTime + (barIdx * secondsPerBar);
-      
+
       const minutes = Math.floor(lineTimeSeconds / 60);
       const seconds = Math.floor(lineTimeSeconds % 60);
       const timeStr = `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}]`;
