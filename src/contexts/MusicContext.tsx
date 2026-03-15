@@ -618,7 +618,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             tempo,
             vocalStyle: input.vocalStyle as VocalStyleType,
             vocalIntensity: input.vocalIntensity,
-            language: input.vocalLanguages[0] || 'English',
+            language: input.vocalLanguages[0] && input.vocalLanguages[0] !== 'Select Language' ? input.vocalLanguages[0] : undefined,
           });
         }
 
@@ -627,7 +627,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           tempo: tempo,
           vocalStyle: inferVocalStyle(input.genres, input.vocalStyle),
           vocalIntensity: input.vocalIntensity || 5,
-          language: input.vocalLanguages[0] || 'English',
+          language: input.vocalLanguages[0] && input.vocalLanguages[0] !== 'Select Language' ? input.vocalLanguages[0] : undefined,
         });
 
         // 8c. Synthesize Vocals
@@ -643,7 +643,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           vocalEffects: input.vocalEffects,
           genres: input.genres,
           mood: input.mood,
-          language: input.vocalLanguages[0] || 'English',
+          language: input.vocalLanguages[0] && input.vocalLanguages[0] !== 'Select Language' ? input.vocalLanguages[0] : undefined,
         };
 
         const vocalBuffer = await generateVocals(vocalConfig, (prog) => {

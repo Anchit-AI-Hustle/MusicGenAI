@@ -145,7 +145,6 @@ async function createDemoTrackArtifacts(): Promise<DemoTrackArtifacts> {
       durationSeconds,
       vocalStyle,
       vocalIntensity: 7,
-      language: 'English',
     },
   );
   const lyricCues = generateLyricCues(lyrics, intent.structure, durationSeconds, {
@@ -165,7 +164,6 @@ async function createDemoTrackArtifacts(): Promise<DemoTrackArtifacts> {
     vocalEffects: ['Reverb', 'Delay'],
     genres: intent.genres || [],
     mood: intent.mood,
-    language: 'English',
   };
   const vocalBuffer = await generateVocals(vocalConfig, () => undefined, () => Math.random());
 
@@ -517,6 +515,26 @@ export async function runSystemDemoTests({ aiSuggest, player, onUpdate }: RunSys
     ]);
   });
 
+  await runCase('multilingual-support', 'Test Case 11 — Multilingual Support', async (base) => {
+    const prompts = [
+      { p: "Punjabi drill rap in Delhi", lang: "punjabi" },
+      { p: "Latin reggaeton party", lang: "spanish" }
+    ];
+    
+    const results = [];
+    for (const item of prompts) {
+      const lyrics = generateDefaultLyrics(item.p, [], "energetic", [{ name: 'Chorus', duration: 10, energy: 0.8, description: '' }]);
+      const hasLangTag = lyrics.toLowerCase().includes(`[${item.lang}]`);
+      results.push({ prompt: item.p, detected: hasLangTag });
+    }
+
+    if (results.every(r => r.detected)) {
+      return passResult(base, 'Automatic language detection and tagging is active for multilingual prompts.', results.map(r => `${r.prompt}: Detected`));
+    }
+    
+    return failResult(base, 'Language detection failed for one or more cultural prompts.', results.map(r => `${r.prompt}: ${r.detected ? 'Detected' : 'Failed'}`));
+  });
+
   if (sharedArtifacts) {
     URL.revokeObjectURL(sharedArtifacts.audioUrl);
   }
@@ -540,6 +558,8 @@ export async function runSystemDemoTests({ aiSuggest, player, onUpdate }: RunSys
         return ['Verify the global AudioEngine instance is reused when toggling the expanded player state.'];
       case 'dna-uniqueness':
         return ['Increase arrangement or instrumentation variance driven by GenerationDNA.'];
+      case 'multilingual-support':
+        return ['Check detectCulturalContext keyword matching and language marker injection logic.'];
       default:
         return ['Inspect the failing subsystem and rerun diagnostics after adjustment.'];
     }
