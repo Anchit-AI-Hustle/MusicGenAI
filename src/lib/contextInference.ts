@@ -1,53 +1,87 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { GENRE_NAMES } from "./musicData/genres";
+import { LANGUAGE_NAMES } from "./musicData/languages";
+import { MOOD_NAMES } from "./musicData/moods";
+import { TEMPO_NAMES } from "./musicData/tempo";
+import { ARTIST_NAMES } from "./musicData/artists";
 import { CreativeContext } from "@/types/creative-context";
-import { interpretDescription, DerivationResult } from "./inference/description-interpreter";
 
-/**
- * Sync version for UI responsiveness. Uses heuristic fallback.
- */
-export function inferContextFromDescription(description: string): Partial<CreativeContext> {
-  const lower = description.toLowerCase();
-  
-  const result: Partial<CreativeContext> = {};
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY || "",
+});
 
-  if (lower.includes("punjabi") || lower.includes("bhangra")) result.genre = "Punjabi Pop";
-  if (lower.includes("drill")) result.genre = result.genre === "Punjabi Pop" ? "Punjabi Drill" : "UK Drill";
-  if (lower.includes("sad") || lower.includes("heartbroken")) result.mood = "Sad";
-  if (lower.includes("hindi") || lower.includes("bollywood")) result.vocalLanguage = "Hindi";
-  if (lower.includes("punjabi")) result.vocalLanguage = "Punjabi";
+export async function inferContextFromDescription(description: string) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.warn("[Context Inference] ANTHROPIC_API_KEY missing, skipping inference");
+    return null;
+  }
 
-  return result;
+  try {
+    const prompt = `
+Analyze the following song description and extract the musical parameters.
+If a parameter isn't explicitly mentioned, infer the most likely choice based on the description's tone, topic, or typical genre conventions.
+If you are completely unsure, return null for that field.
+
+Song description: "${description}"
+
+Valid Genres: ${GENRE_NAMES().join(", ")}
+Valid Languages: ${LANGUAGE_NAMES().join(", ")}
+Valid Moods: ${MOOD_NAMES().join(", ")}
+Valid Tempos: ${TEMPO_NAMES().join(", ")}
+Valid Artists (for inspiration): ${ARTIST_NAMES().join(", ")} (you can suggest others if highly relevant)
+
+Return ONLY a raw JSON object with the following keys, without markdown formatting:
+{
+  "genre": "string or null",
+  "vocalLanguage": "string or null",
+  "mood": "string or null",
+  "tempo": "number or null",
+  "artistInspiration": "string or null",
+  "lyricTheme": "string or null",
+  "subgenre": "string or null",
+  "instrumentalOnly": boolean
+}
+`;
+
+    const response = await anthropic.messages.create({
+      model: "claude-3-haiku-20240307",
+      max_tokens: 300,
+      temperature: 0.2,
+      messages: [{ role: "user", content: prompt }]
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : "";
+    
+    // Clean JSON (remove markdown)
+    let jsonString = text;
+    if (text.includes("```json")) {
+        jsonString = text.split("```json")[1].split("```")[0];
+    } else if (text.includes("```")) {
+         jsonString = text.split("```")[1].split("```")[0];
+    }
+    
+    const parsed = JSON.parse(jsonString.trim());
+    return parsed;
+
+  } catch (error) {
+    console.error("[Context Inference] Failed to infer context:", error);
+    return null;
+  }
 }
 
 /**
- * Async version for deep Claude-based inference.
+ * Synchronous layer to apply inferred updates to an existing context obj
+ * This mimics the legacy applyInferenceToContext used in MusicContext.tsx
  */
-export async function applyInferenceToContextAsync(
-  description: string,
-  existingContext: CreativeContext
-): Promise<CreativeContext> {
-  const derivation = await interpretDescription(description);
-
-  return {
-    ...existingContext,
-    genre: existingContext.genre || derivation.suggestedGenre,
-    mood: existingContext.mood || derivation.suggestedMood,
-    vocalLanguage: existingContext.vocalLanguage || derivation.derivedLanguage,
-    tempo: existingContext.tempo || derivation.bpm,
-    vocalStyle: existingContext.vocalStyle || derivation.vocalStyle,
-    songDescription: description
-  };
-}
-
-// Keep original export name for compatibility
-export function applyInferenceToContext(
-  description: string,
-  existingContext: CreativeContext
-): CreativeContext {
-  const inferred = inferContextFromDescription(description);
-  
-  return {
-    ...existingContext,
-    ...inferred,
-    songDescription: description
-  };
+export function applyInferenceToContext(description: string, currentContext: Partial<CreativeContext>): Partial<CreativeContext> {
+    // Because MusicContext expects a synchronous return for React state updates based on pure description changes:
+    // we can either return the exact same or trigger a background hook. 
+    // Usually local inference isn't synchronous LLM, so we just pass back what we can.
+    // For full AI inference, the user clicks "AI Suggest".
+    // 
+    // Here we just attach standard logic.
+    return {
+        ...currentContext,
+        songDescription: description
+    };
 }
