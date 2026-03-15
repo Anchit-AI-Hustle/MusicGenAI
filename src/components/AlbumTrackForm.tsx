@@ -11,19 +11,21 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
-import { GENRE_OPTIONS, normalizeGenreOptions, genreOptionsToLabels, type GenreOption } from '@/data/genres';
-import { SmartSearchInput } from '@/components/ui/smart-search-input';
-import { useMusic } from '@/contexts/MusicContext';
-import { 
-  LANGUAGES, 
-  PRESET_MOODS, 
-  PRESET_VOCAL_STYLES, 
-  PRESET_VIDEO_STYLES, 
+import { GENRE_DATABASE, GENRE_NAMES } from '@/lib/musicData/genres';
+import { LANGUAGE_DATABASE, LANGUAGE_NAMES } from '@/lib/musicData/languages';
+import { MOOD_DATABASE, MOOD_NAMES } from '@/lib/musicData/moods';
+import { VOCAL_PROFILES, VOCAL_STYLE_LABELS } from '@/lib/musicData/vocals';
+import { ARTIST_DATABASE, ARTIST_NAMES } from '@/lib/musicData/artists';
+import {
+  PRESET_VIDEO_STYLES,
   VOCAL_STRUCTURE_PRESETS,
   SONG_STRUCTURE_PRESETS,
   VOCAL_EFFECTS_OPTIONS,
-  PRESET_LYRIC_THEMES
+  PRESET_LYRIC_THEMES,
 } from '@/data/form-presets';
+import { SmartSearchInput } from '@/components/ui/smart-search-input';
+import { useMusic } from '@/contexts/MusicContext';
+import { normalizeGenreOptions, genreOptionsToLabels, type GenreOption } from '@/data/genres';
 import type { AiSuggestionResult } from '@/contexts/MusicContext';
 
 export interface TrackConfig {
@@ -45,6 +47,7 @@ export interface TrackConfig {
   lyricTheme: string;
   generateVideo: boolean;
   videoStyle: string;
+  vocalGender?: 'male' | 'female' | 'neutral';
 }
 
 export const defaultTrackConfig = (index: number): TrackConfig => ({
@@ -66,6 +69,7 @@ export const defaultTrackConfig = (index: number): TrackConfig => ({
   lyricTheme: '',
   generateVideo: false,
   videoStyle: '',
+  vocalGender: 'neutral',
 });
 
 interface AlbumTrackFormProps {
@@ -125,7 +129,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
       case 'vocalIntensity': { const p = parseInt(value); if (!isNaN(p)) update({ vocalIntensity: Math.max(1, Math.min(10, p)) }); break; }
       case 'vocalEffects': update({ vocalEffects: Array.from(new Set([...config.vocalEffects, ...value.split(',').map(e => e.trim()).filter(Boolean)])) }); break;
       case 'vocalLanguage':
-        const langs = value.split(',').map(l => l.trim()).filter(l => LANGUAGES.includes(l));
+        const langs = value.split(',').map(l => l.trim()).filter(l => LANGUAGE_NAMES().includes(l));
         if (langs.length > 0) update({ vocalLanguages: Array.from(new Set([...config.vocalLanguages, ...langs])) });
         break;
       case 'songStructure': update({ songStructure: value }); break;
@@ -279,7 +283,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                 <SmartSearchInput
                   value={config.genres.map(g => g.label)}
                   onChange={(val: string[]) => update({ genres: normalizeGenreOptions(val) })}
-                  options={GENRE_OPTIONS.map(g => g.label)}
+                  options={GENRE_NAMES()}
                   placeholder="Type or select genres..."
                   multiSelect
                 />
@@ -309,7 +313,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                 <SmartSearchInput
                   value={config.mood}
                   onChange={(val: string) => update({ mood: val })}
-                  options={PRESET_MOODS}
+                  options={MOOD_NAMES()}
                   placeholder="e.g., Dark, euphoric, melancholic..."
                 />
               </div>
@@ -366,7 +370,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   <SmartSearchInput
                     value={config.vocalStyle}
                     onChange={(val: string) => update({ vocalStyle: val })}
-                    options={PRESET_VOCAL_STYLES}
+                    options={VOCAL_STYLE_LABELS()}
                     placeholder="e.g., Male Vocal, Rap"
                   />
                 </div>
@@ -403,6 +407,24 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   placeholder="Select or type effects..."
                   multiSelect
                 />
+
+                {/* Vocal Gender */}
+                <div className="mt-4">
+                  <Label className="text-foreground font-medium text-sm mb-2 block">Vocal Gender Profile</Label>
+                  <div className="flex items-center gap-2">
+                    {['male', 'female', 'neutral'].map((gender) => (
+                      <Button
+                        key={gender}
+                        variant={config.vocalGender === gender ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => update({ vocalGender: gender as any })}
+                        className="flex-1 capitalize text-xs h-8"
+                      >
+                        {gender === 'neutral' ? 'Auto/Smart' : gender}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {/* Languages */}
@@ -417,7 +439,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                 <SmartSearchInput
                   value={config.vocalLanguages}
                   onChange={(val: string[]) => update({ vocalLanguages: val })}
-                  options={LANGUAGES}
+                  options={LANGUAGE_NAMES()}
                   placeholder="Select or type languages..."
                   multiSelect
                 />
@@ -452,7 +474,12 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   <Label className="text-foreground font-medium text-sm">Artist Inspiration</Label>
                   <AiToolbar field="artistInspiration" />
                 </div>
-                <Input value={config.artistInspiration} onChange={e => update({ artistInspiration: e.target.value })} className="bg-input border-border" placeholder="e.g., Tame Impala, Daft Punk..." />
+                <SmartSearchInput
+                  value={config.artistInspiration}
+                  onChange={(val: string) => update({ artistInspiration: val })}
+                  options={ARTIST_NAMES()}
+                  placeholder="e.g., AP Dhillon, Bad Bunny..."
+                />
               </div>
 
               {/* Song Structure */}

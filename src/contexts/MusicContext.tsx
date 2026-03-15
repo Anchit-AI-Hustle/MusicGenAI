@@ -12,6 +12,9 @@ import { generateVocals, generateLyricCues, inferVocalStyle, generateDefaultLyri
 import { aiMusicClient } from '@/lib/ai-music-client';
 import type { TrackConfig } from '@/components/AlbumTrackForm';
 import { genreOptionsToLabels } from '@/data/genres';
+import { buildMasterPrompt } from '@/lib/promptBuilder';
+import { applyInferenceToContext } from '@/lib/contextInference';
+import { CreativeContext } from '@/types/creative-context';
 
 export interface Track {
   id: string;
@@ -72,7 +75,7 @@ export interface CreateMusicInput {
   vocalEffects?: string[];
   songStructure?: string;
   lyricTheme?: string;
-  vocalGender?: 'male' | 'female' | 'non-binary';
+  vocalGender?: 'male' | 'female' | 'neutral';
   numberOfTracks?: number;
   musicalKey?: string;
   // Per-track configs for album mode
@@ -97,6 +100,7 @@ export interface FormState {
   vocalEffects?: string[];
   songStructure?: string;
   lyricTheme?: string;
+  vocalGender?: 'male' | 'female' | 'neutral';
 }
 
 type AiAction = 'suggest' | 'enhance' | 'new';
@@ -180,6 +184,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     vocalEffects: [],
     songStructure: '',
     lyricTheme: '',
+    vocalGender: 'neutral',
   });
   const [suggestionState, setSuggestionState] = useState<AiSuggestionState>({
     loading: {},
@@ -191,7 +196,45 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const abortControllersRef = useRef<Record<string, AbortController>>({});
 
   const updateFormState = useCallback((updates: Partial<FormState>) => {
-    setFormState(prev => ({ ...prev, ...updates }));
+    setFormState(prev => {
+      let newState = { ...prev, ...updates };
+      
+      // If description (musicPrompt) changed, apply inference
+      if (updates.musicPrompt !== undefined) {
+        const creative = applyInferenceToContext(updates.musicPrompt, {
+          genre: prev.genres[0] || '',
+          subgenre: prev.subgenre[0] || '',
+          tempo: prev.tempo || 110,
+          duration: prev.durationSeconds,
+          mood: prev.mood || '',
+          songStructure: prev.songStructure || '',
+          vocalStyle: prev.vocalStyle || '',
+          vocalIntensity: prev.vocalIntensity || 50,
+          vocalLanguage: prev.vocalLanguages[0] || 'English',
+          vocalLanguages: prev.vocalLanguages,
+          vocalEffects: prev.vocalEffects,
+          lyrics: prev.lyrics || '',
+          lyricTheme: prev.lyricTheme || '',
+          artistInspiration: prev.artistInspiration || '',
+          videoStyle: prev.videoStyle || '',
+          songDescription: updates.musicPrompt,
+          vocalGender: prev.vocalGender,
+        });
+
+        newState = {
+          ...newState,
+          genres: creative.genre ? [creative.genre] : newState.genres,
+          subgenre: creative.subgenre ? [creative.subgenre] : newState.subgenre,
+          tempo: creative.tempo || newState.tempo,
+          mood: creative.mood || newState.mood,
+          artistInspiration: creative.artistInspiration || newState.artistInspiration,
+          lyricTheme: creative.lyricTheme || newState.lyricTheme,
+          vocalLanguages: creative.vocalLanguage ? [creative.vocalLanguage] : newState.vocalLanguages,
+        };
+      }
+      
+      return newState;
+    });
   }, []);
 
   const fetchCreations = useCallback(async () => {
@@ -474,43 +517,28 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Senior Engineer Utility: Compiles a semantically dense prompt for neural models
   const compileNeuralPrompt = (input: CreateMusicInput): string => {
-    const isInstrumental = (input.vocalStructure || '').toLowerCase() === 'instrumental';
-    const genres = input.genres.join(', ');
-    const mood = input.mood || 'balanced';
-    const tempo = input.tempoBpm || 120;
-    const duration = input.durationSeconds || 180;
-    
-    let prompt = `A professional ${duration}s recording of ${genres}. `;
-    prompt += `Context: ${mood} mood, tight ${tempo} BPM rhythmic grid. `;
-    
-    if (isInstrumental) {
-      prompt += "Structure: Instrumental composition. Purely musical, no human voices or vocals. ";
-    } else {
-      const style = input.vocalStyle || "expressive singing";
-      const lang = input.vocalLanguages[0] || "English";
-      prompt += `Structure: Vocal-led song featuring ${style} vocals in ${lang}. `;
-      if (input.vocalIntensity) prompt += `Vocal energy level: ${input.vocalIntensity}/10. `;
-      if (input.vocalEffects?.length) prompt += `Effects: ${input.vocalEffects.join(', ')}. `;
-    }
+    const context: CreativeContext = {
+      genre: input.genres[0] || 'Pop',
+      subgenre: input.subgenre?.[0],
+      tempo: input.tempoBpm || 110,
+      duration: input.durationSeconds,
+      mood: input.mood || 'Neutral',
+      songStructure: input.songStructure || '',
+      vocalStyle: input.vocalStyle || '',
+      vocalIntensity: input.vocalIntensity || 50,
+      vocalLanguage: input.vocalLanguage?.[0] || input.vocalLanguages?.[0] || 'English',
+      vocalLanguages: input.vocalLanguages || [],
+      vocalEffects: input.vocalEffects || [],
+      lyrics: input.lyrics || '',
+      lyricTheme: input.lyricTheme || '',
+      artistInspiration: input.artistInspiration || '',
+      videoStyle: input.videoStyle || '',
+      songDescription: input.musicPrompt || '',
+      vocalGender: input.vocalGender,
+      instrumentalOnly: (input.vocalStructure || '').toLowerCase() === 'instrumental'
+    };
 
-    if (input.songStructure) {
-      prompt += `Musical Form: ${input.songStructure}. `;
-    }
-    
-    if (input.musicPrompt) {
-      prompt += `Details: ${input.musicPrompt}. `;
-    }
-    
-    if (input.artistInspiration) {
-      prompt += `Influence: In the aesthetic spirit of ${input.artistInspiration}. `;
-    }
-
-    if (input.lyrics) {
-      const lyricGist = input.lyrics.split('\n').slice(0, 3).join(' ').substring(0, 100);
-      prompt += `Thematic core: ${lyricGist}... `;
-    }
-    
-    return prompt.trim();
+    return buildMasterPrompt(context);
   };
 
   // Helper to calculate bars
