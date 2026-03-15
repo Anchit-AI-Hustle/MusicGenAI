@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PortalDropdown } from '@/components/ui/portal-dropdown';
 import { 
@@ -414,8 +414,23 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   const filteredGenres = GENRE_OPTIONS.filter(g => g.label.toLowerCase().includes(genreSearch.toLowerCase()));
 
+  const formatDuration = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const contextRef = useRef(getFormContext());
+  useEffect(() => { contextRef.current = getFormContext(); }, [
+    title, musicPrompt, selectedGenres, durationSeconds, selectedLanguages,
+    lyrics, artistInspiration, videoStyle, tempoBpm, mood, vocalStructure,
+    vocalStyle, vocalIntensity, selectedVocalEffects, songStructure
+  ]);
+
   const handleGenerate = async () => {
     if (!isAuthenticated) { onAuthClick(); return; }
+
+    console.log("[Generate] Context being sent:", JSON.stringify(contextRef.current, null, 2));
 
     if (mode === 'album') {
       await createMusic({
@@ -447,10 +462,51 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     }
   };
 
-  const formatDuration = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
+  const triggerDownload = (url: string, filename: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleDownload = async (audioUrl?: string, trackTitle?: string) => {
+    if (!audioUrl) return;
+
+    try {
+      // If it's already a base64 data URL (ElevenLabs path), convert to blob
+      if (audioUrl.startsWith("data:")) {
+        const response = await fetch(audioUrl);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        triggerDownload(url, `musevibe-${trackTitle}.mp3`);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        return;
+      }
+
+      // If it's a blob: URL
+      if (audioUrl.startsWith("blob:")) {
+        triggerDownload(audioUrl, `musevibe-${trackTitle}.wav`);
+        return;
+      }
+
+      // If it's an external URL (Replicate or Vercel Blob)
+      // Fetch it through our own proxy to force download headers
+      const response = await fetch(`/api/download?url=${encodeURIComponent(audioUrl)}`);
+      if (!response.ok) throw new Error("Download fetch failed");
+      const blob = await response.blob();
+      const contentType = response.headers.get("content-type") ?? "audio/mpeg";
+      const ext = contentType.includes("wav") ? "wav" : "mp3";
+      const objectUrl = URL.createObjectURL(blob);
+      triggerDownload(objectUrl, `musevibe-${trackTitle}.${ext}`);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+    } catch (err) {
+      console.error("Download failed:", err);
+      // Last resort fallback: open in new tab
+      window.open(audioUrl, "_blank");
+    }
   };
 
   const handleTrackPlay = (track: { id: string; title: string; audioUrl?: string; videoUrl?: string; duration: number; lyrics?: string; lyricCues?: PlayerTrack['lyricCues'] }) => {
@@ -992,9 +1048,9 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                         <div className="flex items-center gap-1 flex-shrink-0">
                           {track.audioUrl && (
                             <>
-                              <a href={track.audioUrl} download={`${track.title || 'track'}.wav`}>
-                                <Button variant="ghost" size="icon"><Download className="w-5 h-5" /></Button>
-                              </a>
+                              <Button variant="ghost" size="icon" onClick={() => handleDownload(track.audioUrl, track.title || 'track')}>
+                                <Download className="w-5 h-5" />
+                              </Button>
                               <Button variant="ghost" size="icon" onClick={() => { navigator.clipboard.writeText(track.audioUrl!); toast.success('Link copied!'); }}>
                                 <Share2 className="w-5 h-5" />
                               </Button>

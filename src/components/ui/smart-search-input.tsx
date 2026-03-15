@@ -37,6 +37,14 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
     );
   }, [options, search, values]);
 
+  // Sync the `search` state directly with `value` if it updates externally without typing
+  // This solves Bug 1: AI SUGGESTIONS APPEAR BUT NEVER APPLY TO FIELDS
+  useEffect(() => {
+    if (!multiSelect && typeof value === 'string' && value !== undefined) {
+      setSearch(value);
+    }
+  }, [value, multiSelect]);
+
   const handleSelect = (val: string) => {
     if (multiSelect) {
       if (!values.includes(val)) {
