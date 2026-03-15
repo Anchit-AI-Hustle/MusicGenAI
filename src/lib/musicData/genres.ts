@@ -76,3 +76,11 @@ export function getModelQualityWarning(genre: string): string | null {
 export function getGenresByRegion(region: string): GenreDefinition[] {
   return GENRE_DATABASE.filter(g => g.region === region);
 }
+
+export function getAllSubgenres(): string[] {
+  const subgenres = new Set<string>();
+  GENRE_DATABASE.forEach(g => {
+    g.subgenres.forEach(s => subgenres.add(s));
+  });
+  return Array.from(subgenres).sort();
+}

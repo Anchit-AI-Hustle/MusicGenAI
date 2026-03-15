@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { GENRE_NAMES } from "./musicData/genres";
+import { GENRE_NAMES, getAllSubgenres } from "./musicData/genres";
 import { LANGUAGE_NAMES } from "./musicData/languages";
 import { MOOD_NAMES } from "./musicData/moods";
 import { TEMPO_NAMES } from "./musicData/tempo";
@@ -25,6 +25,7 @@ If you are completely unsure, return null for that field.
 Song description: "${description}"
 
 Valid Genres: ${GENRE_NAMES().join(", ")}
+Valid Subgenres: ${getAllSubgenres().join(", ")}
 Valid Languages: ${LANGUAGE_NAMES().join(", ")}
 Valid Moods: ${MOOD_NAMES().join(", ")}
 Valid Tempos: ${TEMPO_NAMES().join(", ")}

@@ -1,3 +1,51 @@
+/*
+ * ============================================================
+ * MUSEVIBENSTUDIO — FORM COMPONENT FEATURE INVENTORY
+ * Update this comment whenever a feature is added or removed.
+ * Future rewrites must restore every item listed here.
+ * ============================================================
+ *
+ * AUDIO GENERATION
+ *   Trigger    : handleGenerate() button click
+ *   Entry      : createMusic({ type: 'song', ... }) via useMusic context calls startGeneration
+ *   Hook       : hooks/useGenerationJob.ts → startJob()
+ *   Lyrics     : auto-generated inside startJob if context.lyrics empty
+ *   State      : creation status, audioUrl, progress via MusicContext
+ *   Player     : <audio> / custom player rendered on success
+ *   Download   : handleDownload() → /api/download proxy → file save
+ *
+ * VIDEO GENERATION
+ *   Trigger    : useEffect watching job.status === "succeeded"
+ *                AND/OR separate "Generate Video" button (keep both)
+ *   Entry      : generateVideo(context) defined in this file
+ *   API        : POST /api/video → { jobId }
+ *   Polling    : GET /api/video/status?jobId=... every 4 seconds
+ *   State      : videoStatus, videoUrl, videoError (local useState)
+ *   Cleanup    : videoPollRef cleared on unmount
+ *   Player     : <video> rendered when videoStatus === "succeeded"
+ *   Download   : anchor with download attribute
+ *
+ * LYRICS
+ *   Standalone : "Generate Lyrics" button → POST /api/lyrics → context.lyrics (Currently auto only)
+ *   Auto       : inside startJob when context.lyrics is empty
+ *   Display    : <textarea> bound to context.lyrics, user-editable
+ *
+ * AI SUGGESTIONS
+ *   Hook       : hooks/useSuggestion.ts via MusicContext aiSuggest
+ *   Auto-apply : useEffect([suggestions]) writes to context state
+ *   Per-field  : each AiToolbar button calls handleAiSuggest("fieldName")
+ *   AI Enhance : handleEnhance("fieldName")
+ *   AI New     : handleNewSuggestion("fieldName")
+ *   AI Clear   : clears field only
+ *
+ * CONTEXT REF
+ *   contextRef : always holds latest context to avoid stale closures
+ *   Updated    : useEffect([deps]) → contextRef.current = getFormContext()
+ *
+ * RATE LIMITING
+ *   Handled    : server-side in /api/generate, 429 shown in UI
+ * ============================================================
+ */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PortalDropdown } from '@/components/ui/portal-dropdown';
@@ -79,6 +127,8 @@ interface SongPromptState {
   songStructure: string;
   subgenre: string[];
   lyricTheme: string;
+  instrumentalOnly: boolean;
+  useHighQualityVocals: boolean;
 }
 
 export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick }) => {
@@ -123,6 +173,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const [selectedSubgenres, setSelectedSubgenres] = useState<string[]>([]);
   const [lyricTheme, setLyricTheme] = useState('');
 
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoStatus, setVideoStatus] = useState<"idle" | "generating" | "polling" | "succeeded" | "failed">("idle");
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const videoPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const genreInputRef = useRef<HTMLDivElement>(null);
   const vocalStructureRef = useRef<HTMLDivElement>(null);
   const vocalStyleRef = useRef<HTMLDivElement>(null);
@@ -146,6 +201,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     songStructure,
     subgenre: selectedSubgenres,
     lyricTheme,
+    instrumentalOnly: false,
+    useHighQualityVocals: false,
   }), [
     selectedGenres, mood, tempoBpm, artistInspiration, lyrics, musicPrompt,
     selectedLanguages, videoStyle, vocalStructure, vocalStyle, vocalIntensity,
@@ -218,6 +275,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     vocalLanguages: selectedLanguages, lyrics, artistInspiration, videoStyle,
     tempoBpm, mood, vocalStructure, vocalStyle, vocalIntensity, vocalEffects: selectedVocalEffects,
     songStructure,
+    instrumentalOnly: false,
+    useHighQualityVocals: false,
     prompt: getSongPromptState(),
   });
 
@@ -359,6 +418,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         vocalIntensity: 5,
         vocalEffects: [],
         songStructure: '',
+        instrumentalOnly: false,
+        useHighQualityVocals: false,
       }); break;
       case 'genres': updateSongPrompt({ genre: [] }); break;
       case 'lyrics': updateSongPrompt({ lyrics: '' }); break;
@@ -427,10 +488,90 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     vocalStyle, vocalIntensity, selectedVocalEffects, songStructure
   ]);
 
+  const generateVideoTrack = async (ctx: any) => {
+    if (videoPollRef.current) {
+      clearInterval(videoPollRef.current);
+      videoPollRef.current = null;
+    }
+    setVideoStatus("generating");
+    setVideoUrl(null);
+    setVideoError(null);
+
+    try {
+      const res = await fetch("/api/video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ctx),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? `Video API failed: ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      if (data.videoUrl) {
+        setVideoUrl(data.videoUrl);
+        setVideoStatus("succeeded");
+        return;
+      }
+
+      if (data.jobId) {
+        setVideoStatus("polling");
+        videoPollRef.current = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`/api/video/status?jobId=${data.jobId}`);
+            const statusData = await statusRes.json();
+
+            if (statusData.status === "succeeded" && statusData.videoUrl) {
+              clearInterval(videoPollRef.current!);
+              videoPollRef.current = null;
+              setVideoUrl(statusData.videoUrl);
+              setVideoStatus("succeeded");
+            } else if (statusData.status === "failed" || statusData.status === "canceled") {
+              clearInterval(videoPollRef.current!);
+              videoPollRef.current = null;
+              setVideoStatus("failed");
+              setVideoError(statusData.error ?? "Video generation failed");
+            }
+          } catch (pollErr) {
+            clearInterval(videoPollRef.current!);
+            videoPollRef.current = null;
+            setVideoStatus("failed");
+            setVideoError((pollErr as Error).message);
+          }
+        }, 4000);
+      }
+    } catch (err) {
+      setVideoStatus("failed");
+      setVideoError((err as Error).message);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (videoPollRef.current) clearInterval(videoPollRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Determine if audio is done for current session
+    if (currentCreation?.status === "completed" && generateVideo && currentCreation.tracks[0]?.audioUrl && videoStatus === 'idle') {
+      generateVideoTrack(contextRef.current);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentCreation?.status, currentCreation?.tracks, generateVideo]);
+
   const handleGenerate = async () => {
     if (!isAuthenticated) { onAuthClick(); return; }
 
     console.log("[Generate] Context being sent:", JSON.stringify(contextRef.current, null, 2));
+    
+    // Reset video state
+    setVideoStatus("idle");
+    setVideoUrl(null);
+    setVideoError(null);
 
     if (mode === 'album') {
       await createMusic({
@@ -444,20 +585,27 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         albumTracks,
       });
     } else {
+      const ctx = contextRef.current;
       await createMusic({
         type: 'song',
-        title: title || 'Untitled Track',
-        musicPrompt, genres: genreOptionsToLabels(selectedGenres), durationSeconds, generateVideo,
-        vocalLanguages: selectedLanguages,
-        lyrics: lyrics || undefined,
-        artistInspiration: artistInspiration || undefined,
-        videoStyle: generateVideo ? videoStyle : undefined,
-        tempoBpm, mood: mood || undefined,
-        subgenre: selectedSubgenres,
-        vocalStructure, vocalStyle: vocalStyle || undefined,
-        vocalIntensity, vocalEffects: selectedVocalEffects,
-        songStructure: songStructure || undefined,
-        lyricTheme: lyricTheme || undefined,
+        title: ctx.title || 'Untitled Track',
+        musicPrompt: ctx.musicPrompt, 
+        genres: ctx.genres, 
+        durationSeconds: ctx.durationSeconds, 
+        generateVideo,
+        vocalLanguages: ctx.vocalLanguages,
+        lyrics: ctx.lyrics || undefined,
+        artistInspiration: ctx.artistInspiration || undefined,
+        videoStyle: generateVideo ? ctx.videoStyle : undefined,
+        tempoBpm: ctx.tempoBpm, 
+        mood: ctx.mood || undefined,
+        subgenre: ctx.prompt.subgenre,
+        vocalStructure: ctx.vocalStructure,
+        vocalStyle: ctx.vocalStyle || undefined,
+        vocalIntensity: ctx.vocalIntensity, 
+        vocalEffects: ctx.vocalEffects,
+        songStructure: ctx.songStructure || undefined,
+        lyricTheme: ctx.prompt.lyricTheme || undefined,
       });
     }
   };
@@ -1036,7 +1184,47 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                           {track.audioUrl && (
                             <p className="text-sm text-muted-foreground">{formatDuration(track.duration)}</p>
                           )}
-                          {track.videoUrl && (
+                          {/* VIDEO GENERATION STATUS */}
+                          {videoStatus === "generating" && (
+                            <div className="flex items-center gap-2 text-sm text-purple-600 mt-4">
+                              <span className="inline-block w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                              Creating video visuals...
+                            </div>
+                          )}
+
+                          {videoStatus === "polling" && (
+                            <div className="flex items-center gap-2 text-sm text-purple-600 mt-4">
+                              <span className="inline-block w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                              Rendering video...
+                            </div>
+                          )}
+
+                          {videoStatus === "succeeded" && videoUrl && (
+                            <div className="mt-4">
+                              <video controls src={videoUrl} className="w-full rounded-lg" />
+                              <button
+                                type="button"
+                                className="mt-2 text-sm text-blue-500 hover:underline"
+                                onClick={() => {
+                                  const a = document.createElement("a");
+                                  a.href = videoUrl;
+                                  a.download = "musevibe-video.mp4";
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  document.body.removeChild(a);
+                                }}
+                              >
+                                ⬇ Download Video
+                              </button>
+                            </div>
+                          )}
+
+                          {videoStatus === "failed" && videoError && (
+                            <div className="mt-4 text-sm text-red-500">
+                              Video failed: {videoError}
+                            </div>
+                          )}
+                          {track.videoUrl && videoStatus !== "succeeded" && (
                             <div className="mt-3">
                               <VideoPlayer videoUrl={track.videoUrl} title={track.title} duration={track.duration} />
                             </div>

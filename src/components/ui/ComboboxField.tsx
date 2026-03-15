@@ -26,6 +26,12 @@ export function ComboboxField({
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (value !== undefined && value !== null) {
+      setQuery(String(value));
+    }
+  }, [value]);
+
+  useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
         setIsOpen(false);
@@ -56,15 +62,10 @@ export function ComboboxField({
     <div className="flex flex-col gap-1.5 w-full relative" ref={wrapperRef}>
       <label className="text-sm font-medium text-white/90 flex justify-between items-center">
         {label}
-        {suggestion && onApplySuggestion && (
-           <button 
-             type="button" 
-             onClick={onApplySuggestion}
-             className="text-xs bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 px-2 py-0.5 rounded-full transition-colors flex items-center gap-1"
-             title={`AI Suggestion (Confidence: ${Math.round(suggestion.confidence * 100)}%)`}
-           >
-             ✨ Suggests: {suggestion.value}
-           </button>
+        {suggestion && (
+          <p className="mt-1 text-xs text-green-600 opacity-60">
+            ✓ AI: {suggestion.value}
+          </p>
         )}
       </label>
       

@@ -15,7 +15,7 @@ import { GENRE_DATABASE, GENRE_NAMES, getModelQualityWarning } from '@/lib/music
 import { LANGUAGE_DATABASE, LANGUAGE_NAMES, getVocalQualityAdvisory } from '@/lib/musicData/languages';
 import { MOOD_DATABASE, MOOD_NAMES } from '@/lib/musicData/moods';
 import { VOCAL_PROFILES, VOCAL_STYLE_LABELS } from '@/lib/musicData/vocals';
-import { ARTIST_DATABASE, ARTIST_NAMES } from '@/lib/musicData/artists';
+import { ARTIST_NAMES } from '@/lib/musicData/artists';
 import {
   PRESET_VIDEO_STYLES,
   VOCAL_STRUCTURE_PRESETS,
@@ -49,6 +49,7 @@ export interface TrackConfig {
   videoStyle: string;
   vocalGender?: 'male' | 'female' | 'neutral';
   useHighQualityVocals: boolean;
+  instrumentalOnly: boolean;
 }
 
 export const defaultTrackConfig = (index: number): TrackConfig => ({
@@ -72,6 +73,7 @@ export const defaultTrackConfig = (index: number): TrackConfig => ({
   videoStyle: '',
   vocalGender: 'neutral',
   useHighQualityVocals: false,
+  instrumentalOnly: false,
 });
 
 interface AlbumTrackFormProps {
@@ -157,6 +159,8 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
         vocalEffects: [],
         songStructure: '',
         videoStyle: '',
+        useHighQualityVocals: false,
+        instrumentalOnly: false,
       }); break;
       case 'genres': update({ genres: [] }); break;
       case 'mood': update({ mood: '' }); break;
@@ -380,7 +384,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   <SmartSearchInput
                     value={config.vocalStyle}
                     onChange={(val: string) => update({ vocalStyle: val })}
-                    options={VOCAL_STYLE_LABELS()}
+                    options={VOCAL_STYLE_LABELS}
                     placeholder="e.g., Male Vocal, Rap"
                   />
                 </div>
