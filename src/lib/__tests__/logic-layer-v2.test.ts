@@ -34,19 +34,19 @@ describe('Logic Layer v2: Inference Engines', () => {
 
   it('should build master prompts with all v2 segments', () => {
     const context = {
-        genre: 'Trap',
-        mood: 'Dark',
-        vocalLanguage: 'English',
-        tempo: 140,
-        duration: 180,
-        lyrics: 'Test lyrics',
-        useHighQualityVocals: false,
-        songDescription: 'A dark trap song',
-        vocalStyle: 'Rap'
+      genre: 'Trap',
+      mood: 'Dark',
+      vocalLanguage: 'English',
+      tempo: 140,
+      duration: 180,
+      lyrics: 'Test lyrics',
+      useHighQualityVocals: false,
+      songDescription: 'A dark trap song',
+      vocalStyle: 'Rap'
     };
     const plan = generateCompositionPlan(context.genre, context.mood, context.duration, context.vocalLanguage);
-    const prompts = buildMasterPrompts(context, plan);
-    
+    const prompts = buildMasterPrompts(context as any, plan);
+
     expect(prompts.instrumentalPrompt).toContain('Trap');
     expect(prompts.mixingInstruction).toContain('High-end');
   });
