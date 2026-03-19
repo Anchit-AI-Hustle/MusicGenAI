@@ -7,11 +7,12 @@ import { ARTIST_NAMES } from "./musicData/artists";
 import { CreativeContext } from "@/types/creative-context";
 
 const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || "",
+  apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "",
+  dangerouslyAllowBrowser: true,
 });
 
 export async function inferContextFromDescription(description: string) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.ANTHROPIC_API_KEY && !import.meta.env.VITE_ANTHROPIC_API_KEY) {
     console.warn("[Context Inference] ANTHROPIC_API_KEY missing, skipping inference");
     return null;
   }
