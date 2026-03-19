@@ -13,7 +13,7 @@ import { aiMusicClient } from '@/lib/ai-music-client';
 import type { TrackConfig } from '@/components/AlbumTrackForm';
 import { genreOptionsToLabels } from '@/data/genres';
 import { buildMasterPrompt } from '@/lib/promptBuilder';
-import { applyInferenceToContext } from '@/lib/contextInference';
+import { applyInferenceToContext, resolveCreativeContext } from '@/lib/contextInference';
 import { CreativeContext } from '@/types/creative-context';
 
 export interface Track {
@@ -42,66 +42,28 @@ export interface MusicCreation {
   title: string;
   tracks: Track[];
   createdAt: Date;
-  musicPrompt: string;
-  genres: string[];
+  songDescription: string;
+  genre: string;
   status: string;
-  durationSeconds: number;
-  generateVideo: boolean;
-  vocalLanguages: string[];
-  lyrics?: string;
+  duration: number;
+  visualizerEnabled: boolean;
+  vocalLanguage: string;
+  lyricsText?: string;
   artistInspiration?: string;
   videoStyle?: string;
   progress?: number;
 }
 
-export interface CreateMusicInput {
+export interface CreateMusicInput extends Partial<CreativeContext> {
   type: 'song' | 'album';
   title: string;
-  musicPrompt: string;
-  genres: string[];
-  durationSeconds: number;
-  generateVideo: boolean;
-  vocalLanguages: string[];
-  lyrics?: string;
-  artistInspiration?: string;
-  videoStyle?: string;
-  subgenre?: string[];
-  tempoBpm?: number;
-  mood?: string;
-  vocalStructure?: string;
-  vocalStyle?: string;
-  vocalIntensity?: number;
-  vocalLanguage?: string[];
-  vocalEffects?: string[];
-  songStructure?: string;
-  lyricTheme?: string;
-  vocalGender?: 'male' | 'female' | 'neutral';
   numberOfTracks?: number;
   musicalKey?: string;
   // Per-track configs for album mode
   albumTracks?: TrackConfig[];
 }
 
-export interface FormState {
-  musicPrompt: string;
-  genres: string[];
-  subgenre: string[];
-  durationSeconds: number;
-  generateVideo: boolean;
-  vocalLanguages: string[];
-  lyrics?: string;
-  artistInspiration?: string;
-  videoStyle?: string;
-  tempo?: number;
-  mood?: string;
-  vocalStructure?: string;
-  vocalStyle?: string;
-  vocalIntensity?: number;
-  vocalEffects?: string[];
-  songStructure?: string;
-  lyricTheme?: string;
-  vocalGender?: 'male' | 'female' | 'neutral';
-}
+export type FormState = CreativeContext;
 
 type AiAction = 'suggest' | 'enhance' | 'new';
 
@@ -170,21 +132,31 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [formState, setFormState] = useState<FormState>({
-    musicPrompt: '',
-    genres: [],
-    durationSeconds: 120,
-    generateVideo: true,
-    vocalLanguages: ['English'],
+    songDescription: '',
+    songTitle: 'Untitled Track',
+    genre: 'Pop',
+    subgenre: '',
+    mood: 'Energetic',
     tempo: 120,
-    mood: '',
-    subgenre: [],
-    vocalStructure: 'Verse-Chorus',
-    vocalStyle: '',
+    duration: 120,
+    vocalsEnabled: true,
+    vocalStyle: 'Pop Singing',
+    vocalGender: 'neutral',
+    vocalLanguage: 'English',
     vocalIntensity: 5,
     vocalEffects: [],
-    songStructure: '',
-    lyricTheme: '',
-    vocalGender: 'neutral',
+    lyricsMode: 'auto',
+    lyricsText: '',
+    lyricsTheme: '',
+    artistInspiration: '',
+    instruments: [],
+    energyLevel: 5,
+    structureType: 'Verse-Chorus-Bridge',
+    videoStyle: 'Cinematic',
+    visualizerEnabled: true,
+    creativityLevel: 5,
+    variationSeed: `${Math.floor(Math.random() * 1000000)}`,
+    generationMode: 'standard'
   });
   const [suggestionState, setSuggestionState] = useState<AiSuggestionState>({
     loading: {},
@@ -194,46 +166,19 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const realtimeChannelRef = useRef<any>(null);
   const abortControllersRef = useRef<Record<string, AbortController>>({});
+  const trackLastUpdateRef = useRef<Record<string, number>>({});
 
   const updateFormState = useCallback((updates: Partial<FormState>) => {
     setFormState(prev => {
-      let newState = { ...prev, ...updates };
+      const merged = { ...prev, ...updates };
       
-      // If description (musicPrompt) changed, apply inference
-      if (updates.musicPrompt !== undefined) {
-        const creative = applyInferenceToContext(updates.musicPrompt, {
-          genre: prev.genres[0] || '',
-          subgenre: prev.subgenre[0] || '',
-          tempo: prev.tempo || 110,
-          duration: prev.durationSeconds,
-          mood: prev.mood || '',
-          songStructure: prev.songStructure || '',
-          vocalStyle: prev.vocalStyle || '',
-          vocalIntensity: prev.vocalIntensity || 50,
-          vocalLanguage: prev.vocalLanguages[0] || 'English',
-          vocalLanguages: prev.vocalLanguages,
-          vocalEffects: prev.vocalEffects,
-          lyrics: prev.lyrics || '',
-          lyricTheme: prev.lyricTheme || '',
-          artistInspiration: prev.artistInspiration || '',
-          videoStyle: prev.videoStyle || '',
-          songDescription: updates.musicPrompt,
-          vocalGender: prev.vocalGender,
-        });
-
-        newState = {
-          ...newState,
-          genres: creative.genre ? [creative.genre] : newState.genres,
-          subgenre: creative.subgenre ? [creative.subgenre] : newState.subgenre,
-          tempo: creative.tempo || newState.tempo,
-          mood: creative.mood || newState.mood,
-          artistInspiration: creative.artistInspiration || newState.artistInspiration,
-          lyricTheme: creative.lyricTheme || newState.lyricTheme,
-          vocalLanguages: creative.vocalLanguage ? [creative.vocalLanguage] : newState.vocalLanguages,
-        };
+      // If description (songDescription) changed, apply inference
+      if (updates.songDescription !== undefined) {
+        return applyInferenceToContext(updates.songDescription, merged);
       }
       
-      return newState;
+      // Otherwise just resolve any direct dependency changes
+      return resolveCreativeContext(merged);
     });
   }, []);
 
@@ -269,6 +214,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             duration: track.duration_seconds,
             audioUrl: track.audio_url || undefined,
             videoUrl: track.video_url || undefined,
+            lyrics: track.lyrics || undefined,
+            lyricCues: track.lyric_cues || undefined,
             status: track.status,
             trackNumber: track.track_number,
             createdAt: new Date(track.created_at),
@@ -285,13 +232,13 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           userId: creation.user_id,
           type: creation.type as 'song' | 'album',
           title: creation.title,
-          musicPrompt: creation.music_prompt,
-          genres: creation.genres || [],
+          songDescription: creation.music_prompt,
+          genre: Array.isArray(creation.genres) ? creation.genres[0] : (creation.genres || 'Pop'),
           status: derivedStatus,
-          durationSeconds: creation.duration_seconds,
-          generateVideo: creation.generate_video,
-          vocalLanguages: creation.vocal_languages || [],
-          lyrics: creation.lyrics || undefined,
+          duration: creation.duration_seconds,
+          visualizerEnabled: creation.generate_video,
+          vocalLanguage: Array.isArray(creation.vocal_languages) ? creation.vocal_languages[0] : (creation.vocal_languages || 'English'),
+          lyricsText: creation.lyrics || undefined,
           artistInspiration: creation.artist_inspiration || undefined,
           videoStyle: creation.video_style || undefined,
           createdAt: new Date(creation.created_at),
@@ -400,19 +347,20 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       updateTrackLocal(creationId, trackId, { status: 'analyzing_beat_structure', currentStage: 'Analyzing beats', progress: 0.84, audioUrl });
       await updateTrackDB(trackId, creationId, 'Analyzing beats', 0.84, 'analyzing_beat_structure');
 
+      const { generateVideoFromAudio } = await import('@/lib/video-generator');
       const videoBlob = await generateVideoFromAudio(
         audioUrl,
-        input.durationSeconds,
-        input.genres,
+        input.duration || 120,
+        [input.genre || 'Pop'],
         input.mood || '',
-        input.videoStyle,
+        input.videoStyle || 'Cinematic',
         (p) => {
           const stageLabel = p.stage === 'analyzing_beat_structure'
             ? 'Analyzing beats'
             : p.stage === 'rendering_video' || p.stage === 'generating_video'
               ? 'Rendering visuals'
               : p.stage === 'transcoding_video'
-                ? 'Optimizing MP4 for all devices'
+                ? 'Optimizing MP4'
                 : 'Encoding video';
 
           updateTrackLocal(creationId, trackId, {
@@ -490,60 +438,43 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  // Build a CreateMusicInput from a TrackConfig
+  // Senior Engineer Utility: Compiles a CreateMusicInput from a TrackConfig
   const trackConfigToInput = (tc: TrackConfig): CreateMusicInput => ({
     type: 'song',
+    songTitle: tc.trackName,
     title: tc.trackName,
-    musicPrompt: tc.musicPrompt,
-    genres: genreOptionsToLabels(tc.genres),
-    durationSeconds: tc.durationSeconds,
-    generateVideo: tc.generateVideo,
-    vocalLanguages: tc.vocalLanguages,
-    lyrics: tc.lyrics || undefined,
+    songDescription: tc.songDescription,
+    genre: tc.genre,
+    subgenre: tc.subgenre,
+    duration: tc.duration,
+    vocalsEnabled: tc.vocalsEnabled,
+    vocalLanguage: tc.vocalLanguage,
+    lyricsText: tc.lyricsText || undefined,
     artistInspiration: tc.artistInspiration || undefined,
     videoStyle: tc.generateVideo ? tc.videoStyle : undefined,
-    tempoBpm: tc.tempoBpm,
-    mood: tc.mood || undefined,
-    musicalKey: undefined,
-    vocalStructure: tc.vocalStructure,
-    vocalStyle: tc.vocalStyle || undefined,
+    tempo: tc.tempo,
+    mood: tc.mood,
+    vocalStyle: tc.vocalStyle,
     vocalIntensity: tc.vocalIntensity,
     vocalEffects: tc.vocalEffects,
-    songStructure: tc.songStructure || undefined,
+    structureType: tc.structureType,
+    energyLevel: tc.energyLevel,
+    instruments: tc.instruments,
+    lyricsTheme: tc.lyricsTheme,
   });
 
-  // Track-level stall detection ref: trackId -> lastUpdateTimestamp
-  const trackLastUpdateRef = useRef<Record<string, number>>({});
+  // Senior Engineer Utility: Compiles a semantically dense prompt for neural models
 
   // Senior Engineer Utility: Compiles a semantically dense prompt for neural models
   const compileNeuralPrompt = (input: CreateMusicInput): string => {
-    const context: CreativeContext = {
-      genre: input.genres[0] || 'Pop',
-      subgenre: input.subgenre?.[0],
-      tempo: input.tempoBpm || 110,
-      duration: input.durationSeconds,
-      mood: input.mood || 'Neutral',
-      songStructure: input.songStructure || '',
-      vocalStyle: input.vocalStyle || '',
-      vocalIntensity: input.vocalIntensity || 50,
-      vocalLanguage: input.vocalLanguage?.[0] || input.vocalLanguages?.[0] || 'English',
-      vocalLanguages: input.vocalLanguages || [],
-      vocalEffects: input.vocalEffects || [],
-      lyrics: input.lyrics || '',
-      lyricTheme: input.lyricTheme || '',
-      artistInspiration: input.artistInspiration || '',
-      videoStyle: input.videoStyle || '',
-      songDescription: input.musicPrompt || '',
-      vocalGender: input.vocalGender,
-      instrumentalOnly: (input.vocalStructure || '').toLowerCase() === 'instrumental'
-    };
+    const context: CreativeContext = resolveCreativeContext(input);
 
     return buildMasterPrompt(context);
   };
 
   // Helper to calculate bars
-  const calculateBars = (durationSeconds: number, tempo: number) => {
-    return Math.max(1, Math.round(durationSeconds / ((60 / tempo) * 4)));
+  const calculateBars = (duration: number, tempo: number) => {
+    return Math.max(1, Math.round(duration / ((60 / tempo) * 4)));
   };
 
   // BROWSER-BASED MUSIC GENERATION (poll the Next.js backend)
@@ -561,18 +492,18 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       
       // 2. Build Music Intent
       const intent: MusicIntent = {
-        genre: input.genres[0] || 'Pop',
-        subgenre: input.subgenre?.[0] || '',
-        tempo: input.tempoBpm || 110,
+        genre: input.genre || 'Pop',
+        subgenre: input.subgenre || '',
+        tempo: input.tempo || 110,
         key: input.musicalKey || 'C',
         scale: 'minor', // Default
         mood: input.mood || 'Neutral',
-        energy: (input.vocalIntensity || 50) / 10, // scale to 1-10
+        energy: (input.vocalIntensity || 5) * 2, // scale 1-10 to match intensity
         structure: [], // Engine generates structure if empty
-        instruments: [],
-        atmosphere: input.musicPrompt || '',
-        durationSeconds: input.durationSeconds,
-        genres: input.genres,
+        instruments: input.instruments || [],
+        atmosphere: input.songDescription || '',
+        durationSeconds: input.duration || 120,
+        genres: [input.genre || 'Pop'],
         generationDNA: dna
       };
 
@@ -580,7 +511,10 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       updateTrackLocal(creationId, trackId, { status: 'processing', currentStage: 'Generating arrangement', progress: 0.2 });
       const { generateTrack } = await import('@/lib/music-engine');
       const instrumentalResult = await generateTrack(
-        intent,
+        {
+          ...intent,
+          genres: [intent.genre] // Wrap singular into array for engine compat
+        },
         (stage: string, progress: number) => {
           updateTrackLocal(creationId, trackId, { 
             status: 'processing', 
@@ -592,27 +526,24 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       let finalBuffer = instrumentalResult.instrumentalBuffer;
 
-      // 4. Generate Vocals if not instrumental-only
-      const isInstrumentalOnly = (input.vocalStructure || '').toLowerCase() === 'instrumental';
-      
-      if (!isInstrumentalOnly && input.lyrics) {
+      if (input.vocalsEnabled && input.lyricsText) {
         updateTrackLocal(creationId, trackId, { status: 'processing', currentStage: 'Synthesizing vocals', progress: 0.65 });
         
         const { generateVocals, mixVocalsIntoInstrumental, inferVocalStyle } = await import('@/lib/vocal-engine');
         
         const vocalConfig = {
-          lyrics: input.lyrics,
+          lyrics: input.lyricsText,
           tempo: intent.tempo,
           key: intent.key,
           scale: intent.scale,
           structure: instrumentalResult.compositionGraph.songStructure,
           durationSeconds: intent.durationSeconds,
-          vocalStyle: inferVocalStyle(input.genres, input.vocalStyle),
+          vocalStyle: inferVocalStyle([input.genre || 'Pop'], input.vocalStyle),
           vocalIntensity: input.vocalIntensity || 5,
           vocalEffects: input.vocalEffects || [],
-          genres: input.genres,
+          genres: [input.genre || 'Pop'],
           mood: intent.mood,
-          language: input.vocalLanguage?.[0] || 'English'
+          language: input.vocalLanguage || 'English'
         };
 
         const vocalBuffer = await generateVocals(vocalConfig as any, (p) => {
@@ -652,7 +583,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }).eq('id', trackId);
 
       // 7. Handle Video 
-      if (input.generateVideo) {
+      if (input.videoStyle) {
         runAsyncVideoRender(trackId, creationId, input, trackTitle, localAudioUrl, dna, []).catch(console.warn);
       }
 
@@ -748,13 +679,13 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         .insert({
           user_id: user.id,
           type: input.type,
-          title: input.title || (input.type === 'song' ? 'Untitled Track' : 'Untitled Album'),
-          music_prompt: input.musicPrompt || (input.type === 'album' ? 'Album' : ''),
-          genres: input.genres,
-          duration_seconds: input.durationSeconds,
-          generate_video: input.generateVideo,
-          vocal_languages: input.vocalLanguages,
-          lyrics: input.lyrics || null,
+          title: input.songTitle || (input.type === 'song' ? 'Untitled Track' : 'Untitled Album'),
+          music_prompt: input.songDescription || (input.type === 'album' ? 'Album' : ''),
+          genres: [input.genre || 'Pop'],
+          duration_seconds: input.duration || 120,
+          generate_video: !!input.videoStyle,
+          vocal_languages: [input.vocalLanguage || 'English'],
+          lyrics: input.lyricsText || null,
           artist_inspiration: input.artistInspiration || null,
           video_style: input.videoStyle || null,
           status: 'pending',
@@ -772,9 +703,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const tc = isAlbumWithTracks ? input.albumTracks![i] : null;
         return {
           creation_id: creationData.id,
-          title: tc ? tc.trackName : (input.type === 'song' ? (input.title || 'Untitled Track') : `Track ${i + 1}`),
+          title: tc ? tc.trackName : (input.songTitle || 'Untitled Track'),
           track_number: i + 1,
-          duration_seconds: tc ? tc.durationSeconds : input.durationSeconds,
+          duration_seconds: tc ? tc.duration : (input.duration || 120),
           status: 'pending',
         };
       });
@@ -791,13 +722,13 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         userId: creationData.user_id,
         type: creationData.type as 'song' | 'album',
         title: creationData.title,
-        musicPrompt: creationData.music_prompt,
-        genres: creationData.genres || [],
+        songDescription: creationData.music_prompt,
+        genre: Array.isArray(creationData.genres) ? creationData.genres[0] : (creationData.genres || 'Pop'),
         status: 'pending',
-        durationSeconds: creationData.duration_seconds,
-        generateVideo: creationData.generate_video,
-        vocalLanguages: creationData.vocal_languages || [],
-        lyrics: creationData.lyrics || undefined,
+        duration: creationData.duration_seconds,
+        visualizerEnabled: creationData.generate_video,
+        vocalLanguage: Array.isArray(creationData.vocal_languages) ? creationData.vocal_languages[0] : (creationData.vocal_languages || 'English'),
+        lyricsText: creationData.lyrics || undefined,
         artistInspiration: creationData.artist_inspiration || undefined,
         videoStyle: creationData.video_style || undefined,
         createdAt: new Date(creationData.created_at),
@@ -894,7 +825,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const compositePrompt = `
         Target Field: ${field}
         Current Value: ${value}
-        Overall Music Description: ${effectiveContext.musicPrompt || "Not provided"}
+        Overall Music Description: ${effectiveContext.songDescription || "Not provided"}
         
         Action: ${action === 'enhance' ? 'Enhance the current value based on the description.' : 'Provide a new value for this field.'}
       `.trim();
@@ -977,12 +908,12 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const input: CreateMusicInput = {
       type: creation.type,
       title: creation.title,
-      musicPrompt: creation.musicPrompt,
-      genres: creation.genres,
-      durationSeconds: creation.durationSeconds,
-      generateVideo: creation.generateVideo,
-      vocalLanguages: creation.vocalLanguages,
-      lyrics: creation.lyrics,
+      songDescription: creation.songDescription,
+      genre: creation.genre,
+      duration: creation.duration,
+      visualizerEnabled: creation.visualizerEnabled,
+      vocalLanguage: creation.vocalLanguage,
+      lyricsText: creation.lyricsText,
       artistInspiration: creation.artistInspiration,
     };
 
@@ -992,9 +923,17 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   return (
     <MusicContext.Provider value={{
-      creations, currentCreation, isLoading, isCreating,
-      formState, updateFormState,
-      createMusic, setCurrentCreation, refreshCreations, retryTrack, aiSuggest,
+      creations,
+      currentCreation,
+      isLoading,
+      isCreating,
+      formState,
+      updateFormState,
+      createMusic,
+      setCurrentCreation,
+      refreshCreations: fetchCreations,
+      retryTrack,
+      aiSuggest,
       suggestionState,
     }}>
       {children}
@@ -1004,6 +943,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
 export const useMusic = () => {
   const context = useContext(MusicContext);
-  if (context === undefined) throw new Error('useMusic must be used within a MusicProvider');
+  if (context === undefined) {
+    throw new Error('useMusic must be used within a MusicProvider');
+  }
   return context;
 };

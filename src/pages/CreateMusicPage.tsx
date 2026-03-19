@@ -17,7 +17,7 @@
  * VIDEO GENERATION
  *   Trigger    : useEffect watching job.status === "succeeded"
  *                AND/OR separate "Generate Video" button (keep both)
- *   Entry      : generateVideo(context) defined in this file
+ *   Entry      : visualizerEnabled(context) defined in this file
  *   API        : POST /api/video → { jobId }
  *   Polling    : GET /api/video/status?jobId=... every 4 seconds
  *   State      : videoStatus, videoUrl, videoError (local useState)
@@ -111,23 +111,26 @@ interface CreateMusicPageProps {
 }
 
 interface SongPromptState {
-  genre: GenreOption[];
+  songDescription: string;
+  genre: string;
+  subgenre: string;
   mood: string;
-  energy: string;
   tempo: number;
-  artist_inspiration: string;
-  lyrics: string;
-  description: string;
-  vocalLanguages: string[];
-  videoStyle: string;
-  vocalStructure: string;
+  duration: number;
+  vocalsEnabled: boolean;
   vocalStyle: string;
+  vocalGender?: 'male' | 'female' | 'neutral';
+  vocalLanguage: string;
   vocalIntensity: number;
   vocalEffects: string[];
-  songStructure: string;
-  subgenre: string[];
-  lyricTheme: string;
-  instrumentalOnly: boolean;
+  lyricsText: string;
+  lyricsTheme: string;
+  artistInspiration: string;
+  instruments: string[];
+  energyLevel: number;
+  structureType: string;
+  visualizerEnabled: boolean;
+  videoStyle: string;
   useHighQualityVocals: boolean;
 }
 
@@ -145,33 +148,35 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     Array.from({ length: 5 }, (_, i) => defaultTrackConfig(i))
   );
 
-  // Song mode state
+  // Song mode state (now strictly mapping to CreativeContext fields)
   const [title, setTitle] = useState('');
-  const [musicPrompt, setMusicPrompt] = useState('');
-  const [selectedGenres, setSelectedGenres] = useState<GenreOption[]>([]);
+  const [songDescription, setSongDescription] = useState('');
+  const [genre, setGenre] = useState('Pop');
+  const [subgenre, setSubgenre] = useState('');
   const [genreSearch, setGenreSearch] = useState('');
   const [showGenreDropdown, setShowGenreDropdown] = useState(false);
-  const [durationSeconds, setDurationSeconds] = useState(180);
+  const [duration, setDuration] = useState(180);
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(3);
   const [seconds, setSeconds] = useState(0);
-  const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
+  const [vocalLanguage, setVocalLanguage] = useState('English');
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
-  const [lyrics, setLyrics] = useState('');
+  const [lyricsText, setLyricsText] = useState('');
   const [artistInspiration, setArtistInspiration] = useState('');
-  const [generateVideo, setGenerateVideo] = useState(false);
-  const [videoStyle, setVideoStyle] = useState('');
-  const [tempoBpm, setTempoBpm] = useState(120);
-  const [mood, setMood] = useState('');
+  const [visualizerEnabled, setGenerateVideo] = useState(false);
+  const [videoStyle, setVideoStyle] = useState('Cinematic');
+  const [tempo, setTempo] = useState(120);
+  const [mood, setMood] = useState('Energetic');
   
-  const [vocalStructure, setVocalStructure] = useState('Instrumental');
-  const [vocalStyle, setVocalStyle] = useState('');
+  const [vocalsEnabled, setVocalsEnabled] = useState(true);
+  const [vocalStyle, setVocalStyle] = useState('Pop Singing');
   const [vocalIntensity, setVocalIntensity] = useState(5);
   const [selectedVocalEffects, setSelectedVocalEffects] = useState<string[]>([]);
   const [showVocalEffectsDropdown, setShowVocalEffectsDropdown] = useState(false);
-  const [songStructure, setSongStructure] = useState('');
-  const [selectedSubgenres, setSelectedSubgenres] = useState<string[]>([]);
-  const [lyricTheme, setLyricTheme] = useState('');
+  const [structureType, setStructureType] = useState('Verse-Chorus-Bridge');
+  const [lyricsTheme, setLyricsTheme] = useState('');
+  const [energyLevel, setEnergyLevel] = useState(5);
+  const [instruments, setInstruments] = useState<string[]>([]);
 
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoStatus, setVideoStatus] = useState<"idle" | "generating" | "polling" | "succeeded" | "failed">("idle");
@@ -185,46 +190,53 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const languageRef = useRef<HTMLDivElement>(null);
 
   const getSongPromptState = useCallback((): SongPromptState => ({
-    genre: selectedGenres,
+    songDescription,
+    genre,
+    subgenre,
     mood,
-    energy: mood,
-    tempo: tempoBpm,
-    artist_inspiration: artistInspiration,
-    lyrics,
-    description: musicPrompt,
-    vocalLanguages: selectedLanguages,
-    videoStyle,
-    vocalStructure,
+    tempo,
+    duration,
+    vocalsEnabled,
     vocalStyle,
+    vocalLanguage,
     vocalIntensity,
     vocalEffects: selectedVocalEffects,
-    songStructure,
-    subgenre: selectedSubgenres,
-    lyricTheme,
-    instrumentalOnly: false,
+    lyricsText,
+    lyricsTheme,
+    artistInspiration,
+    instruments,
+    energyLevel,
+    structureType,
+    visualizerEnabled,
+    videoStyle,
     useHighQualityVocals: false,
   }), [
-    selectedGenres, mood, tempoBpm, artistInspiration, lyrics, musicPrompt,
-    selectedLanguages, videoStyle, vocalStructure, vocalStyle, vocalIntensity,
-    selectedVocalEffects, songStructure, selectedSubgenres, lyricTheme,
+    songDescription, genre, subgenre, mood, tempo, duration,
+    vocalsEnabled, vocalStyle, vocalLanguage, vocalIntensity,
+    selectedVocalEffects, lyricsText, lyricsTheme, artistInspiration,
+    instruments, energyLevel, structureType, visualizerEnabled, videoStyle
   ]);
 
   const applySongPromptState = useCallback((next: SongPromptState) => {
-    setSelectedGenres(next.genre);
+    setSongDescription(next.songDescription);
+    setGenre(next.genre);
+    setSubgenre(next.subgenre);
     setMood(next.mood);
-    setTempoBpm(next.tempo);
-    setArtistInspiration(next.artist_inspiration);
-    setLyrics(next.lyrics);
-    setMusicPrompt(next.description);
-    setSelectedLanguages(next.vocalLanguages);
-    setVideoStyle(next.videoStyle);
-    setVocalStructure(next.vocalStructure);
+    setTempo(next.tempo);
+    setDuration(next.duration);
+    setVocalsEnabled(next.vocalsEnabled);
     setVocalStyle(next.vocalStyle);
+    setVocalLanguage(next.vocalLanguage);
     setVocalIntensity(next.vocalIntensity);
     setSelectedVocalEffects(next.vocalEffects);
-    setSongStructure(next.songStructure);
-    setSelectedSubgenres(next.subgenre);
-    setLyricTheme(next.lyricTheme);
+    setLyricsText(next.lyricsText);
+    setLyricsTheme(next.lyricsTheme);
+    setArtistInspiration(next.artistInspiration);
+    setInstruments(next.instruments);
+    setEnergyLevel(next.energyLevel);
+    setStructureType(next.structureType);
+    setGenerateVideo(next.visualizerEnabled);
+    setVideoStyle(next.videoStyle);
   }, []);
 
   const updateSongPrompt = useCallback((updater: Partial<SongPromptState> | ((prev: SongPromptState) => SongPromptState)) => {
@@ -236,22 +248,28 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   // Sync with global FormState for AI suggestions
   React.useEffect(() => {
     updateFormState({
-      musicPrompt,
-      genres: genreOptionsToLabels(selectedGenres),
-      durationSeconds,
-      vocalLanguages: selectedLanguages,
-      lyrics,
+      songDescription,
+      genre,
+      subgenre,
+      duration,
+      vocalLanguage,
+      lyricsText,
       artistInspiration,
       videoStyle,
-      tempo: tempoBpm,
+      tempo,
       mood,
       vocalStyle,
-      songStructure,
+      structureType,
+      energyLevel,
+      instruments,
+      lyricsTheme,
+      vocalsEnabled
     });
   }, [
-    musicPrompt, selectedGenres, durationSeconds, selectedLanguages,
-    lyrics, artistInspiration, videoStyle, tempoBpm, mood,
-    vocalStyle, songStructure, updateFormState
+    songDescription, genre, subgenre, duration, vocalLanguage,
+    lyricsText, artistInspiration, videoStyle, tempo, mood,
+    vocalStyle, structureType, energyLevel, instruments, lyricsTheme,
+    vocalsEnabled, updateFormState
   ]);
 
   // Sync album track count
@@ -271,12 +289,25 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   // Song mode helpers
   const getFormContext = () => ({
-    title, musicPrompt, genres: genreOptionsToLabels(selectedGenres), durationSeconds,
-    vocalLanguages: selectedLanguages, lyrics, artistInspiration, videoStyle,
-    tempoBpm, mood, vocalStructure, vocalStyle, vocalIntensity, vocalEffects: selectedVocalEffects,
-    songStructure,
-    instrumentalOnly: false,
-    useHighQualityVocals: false,
+    title, 
+    songDescription, 
+    genre, 
+    subgenre,
+    duration,
+    vocalLanguage, 
+    lyricsText, 
+    artistInspiration, 
+    videoStyle,
+    tempo, 
+    mood, 
+    vocalsEnabled,
+    vocalStyle, 
+    vocalIntensity, 
+    vocalEffects: selectedVocalEffects,
+    structureType,
+    instruments,
+    energyLevel,
+    lyricsTheme,
     prompt: getSongPromptState(),
   });
 
@@ -286,13 +317,14 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
     updateSongPrompt(prev => ({
       ...prev,
-      genre: structured.genre?.length ? normalizeGenreOptions([...prev.genre, ...structured.genre]) : prev.genre,
+      genre: structured.genre?.length ? structured.genre[0] : prev.genre,
       mood: structured.mood || prev.mood,
-      energy: structured.energy || prev.energy,
       tempo: structured.tempo ? Math.max(60, Math.min(200, parseInt(structured.tempo) || prev.tempo)) : prev.tempo,
-      artist_inspiration: structured.artist_inspiration || prev.artist_inspiration,
-      lyrics: structured.lyrics || prev.lyrics,
-      description: structured.description || structured.prompt || result.suggestion || prev.description,
+      artistInspiration: structured.artist_inspiration || prev.artistInspiration,
+      lyricsText: structured.lyrics || prev.lyricsText,
+      songDescription: structured.description || structured.prompt || result.suggestion || prev.songDescription,
+      subgenre: structured.subgenre && Array.isArray(structured.subgenre) ? structured.subgenre.join(', ') : (structured.subgenre || prev.subgenre),
+      lyricsTheme: structured.lyricTheme || prev.lyricsTheme,
     }));
     return true;
   };
@@ -302,45 +334,35 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'trackName': setTitle(value); break;
       case 'albumName': setAlbumName(value); break;
       case 'albumVibe': setAlbumVibe(value); break;
-      case 'prompt': updateSongPrompt({ description: value }); break;
-      case 'genres':
-        // MERGE AI-suggested genres into existing selection instead of replacing
-        const validSuggested = normalizeGenreOptions(value.split(',').map(g => g.trim()).filter(Boolean));
-        if (validSuggested.length > 0) {
-          updateSongPrompt(prev => ({
-            ...prev,
-            genre: normalizeGenreOptions([...prev.genre, ...validSuggested]),
-          }));
-        }
-        break;
-      case 'lyrics': updateSongPrompt({ lyrics: value }); break;
-      case 'artistInspiration': updateSongPrompt({ artist_inspiration: value }); break;
-      case 'vocalLanguage':
-        // MERGE languages instead of replacing
-        const langs = value.split(',').map(l => l.trim()).filter(l => LANGUAGES.includes(l));
-        if (langs.length > 0) {
-          updateSongPrompt(prev => ({
-            ...prev,
-            vocalLanguages: Array.from(new Set([...prev.vocalLanguages, ...langs])),
-          }));
-        }
-        break;
+      case 'prompt': updateSongPrompt({ songDescription: value }); break;
+      case 'genre': updateSongPrompt({ genre: value }); break;
+      case 'lyrics': updateSongPrompt({ lyricsText: value }); break;
+      case 'artistInspiration': updateSongPrompt({ artistInspiration: value }); break;
+      case 'vocalLanguage': updateSongPrompt({ vocalLanguage: value }); break;
       case 'videoStyle': updateSongPrompt({ videoStyle: value }); break;
-      case 'tempoBpm': { const p = parseInt(value); if (!isNaN(p)) updateSongPrompt({ tempo: Math.max(60, Math.min(200, p)) }); break; }
-      case 'mood': updateSongPrompt({ mood: value, energy: value }); break;
-      case 'songStructure': updateSongPrompt({ songStructure: value }); break;
-      case 'vocalStructure': updateSongPrompt({ vocalStructure: value }); break;
+      case 'tempo': updateSongPrompt({ tempo: Math.max(60, Math.min(200, parseInt(value) || 120)) }); break;
+      case 'mood': updateSongPrompt({ mood: value }); break;
+      case 'structureType': updateSongPrompt({ structureType: value }); break;
       case 'vocalStyle': updateSongPrompt({ vocalStyle: value }); break;
-      case 'vocalIntensity': { const p = parseInt(value); if (!isNaN(p)) updateSongPrompt({ vocalIntensity: Math.max(1, Math.min(10, p)) }); break; }
+      case 'vocalIntensity': updateSongPrompt({ vocalIntensity: Math.max(1, Math.min(10, parseInt(value) || 5)) }); break;
       case 'vocalEffects':
-        // MERGE effects instead of replacing
         const newEffects = value.split(',').map(e => e.trim()).filter(Boolean);
         updateSongPrompt(prev => ({
           ...prev,
           vocalEffects: Array.from(new Set([...prev.vocalEffects, ...newEffects])),
         }));
         break;
-      case 'duration': { const p = parseInt(value); if (!isNaN(p)) { const clamped = Math.max(30, Math.min(600, p)); setDurationSeconds(clamped); setHours(Math.floor(clamped / 3600)); setMinutes(Math.floor((clamped % 3600) / 60)); setSeconds(clamped % 60); } break; }
+      case 'duration': {
+        const p = parseInt(value);
+        if (!isNaN(p)) {
+          const clamped = Math.max(30, Math.min(600, p));
+          setDuration(clamped);
+          setHours(Math.floor(clamped / 3600));
+          setMinutes(Math.floor((clamped % 3600) / 60));
+          setSeconds(clamped % 60);
+        }
+        break;
+      }
     }
   };
 
@@ -349,20 +371,19 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'trackName': return title;
       case 'albumName': return albumName;
       case 'albumVibe': return albumVibe;
-      case 'prompt': return musicPrompt;
-      case 'genres': return genreOptionsToLabels(selectedGenres).join(', ');
-      case 'lyrics': return lyrics;
+      case 'prompt': return songDescription;
+      case 'genre': return genre;
+      case 'lyrics': return lyricsText;
       case 'artistInspiration': return artistInspiration;
-      case 'vocalLanguage': return selectedLanguages.join(', ');
+      case 'vocalLanguage': return vocalLanguage;
       case 'videoStyle': return videoStyle;
-      case 'tempoBpm': return String(tempoBpm);
+      case 'tempo': return String(tempo);
       case 'mood': return mood;
-      case 'songStructure': return songStructure;
-      case 'vocalStructure': return vocalStructure;
+      case 'structureType': return structureType;
       case 'vocalStyle': return vocalStyle;
       case 'vocalIntensity': return String(vocalIntensity);
       case 'vocalEffects': return selectedVocalEffects.join(', ');
-      case 'duration': return String(durationSeconds);
+      case 'duration': return String(duration);
       default: return '';
     }
   };
@@ -404,31 +425,29 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'albumName': setAlbumName(''); break;
       case 'albumVibe': setAlbumVibe(''); break;
       case 'prompt': updateSongPrompt({
-        genre: [],
-        mood: '',
-        energy: '',
+        genre: 'Pop',
+        mood: 'Energetic',
         tempo: 120,
-        artist_inspiration: '',
-        lyrics: '',
-        description: '',
-        vocalLanguages: [],
-        videoStyle: '',
-        vocalStructure: 'Instrumental',
-        vocalStyle: '',
+        artistInspiration: '',
+        lyricsText: '',
+        songDescription: '',
+        vocalLanguage: 'English',
+        videoStyle: 'Cinematic',
+        vocalsEnabled: true,
+        vocalStyle: 'Pop Singing',
         vocalIntensity: 5,
         vocalEffects: [],
-        songStructure: '',
-        instrumentalOnly: false,
+        structureType: 'Verse-Chorus-Bridge',
         useHighQualityVocals: false,
       }); break;
-      case 'genres': updateSongPrompt({ genre: [] }); break;
-      case 'lyrics': updateSongPrompt({ lyrics: '' }); break;
-      case 'artistInspiration': updateSongPrompt({ artist_inspiration: '' }); break;
-      case 'vocalLanguage': updateSongPrompt({ vocalLanguages: [] }); break;
-      case 'videoStyle': updateSongPrompt({ videoStyle: '' }); break;
-      case 'tempoBpm': updateSongPrompt({ tempo: 120 }); break;
-      case 'mood': updateSongPrompt({ mood: '', energy: '' }); break;
-      case 'songStructure': updateSongPrompt({ songStructure: '' }); break;
+      case 'genre': updateSongPrompt({ genre: 'Pop' }); break;
+      case 'lyrics': updateSongPrompt({ lyricsText: '' }); break;
+      case 'artistInspiration': updateSongPrompt({ artistInspiration: '' }); break;
+      case 'vocalLanguage': updateSongPrompt({ vocalLanguage: 'English' }); break;
+      case 'videoStyle': updateSongPrompt({ videoStyle: 'Cinematic' }); break;
+      case 'tempo': updateSongPrompt({ tempo: 120 }); break;
+      case 'mood': updateSongPrompt({ mood: 'Energetic' }); break;
+      case 'structureType': updateSongPrompt({ structureType: 'Verse-Chorus-Bridge' }); break;
       case 'vocalStructure': updateSongPrompt({ vocalStructure: 'Instrumental' }); break;
       case 'vocalStyle': updateSongPrompt({ vocalStyle: '' }); break;
       case 'vocalIntensity': updateSongPrompt({ vocalIntensity: 5 }); break;
@@ -483,12 +502,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   const contextRef = useRef(getFormContext());
   useEffect(() => { contextRef.current = getFormContext(); }, [
-    title, musicPrompt, selectedGenres, durationSeconds, selectedLanguages,
-    lyrics, artistInspiration, videoStyle, tempoBpm, mood, vocalStructure,
-    vocalStyle, vocalIntensity, selectedVocalEffects, songStructure
+    title, songDescription, genre, subgenre, duration, vocalLanguage,
+    lyricsText, artistInspiration, videoStyle, tempo, mood, vocalsEnabled,
+    vocalStyle, vocalIntensity, selectedVocalEffects, structureType
   ]);
 
-  const generateVideoTrack = async (ctx: any) => {
+  const visualizerEnabledTrack = async (ctx: any) => {
     if (videoPollRef.current) {
       clearInterval(videoPollRef.current);
       videoPollRef.current = null;
@@ -557,11 +576,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   useEffect(() => {
     // Determine if audio is done for current session
-    if (currentCreation?.status === "completed" && generateVideo && currentCreation.tracks[0]?.audioUrl && videoStatus === 'idle') {
-      generateVideoTrack(contextRef.current);
+    if (currentCreation?.status === "completed" && visualizerEnabled && currentCreation.tracks[0]?.audioUrl && videoStatus === 'idle') {
+      visualizerEnabledTrack(contextRef.current);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCreation?.status, currentCreation?.tracks, generateVideo]);
+  }, [currentCreation?.status, currentCreation?.tracks, visualizerEnabled]);
 
   const handleGenerate = async () => {
     if (!isAuthenticated) { onAuthClick(); return; }
@@ -577,35 +596,38 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       await createMusic({
         type: 'album',
         title: albumName || 'Untitled Album',
-        musicPrompt: albumVibe,
-        genres: [],
-        durationSeconds: albumTracks[0]?.durationSeconds || 180,
-        generateVideo: albumTracks.some(t => t.generateVideo),
-        vocalLanguages: [],
+        songDescription: albumVibe,
+        genre: albumTracks[0]?.genre || 'Pop',
+        duration: albumTracks.reduce((acc, t) => acc + t.duration, 0),
+        visualizerEnabled: albumTracks.some(t => t.visualizerEnabled),
+        vocalLanguage: albumTracks[0]?.vocalLanguage || 'English',
         albumTracks,
       });
     } else {
       const ctx = contextRef.current;
       await createMusic({
         type: 'song',
+        songTitle: ctx.title || 'Untitled Track',
         title: ctx.title || 'Untitled Track',
-        musicPrompt: ctx.musicPrompt, 
-        genres: ctx.genres, 
-        durationSeconds: ctx.durationSeconds, 
-        generateVideo,
-        vocalLanguages: ctx.vocalLanguages,
-        lyrics: ctx.lyrics || undefined,
+        songDescription: ctx.songDescription, 
+        genre: ctx.genre, 
+        duration: ctx.duration, 
+        visualizerEnabled,
+        vocalLanguage: ctx.vocalLanguage,
+        lyricsText: ctx.lyricsText || undefined,
         artistInspiration: ctx.artistInspiration || undefined,
-        videoStyle: generateVideo ? ctx.videoStyle : undefined,
-        tempoBpm: ctx.tempoBpm, 
+        videoStyle: visualizerEnabled ? ctx.videoStyle : undefined,
+        tempo: ctx.tempo, 
         mood: ctx.mood || undefined,
-        subgenre: ctx.prompt.subgenre,
-        vocalStructure: ctx.vocalStructure,
+        subgenre: ctx.subgenre,
+        vocalsEnabled: ctx.vocalsEnabled,
         vocalStyle: ctx.vocalStyle || undefined,
         vocalIntensity: ctx.vocalIntensity, 
         vocalEffects: ctx.vocalEffects,
-        songStructure: ctx.songStructure || undefined,
-        lyricTheme: ctx.prompt.lyricTheme || undefined,
+        structureType: ctx.structureType || undefined,
+        lyricsTheme: ctx.lyricsTheme || undefined,
+        energyLevel: ctx.energyLevel,
+        instruments: ctx.instruments,
       });
     }
   };
@@ -861,7 +883,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                   <AiToolbar field="prompt" />
                 </div>
-                <Textarea placeholder="e.g., A dreamy nostalgic sunset vibe with warm synths..." value={musicPrompt} onChange={e => updateSongPrompt({ description: e.target.value })} className="bg-input border-border min-h-32 resize-none" />
+                <Textarea placeholder="e.g., A dreamy nostalgic sunset vibe with warm synths..." value={songDescription} onChange={e => updateSongPrompt({ songDescription: e.target.value })} className="bg-input border-border min-h-32 resize-none" />
               </motion.div>
 
               {/* Genres */}
@@ -902,11 +924,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <div className="flex items-center gap-2">
                     <Activity className="w-5 h-5 text-muted-foreground" />
                     <Label className="text-foreground font-medium">Tempo (BPM)</Label>
-                    <span className="ml-2 text-lg font-display text-primary">{tempoBpm} BPM</span>
+                    <span className="ml-2 text-lg font-display text-primary">{tempo} BPM</span>
                   </div>
-                  <AiToolbar field="tempoBpm" />
+                  <AiToolbar field="tempo" />
                 </div>
-                <Slider value={[tempoBpm]} onValueChange={v => updateSongPrompt({ tempo: v[0] })} min={60} max={200} step={1} className="mb-3" />
+                <Slider value={[tempo]} onValueChange={v => updateSongPrompt({ tempo: v[0] })} min={60} max={200} step={1} className="mb-3" />
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>60 BPM (Slow)</span><span>200 BPM (Fast)</span>
                 </div>
@@ -918,11 +940,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <div className="flex items-center gap-2">
                     <Clock className="w-5 h-5 text-muted-foreground" />
                     <Label className="text-foreground font-medium">Duration</Label>
-                    <span className="ml-2 text-lg font-display text-primary">{formatDuration(durationSeconds)}</span>
+                    <span className="ml-2 text-lg font-display text-primary">{formatDuration(duration)}</span>
                   </div>
                   <AiToolbar field="duration" />
                 </div>
-                <Slider value={[durationSeconds]} onValueChange={updateFromSlider} max={600} min={30} step={1} className="mb-6" />
+                <Slider value={[duration]} onValueChange={updateFromSlider} max={600} min={30} step={1} className="mb-6" />
                 <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
                   <div className="flex items-center gap-2">
                     <Input type="number" min={0} max={1} value={hours} onChange={e => setHours(Math.min(1, parseInt(e.target.value) || 0))} className="w-14 sm:w-16 bg-input border-border text-center" />
@@ -949,7 +971,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                 </div>
                 <SmartSearchInput
                   value={mood}
-                  onChange={(val: string) => updateSongPrompt({ mood: val, energy: val })}
+                  onChange={(val: string) => updateSongPrompt({ mood: val })}
                   options={PRESET_MOODS}
                   placeholder="e.g., Dark, euphoric, melancholic..."
                 />
@@ -959,11 +981,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32 }} className="glass-card rounded-xl p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
                   <Label className="text-foreground font-medium">Song Structure</Label>
-                  <AiToolbar field="songStructure" />
+                  <AiToolbar field="structureType" />
                 </div>
                 <SmartSearchInput
-                  value={songStructure}
-                  onChange={(val: string) => updateSongPrompt({ songStructure: val })}
+                  value={structureType}
+                  onChange={(val: string) => updateSongPrompt({ structureType: val })}
                   options={SONG_STRUCTURE_PRESETS}
                   placeholder="e.g., Intro → Verse → Chorus → Outro"
                 />
@@ -974,13 +996,13 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
                   <div className="flex items-center gap-2">
                     <AudioWaveform className="w-5 h-5 text-muted-foreground" />
-                    <Label className="text-foreground font-medium">Vocal Structure</Label>
+                    <Label className="text-foreground font-medium">Vocal Arrangement</Label>
                   </div>
-                  <AiToolbar field="vocalStructure" />
+                  <AiToolbar field="structureType" />
                 </div>
                 <SmartSearchInput
-                  value={vocalStructure}
-                  onChange={(val: string) => updateSongPrompt({ vocalStructure: val })}
+                  value={structureType}
+                  onChange={(val: string) => updateSongPrompt({ structureType: val })}
                   options={VOCAL_STRUCTURE_PRESETS}
                   placeholder="e.g., Verse - Chorus - Verse"
                 />
@@ -1047,11 +1069,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <AiToolbar field="vocalLanguage" />
                 </div>
                 <SmartSearchInput
-                  value={selectedLanguages}
-                  onChange={(val: string[]) => setSelectedLanguages(val)}
+                  value={vocalLanguage}
+                  onChange={(val: string) => setVocalLanguage(val)}
                   options={LANGUAGES}
-                  placeholder="Select or type languages..."
-                  multiSelect
+                  placeholder="Select or type language..."
                 />
               </motion.div>
 
@@ -1059,11 +1080,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.38 }} className="glass-card rounded-xl p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
                   <Label className="text-foreground font-medium">Lyric Theme</Label>
-                  <AiToolbar field="lyricTheme" />
+                  <AiToolbar field="lyricsTheme" />
                 </div>
                 <SmartSearchInput
-                  value={lyricTheme}
-                  onChange={(val: string) => setLyricTheme(val)}
+                  value={lyricsTheme}
+                  onChange={(val: string) => setLyricsTheme(val)}
                   options={PRESET_LYRIC_THEMES}
                   placeholder="e.g., Cyberpunk Future, Nature & Peace..."
                 />
@@ -1081,7 +1102,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                   <AiToolbar field="lyrics" />
                 </div>
-                <Textarea placeholder="e.g., A story about finding hope after loss..." value={lyrics} onChange={e => setLyrics(e.target.value)} className="bg-input border-border min-h-32 resize-none" />
+                <Textarea placeholder="e.g., A story about finding hope after loss..." value={lyricsText} onChange={e => setLyricsText(e.target.value)} className="bg-input border-border min-h-32 resize-none" />
               </motion.div>
 
               {/* Artist Inspiration */}
@@ -1093,7 +1114,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </div>
                   <AiToolbar field="artistInspiration" />
                 </div>
-                <Input placeholder="e.g., Tame Impala, Daft Punk, Billie Eilish..." value={artistInspiration} onChange={e => updateSongPrompt({ artist_inspiration: e.target.value })} className="bg-input border-border" />
+                <Input placeholder="e.g., Tame Impala, Daft Punk, Billie Eilish..." value={artistInspiration} onChange={e => updateSongPrompt({ artistInspiration: e.target.value })} className="bg-input border-border" />
               </motion.div>
 
               {/* Video */}
@@ -1106,10 +1127,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                       <p className="text-sm text-muted-foreground">Create a visual accompaniment</p>
                     </div>
                   </div>
-                  <Switch checked={generateVideo} onCheckedChange={setGenerateVideo} />
+                  <Switch checked={visualizerEnabled} onCheckedChange={setGenerateVideo} />
                 </div>
                 <AnimatePresence>
-                  {generateVideo && (
+                  {visualizerEnabled && (
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-6">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
                         <div className="flex items-center gap-2">

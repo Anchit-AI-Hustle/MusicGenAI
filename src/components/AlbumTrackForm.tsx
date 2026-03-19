@@ -30,50 +30,53 @@ import type { AiSuggestionResult } from '@/contexts/MusicContext';
 
 export interface TrackConfig {
   trackName: string;
-  musicPrompt: string;
-  genres: GenreOption[];
+  songDescription: string;
+  genre: string;
+  subgenre?: string;
   mood: string;
-  tempoBpm: number;
-  durationSeconds: number;
-  vocalLanguages: string[];
-  vocalStructure: string;
+  tempo: number;
+  duration: number;
+  vocalsEnabled: boolean;
   vocalStyle: string;
+  vocalGender?: 'male' | 'female' | 'neutral';
+  vocalLanguage: string;
   vocalIntensity: number;
   vocalEffects: string[];
-  lyrics: string;
+  lyricsText: string;
+  lyricsTheme: string;
   artistInspiration: string;
-  songStructure: string;
-  subgenre: string[];
-  lyricTheme: string;
+  instruments: string[];
+  energyLevel: number;
+  structureType: string;
   generateVideo: boolean;
   videoStyle: string;
-  vocalGender?: 'male' | 'female' | 'neutral';
-  useHighQualityVocals: boolean;
-  instrumentalOnly: boolean;
+  useHighQualityVocals?: boolean; // Legacy but kept for now
+  genres?: GenreOption[]; // Kept for SmartSearch compatibility if needed
 }
 
 export const defaultTrackConfig = (index: number): TrackConfig => ({
   trackName: `Track ${index + 1}`,
-  musicPrompt: '',
-  genres: [],
-  mood: '',
-  tempoBpm: 120,
-  durationSeconds: 180,
-  vocalLanguages: [],
-  vocalStructure: 'Instrumental',
-  vocalStyle: '',
+  songDescription: '',
+  genre: 'Pop',
+  subgenre: '',
+  mood: 'Energetic',
+  tempo: 120,
+  duration: 180,
+  vocalsEnabled: true,
+  vocalStyle: 'Pop Singing',
+  vocalGender: 'neutral',
+  vocalLanguage: 'English',
   vocalIntensity: 5,
   vocalEffects: [],
-  lyrics: '',
+  lyricsText: '',
+  lyricsTheme: '',
   artistInspiration: '',
-  songStructure: '',
-  subgenre: [],
-  lyricTheme: '',
+  instruments: [],
+  energyLevel: 5,
+  structureType: 'Verse-Chorus-Bridge',
   generateVideo: false,
-  videoStyle: '',
-  vocalGender: 'neutral',
-  useHighQualityVocals: false,
-  instrumentalOnly: false,
+  videoStyle: 'Cinematic',
+  useHighQualityVocals: false
 });
 
 interface AlbumTrackFormProps {
@@ -94,22 +97,21 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
   const getFieldValue = (field: string): string => {
     switch (field) {
       case 'trackName': return config.trackName;
-      case 'prompt': return config.musicPrompt;
-      case 'genres': return genreOptionsToLabels(config.genres).join(', ');
+      case 'prompt': return config.songDescription;
+      case 'genre': return config.genre;
       case 'mood': return config.mood;
-      case 'tempoBpm': return String(config.tempoBpm);
-      case 'duration': return String(config.durationSeconds);
-      case 'lyrics': return config.lyrics;
+      case 'tempo': return String(config.tempo);
+      case 'duration': return String(config.duration);
+      case 'lyrics': return config.lyricsText;
       case 'artistInspiration': return config.artistInspiration;
       case 'videoStyle': return config.videoStyle;
-      case 'vocalStructure': return config.vocalStructure;
       case 'vocalStyle': return config.vocalStyle;
       case 'vocalIntensity': return String(config.vocalIntensity);
       case 'vocalEffects': return config.vocalEffects.join(', ');
-      case 'vocalLanguage': return config.vocalLanguages.join(', ');
-      case 'songStructure': return config.songStructure;
-      case 'subgenre': return config.subgenre.join(', ');
-      case 'lyricTheme': return config.lyricTheme;
+      case 'vocalLanguage': return config.vocalLanguage;
+      case 'structureType': return config.structureType;
+      case 'subgenre': return config.subgenre || '';
+      case 'lyricsTheme': return config.lyricsTheme;
       default: return '';
     }
   };
@@ -117,28 +119,21 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
   const applyToField = (field: string, value: string) => {
     switch (field) {
       case 'trackName': update({ trackName: value }); break;
-      case 'prompt': update({ musicPrompt: value }); break;
-      case 'genres':
-        const suggested = normalizeGenreOptions(value.split(',').map(g => g.trim()).filter(Boolean));
-        if (suggested.length > 0) update({ genres: normalizeGenreOptions([...config.genres, ...suggested]) });
-        break;
+      case 'prompt': update({ songDescription: value }); break;
+      case 'genre': update({ genre: value }); break;
       case 'mood': update({ mood: value }); break;
-      case 'tempoBpm': { const p = parseInt(value); if (!isNaN(p)) update({ tempoBpm: Math.max(60, Math.min(200, p)) }); break; }
-      case 'duration': { const p = parseInt(value); if (!isNaN(p)) update({ durationSeconds: Math.max(30, Math.min(600, p)) }); break; }
-      case 'lyrics': update({ lyrics: value }); break;
+      case 'tempo': { const p = parseInt(value); if (!isNaN(p)) update({ tempo: Math.max(60, Math.min(200, p)) }); break; }
+      case 'duration': { const p = parseInt(value); if (!isNaN(p)) update({ duration: Math.max(30, Math.min(600, p)) }); break; }
+      case 'lyrics': update({ lyricsText: value }); break;
       case 'artistInspiration': update({ artistInspiration: value }); break;
       case 'videoStyle': update({ videoStyle: value }); break;
-      case 'vocalStructure': update({ vocalStructure: value }); break;
       case 'vocalStyle': update({ vocalStyle: value }); break;
       case 'vocalIntensity': { const p = parseInt(value); if (!isNaN(p)) update({ vocalIntensity: Math.max(1, Math.min(10, p)) }); break; }
       case 'vocalEffects': update({ vocalEffects: Array.from(new Set([...config.vocalEffects, ...value.split(',').map(e => e.trim()).filter(Boolean)])) }); break;
-      case 'vocalLanguage':
-        const langs = value.split(',').map(l => l.trim()).filter(l => LANGUAGE_NAMES().includes(l));
-        if (langs.length > 0) update({ vocalLanguages: Array.from(new Set([...config.vocalLanguages, ...langs])) });
-        break;
-      case 'songStructure': update({ songStructure: value }); break;
-      case 'subgenre': update({ subgenre: Array.from(new Set([...config.subgenre, ...value.split(',').map(s => s.trim()).filter(Boolean)])) }); break;
-      case 'lyricTheme': update({ lyricTheme: value }); break;
+      case 'vocalLanguage': update({ vocalLanguage: value }); break;
+      case 'structureType': update({ structureType: value }); break;
+      case 'subgenre': update({ subgenre: value }); break;
+      case 'lyricsTheme': update({ lyricsTheme: value }); break;
     }
   };
 
@@ -146,54 +141,64 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
     switch (field) {
       case 'trackName': update({ trackName: '' }); break;
       case 'prompt': update({
-        musicPrompt: '',
-        genres: [],
-        mood: '',
-        tempoBpm: 120,
-        lyrics: '',
-        artistInspiration: '',
-        vocalLanguages: [],
-        vocalStructure: 'Instrumental',
-        vocalStyle: '',
+        songDescription: '',
+        genre: 'Pop',
+        mood: 'Energetic',
+        tempo: 120,
+        vocalStyle: 'Pop Singing',
         vocalIntensity: 5,
         vocalEffects: [],
-        songStructure: '',
-        videoStyle: '',
+        videoStyle: 'Cinematic',
         useHighQualityVocals: false,
-        instrumentalOnly: false,
       }); break;
-      case 'genres': update({ genres: [] }); break;
-      case 'mood': update({ mood: '' }); break;
-      case 'tempoBpm': update({ tempoBpm: 120 }); break;
-      case 'duration': update({ durationSeconds: 180 }); break;
-      case 'lyrics': update({ lyrics: '' }); break;
+      case 'genre': update({ genre: 'Pop' }); break;
+      case 'mood': update({ mood: 'Energetic' }); break;
+      case 'tempo': update({ tempo: 120 }); break;
+      case 'duration': update({ duration: 180 }); break;
+      case 'lyrics': update({ lyricsText: '' }); break;
       case 'artistInspiration': update({ artistInspiration: '' }); break;
-      case 'videoStyle': update({ videoStyle: '' }); break;
-      case 'vocalStructure': update({ vocalStructure: 'Instrumental' }); break;
-      case 'vocalStyle': update({ vocalStyle: '' }); break;
+      case 'videoStyle': update({ videoStyle: 'Cinematic' }); break;
+      case 'vocalStyle': update({ vocalStyle: 'Pop Singing' }); break;
       case 'vocalIntensity': update({ vocalIntensity: 5 }); break;
       case 'vocalEffects': update({ vocalEffects: [] }); break;
-      case 'vocalLanguage': update({ vocalLanguages: [] }); break;
-      case 'songStructure': update({ songStructure: '' }); break;
-      case 'subgenre': update({ subgenre: [] }); break;
-      case 'lyricTheme': update({ lyricTheme: '' }); break;
+      case 'vocalLanguage': update({ vocalLanguage: 'English' }); break;
+      case 'structureType': update({ structureType: 'Verse-Chorus-Bridge' }); break;
+      case 'subgenre': update({ subgenre: '' }); break;
+      case 'lyricsTheme': update({ lyricsTheme: '' }); break;
+    }
+  };
+
+  const handleMagicFill = async () => {
+    const result = await aiSuggest('prompt', config.songDescription, getContext(), 'enhance');
+    if (result?.structured) {
+      const s = result.structured;
+      update({
+        genre: s.genre[0] || config.genre,
+        mood: s.mood || config.mood,
+        tempo: parseInt(s.tempo) || config.tempo,
+        duration: config.duration,
+        lyricsText: s.lyrics || config.lyricsText,
+        vocalLanguage: s.genre[0]?.toLowerCase() === 'indian' ? 'Hindi' : 'English',
+        structureType: s.genre[0]?.toLowerCase() === 'classical' ? 'Movement' : 'Verse-Chorus-Bridge',
+        lyricsTheme: s.lyricTheme || config.lyricsTheme
+      });
     }
   };
 
   const handleAiAction = async (field: string, action: 'suggest' | 'enhance' | 'new') => {
     const val = action === 'new' ? '' : getFieldValue(field);
-    const result = await aiSuggest(field, val, { ...getContext(), genres: genreOptionsToLabels(config.genres) }, action);
+    const result = await aiSuggest(field, val, getContext(), action);
     if (result?.structured && field === 'prompt') {
       const { genre, mood, tempo, artist_inspiration, lyrics, description, subgenre, lyricTheme } = result.structured;
       update({
-        genres: genre && genre.length > 0 ? normalizeGenreOptions([...config.genres, ...genre]) : config.genres,
+        genre: genre && genre.length > 0 ? genre[0] : config.genre,
         mood: mood || config.mood,
-        tempoBpm: tempo ? Math.max(60, Math.min(200, parseInt(tempo) || config.tempoBpm)) : config.tempoBpm,
+        tempo: tempo ? Math.max(60, Math.min(200, parseInt(tempo) || config.tempo)) : config.tempo,
         artistInspiration: artist_inspiration || config.artistInspiration,
-        lyrics: lyrics || config.lyrics,
-        musicPrompt: description || result.suggestion || config.musicPrompt,
+        lyricsText: lyrics || config.lyricsText,
+        songDescription: description || result.suggestion || config.songDescription,
         subgenre: subgenre || config.subgenre,
-        lyricTheme: lyricTheme || config.lyricTheme,
+        lyricsTheme: lyricTheme || config.lyricsTheme,
       });
       return;
     }
@@ -228,7 +233,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
   };
 
   const applyAlbumVibe = () => {
-    if (albumVibe) update({ musicPrompt: albumVibe });
+    if (albumVibe) update({ songDescription: albumVibe });
   };
 
   const formatDuration = (secs: number) => {
@@ -246,7 +251,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
           <div className="text-left">
             <p className="font-medium text-foreground">{config.trackName || `Track ${index + 1}`}</p>
             <p className="text-xs text-muted-foreground">
-              {config.genres.length > 0 ? config.genres.slice(0, 3).map(g => g.label).join(', ') : 'No genres selected'} • {formatDuration(config.durationSeconds)}
+              {config.genre || 'No genre selected'} • {formatDuration(config.duration)}
               {config.useHighQualityVocals && <span className="text-accent ml-2 font-medium">• HQ Vocals</span>}
             </p>
           </div>
@@ -280,27 +285,26 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   <Label className="text-foreground font-medium text-sm">Music Prompt</Label>
                   <AiToolbar field="prompt" />
                 </div>
-                <Textarea value={config.musicPrompt} onChange={e => update({ musicPrompt: e.target.value })} className="bg-input border-border min-h-24 resize-none" placeholder="Describe this track's mood and atmosphere..." />
+                <Textarea value={config.songDescription} onChange={e => update({ songDescription: e.target.value })} className="bg-input border-border min-h-24 resize-none" placeholder="Describe this track's mood and atmosphere..." />
               </div>
 
               {/* Genres */}
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <Label className="text-foreground font-medium text-sm">Genres</Label>
-                  <AiToolbar field="genres" />
+                  <Label className="text-foreground font-medium text-sm">Genre</Label>
+                  <AiToolbar field="genre" />
                 </div>
                 <SmartSearchInput
-                  value={config.genres.map(g => g.label)}
-                  onChange={(val: string[]) => update({ genres: normalizeGenreOptions(val) })}
+                  value={config.genre}
+                  onChange={(val: string) => update({ genre: val })}
                   options={GENRE_NAMES()}
-                  placeholder="Type or select genres..."
-                  multiSelect
+                  placeholder="Type or select genre..."
                 />
-                {config.genres.map(g => getModelQualityWarning(g.label)).filter(Boolean).map((warning, i) => (
-                  <p key={i} className="text-[10px] text-amber-500 mt-1 leading-tight flex items-start gap-1">
-                    <Activity className="w-3 h-3 mt-0.5 shrink-0" /> {warning}
+                {config.genre && getModelQualityWarning(config.genre) && (
+                  <p className="text-[10px] text-amber-500 mt-1 leading-tight flex items-start gap-1">
+                    <Activity className="w-3 h-3 mt-0.5 shrink-0" /> {getModelQualityWarning(config.genre)}
                   </p>
-                ))}
+                )}
               </div>
 
               {/* Subgenres */}
@@ -337,11 +341,11 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2">
                     <Activity className="w-4 h-4 text-muted-foreground" />
-                    <Label className="text-foreground font-medium text-sm">Tempo: {config.tempoBpm} BPM</Label>
+                    <Label className="text-foreground font-medium text-sm">Tempo: {config.tempo} BPM</Label>
                   </div>
-                  <AiToolbar field="tempoBpm" />
+                  <AiToolbar field="tempo" />
                 </div>
-                <Slider value={[config.tempoBpm]} onValueChange={v => update({ tempoBpm: v[0] })} min={60} max={200} step={1} />
+                <Slider value={[config.tempo]} onValueChange={v => update({ tempo: v[0] })} min={60} max={200} step={1} />
                 <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
                   <span>60 BPM</span><span>200 BPM</span>
                 </div>
@@ -352,11 +356,11 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-muted-foreground" />
-                    <Label className="text-foreground font-medium text-sm">Duration: {formatDuration(config.durationSeconds)}</Label>
+                    <Label className="text-foreground font-medium text-sm">Duration: {formatDuration(config.duration)}</Label>
                   </div>
                   <AiToolbar field="duration" />
                 </div>
-                <Slider value={[config.durationSeconds]} onValueChange={v => update({ durationSeconds: v[0] })} min={30} max={600} step={1} />
+                <Slider value={[config.duration]} onValueChange={v => update({ duration: v[0] })} min={30} max={600} step={1} />
                 <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
                   <span>0:30</span><span>10:00</span>
                 </div>
@@ -366,15 +370,12 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-2">
-                    <Label className="text-foreground font-medium text-sm">Vocal Structure</Label>
-                    <AiToolbar field="vocalStructure" />
+                    <Label className="text-foreground font-medium text-sm">Vocal Status</Label>
                   </div>
-                  <SmartSearchInput
-                    value={config.vocalStructure}
-                    onChange={(val: string) => update({ vocalStructure: val })}
-                    options={VOCAL_STRUCTURE_PRESETS}
-                    placeholder="e.g., Verse - Chorus"
-                  />
+                  <div className="flex items-center justify-between p-2 rounded-lg bg-secondary/20">
+                    <span className="text-xs text-muted-foreground">Vocals Enabled</span>
+                    <Switch checked={config.vocalsEnabled} onCheckedChange={v => update({ vocalsEnabled: v })} />
+                  </div>
                 </div>
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-2">
@@ -441,27 +442,26 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                 </div>
               </div>
 
-              {/* Languages */}
+              {/* Language */}
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2">
                     <Languages className="w-4 h-4 text-muted-foreground" />
-                    <Label className="text-foreground font-medium text-sm">Vocal Language(s)</Label>
+                    <Label className="text-foreground font-medium text-sm">Vocal Language</Label>
                   </div>
                   <AiToolbar field="vocalLanguage" />
                 </div>
                 <SmartSearchInput
-                  value={config.vocalLanguages}
-                  onChange={(val: string[]) => update({ vocalLanguages: val })}
+                  value={config.vocalLanguage}
+                  onChange={(val: string) => update({ vocalLanguage: val })}
                   options={LANGUAGE_NAMES()}
-                  placeholder="Select or type languages..."
-                  multiSelect
+                  placeholder="Select or type language..."
                 />
-                {config.vocalLanguages.map(l => getVocalQualityAdvisory(l)).filter(Boolean).map((advisory, i) => (
-                  <p key={i} className="text-[10px] text-accent mt-1 leading-tight flex items-start gap-1">
-                    <Sparkles className="w-3 h-3 mt-0.5 shrink-0" /> {advisory}
+                {config.vocalLanguage && getVocalQualityAdvisory(config.vocalLanguage) && (
+                  <p className="text-[10px] text-accent mt-1 leading-tight flex items-start gap-1">
+                    <Sparkles className="w-3 h-3 mt-0.5 shrink-0" /> {getVocalQualityAdvisory(config.vocalLanguage)}
                   </p>
-                ))}
+                )}
 
                 {/* HQ Vocals Toggle */}
                 <div className="mt-3 p-3 rounded-lg bg-accent/5 border border-accent/20 flex items-center justify-between">
@@ -480,11 +480,11 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <Label className="text-foreground font-medium text-sm">Lyric Theme</Label>
-                  <AiToolbar field="lyricTheme" />
+                  <AiToolbar field="lyricsTheme" />
                 </div>
                 <SmartSearchInput
-                  value={config.lyricTheme}
-                  onChange={(val: string) => update({ lyricTheme: val })}
+                  value={config.lyricsTheme}
+                  onChange={(val: string) => update({ lyricsTheme: val })}
                   options={PRESET_LYRIC_THEMES}
                   placeholder="e.g., Cyberpunk Future, Nature & Peace..."
                 />
@@ -496,7 +496,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   <Label className="text-foreground font-medium text-sm">Lyrics (optional)</Label>
                   <AiToolbar field="lyrics" />
                 </div>
-                <Textarea value={config.lyrics} onChange={e => update({ lyrics: e.target.value })} className="bg-input border-border min-h-20 resize-none" placeholder="Lyrics or vocal theme..." />
+                <Textarea value={config.lyricsText} onChange={e => update({ lyricsText: e.target.value })} className="bg-input border-border min-h-20 resize-none" placeholder="Lyrics or vocal theme..." />
               </div>
 
               {/* Artist Inspiration */}
@@ -517,11 +517,11 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <Label className="text-foreground font-medium text-sm">Song Structure</Label>
-                  <AiToolbar field="songStructure" />
+                  <AiToolbar field="structureType" />
                 </div>
                 <SmartSearchInput
-                  value={config.songStructure}
-                  onChange={(val: string) => update({ songStructure: val })}
+                  value={config.structureType}
+                  onChange={(val: string) => update({ structureType: val })}
                   options={SONG_STRUCTURE_PRESETS}
                   placeholder="e.g., Intro → Verse → Chorus → Outro"
                 />

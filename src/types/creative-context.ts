@@ -1,23 +1,46 @@
 export interface CreativeContext {
+  // Primary Inputs
   songDescription: string;
+  songTitle: string;
+
+  // Musical Attributes
   genre: string;
   subgenre?: string;
   mood: string;
   tempo: number;
   duration: number;
+
+  // Vocal Attributes
+  vocalsEnabled: boolean;
   vocalStyle: string;
-  vocalLanguage: string;
-  vocalLanguages?: string[];
-  vocalIntensity?: number;
-  vocalEffects?: string[];
   vocalGender?: string;
-  lyrics: string;
-  lyricTheme?: string;
+  vocalLanguage: string;
+  vocalIntensity: number;
+  vocalEffects: string[];
+
+  // Lyrics Attributes
+  lyricsMode: 'auto' | 'manual' | 'none';
+  lyricsText?: string;
+  lyricsTheme?: string;
+
+  // Arrangement & Style
   artistInspiration: string;
+  instruments: string[];
+  energyLevel: number;
+  structureType: string;
+
+  // Visuals
   videoStyle: string;
+  visualizerEnabled: boolean;
+
+  // System & Meta
+  creativityLevel: number;
+  variationSeed: string;
+  generationMode: 'fast' | 'quality' | 'standard';
+
+  // Legacy/Internal (to be phased out or mapped)
+  vocalLanguages?: string[];
   songStructure?: string;
-  instrumentalOnly: boolean;
-  useHighQualityVocals?: boolean;
 }
 
 export type SuggestionField = keyof CreativeContext;
