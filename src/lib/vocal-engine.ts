@@ -228,8 +228,8 @@ function generateLineMelody(
 function generateSingingRhythm(numSyllables: number, totalBeats: number, isChorus: boolean, rng: () => number): number[] {
   // Common musical note durations (in beats): 0.5, 0.75, 1, 1.5, 2
   const weights = isChorus
-    ? [0.15, 0.15, 0.35, 0.2, 0.15]  // Chorus: longer, more sustained
-    : [0.25, 0.2, 0.35, 0.15, 0.05]; // Verse: more eighth notes
+    ? [0.1, 0.15, 0.4, 0.2, 0.15]   // Chorus: more sustained, stronger landing
+    : [0.3, 0.25, 0.3, 0.1, 0.05]; // Verse: more rapid, eighth/quarter heavy
 
   const durationOptions = [0.5, 0.75, 1.0, 1.5, 2.0];
   const durations: number[] = [];
@@ -242,25 +242,28 @@ function generateSingingRhythm(numSyllables: number, totalBeats: number, isChoru
       cumulative += weights[j];
       if (r < cumulative) { chosen = durationOptions[j]; break; }
     }
+    // Accentuated first syllable of a phrase
+    if (i === 0 && isChorus) chosen = Math.max(1.0, chosen);
     durations.push(chosen);
   }
 
-  // Normalize to fit total beats
+  // Normalize to fit total beats while preserving relative weights
   const sum = durations.reduce((a, b) => a + b, 0);
-  const scale = totalBeats / sum;
-  return durations.map(d => Math.max(0.25, d * scale));
+  const scale = totalBeats / Math.max(0.1, sum);
+  return durations.map(d => Math.max(0.2, d * scale));
 }
 
 function generateRapRhythm(numSyllables: number, totalBeats: number, rng: () => number): number[] {
-  // Rap: fast, mostly sixteenth/eighth notes with occasional longer holds
+  // Rap: fast, mostly sixteenth/eighth notes with occasional triplets/holds
   const durations: number[] = [];
   for (let i = 0; i < numSyllables; i++) {
     const r = rng();
-    durations.push(r < 0.5 ? 0.25 : r < 0.8 ? 0.5 : 0.75);
+    // 0.25 = 16th, 0.5 = 8th, 0.33 = triplet 8th
+    durations.push(r < 0.4 ? 0.25 : r < 0.7 ? 0.5 : r < 0.9 ? 0.33 : 0.75);
   }
   const sum = durations.reduce((a, b) => a + b, 0);
-  const scale = totalBeats / sum;
-  return durations.map(d => Math.max(0.15, d * scale));
+  const scale = totalBeats / Math.max(0.1, sum);
+  return durations.map(d => Math.max(0.12, d * scale));
 }
 
 // ===== Formant Data =====
@@ -1278,7 +1281,10 @@ export async function generateVocals(
     lyrics: lyrics,
     useHighQualityVocals: (config as any).useHighQualityVocals || false,
     songDescription: '',
-    vocalStyle: vocalStyle
+    vocalStyle: vocalStyle,
+    artistInspiration: '',
+    videoStyle: 'Abstract Visualizer',
+    instrumentalOnly: false,
   };
 
   const routingStatus = getVocalRoutingStatus(context);
@@ -1396,7 +1402,7 @@ export async function generateVocals(
 export function mixVocalsIntoInstrumental(
   instrumental: AudioBuffer,
   vocals: AudioBuffer,
-  vocalLevel: number = 1.08,
+  vocalLevel: number = 1.12,
 ): AudioBuffer {
   const sampleRate = instrumental.sampleRate;
   const numChannels = instrumental.numberOfChannels;
@@ -1404,18 +1410,31 @@ export function mixVocalsIntoInstrumental(
 
   const mixed = new AudioBuffer({ length, numberOfChannels: numChannels, sampleRate });
 
+  // Dynamic Range Compression parameters for the mix
+  const duckThreshold = 0.035;
+  const duckAmount = 0.38; // Duck instrumental by ~38% when vocals are present
+  const duckRelease = 0.015; // Fast release for transparency
+
   for (let ch = 0; ch < numChannels; ch++) {
     const instData = instrumental.getChannelData(ch);
     const vocalData = ch < vocals.numberOfChannels ? vocals.getChannelData(ch) : vocals.getChannelData(0);
     const mixData = mixed.getChannelData(ch);
     const vocalSamples = Math.min(length, vocals.length);
 
+    let currentDuck = 1.0;
+
     for (let i = 0; i < length; i++) {
-      const inst = instData[i];
-      const vocal = i < vocalSamples ? vocalData[i] * vocalLevel : 0;
-      const vocalPresence = Math.abs(vocal) > 0.0025 ? Math.min(1, Math.abs(vocal) * 10) : 0;
-      const instDuck = 1 - vocalPresence * 0.34;
-      mixData[i] = inst * instDuck + vocal;
+      const vocal = i < vocalSamples ? vocalData[i] : 0;
+      const vocalAbs = Math.abs(vocal);
+
+      // Lookahead window or envelope follow (simplified for per-sample performance)
+      if (vocalAbs > duckThreshold) {
+        currentDuck = Math.max(1 - duckAmount, currentDuck - 0.05); // Rapid duck
+      } else {
+        currentDuck = Math.min(1.0, currentDuck + duckRelease); // Smooth release
+      }
+
+      mixData[i] = instData[i] * currentDuck + vocal * vocalLevel;
     }
   }
 

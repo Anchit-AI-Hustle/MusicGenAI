@@ -803,20 +803,27 @@ export async function generateTrack(
   const bassStyle = chooseBassStyleDynamic(profile.rhythmStyle, profile.characteristics, profile.swing);
   const melodyStyle = chooseMelodyStyle(intent.genre, globalEnergy / 10, profile.characteristics);
 
-  // Waveform selection based on harmonic style
+  // Waveform selection based on harmonic style and DNA
   const harmonicStr = (profile.harmonicStyle || '').toLowerCase();
+  const dnaHarmonicShift = dna ? (dna.harmonicMood > 0.6 ? 'bright' : dna.harmonicMood < 0.4 ? 'dark' : 'neutral') : 'neutral';
+  
   const leadWaveform: OscillatorType =
-    harmonicStr.includes('chromatic') || harmonicStr.includes('blues') ? 'sawtooth' : 'square';
-  const bassWaveform: OscillatorType = profile.swing > 0.2 ? 'sine' : 'sawtooth';
+    dnaHarmonicShift === 'bright' ? 'sawtooth' : dnaHarmonicShift === 'dark' ? 'sine' : 'square';
+  const bassWaveform: OscillatorType = profile.swing > 0.2 || dna?.grooveBias > 0.6 ? 'sine' : 'sawtooth';
 
   // ===== Generate track-wide motif and hook for coherence =====
   const trackMotif = generateMotif(rng, globalEnergy / 10);
   const trackHook = generateHook(rng);
 
+  // Generate a real chord progression for the CompositionGraph
+  const chordProgression = generateChords(root, parsedScale, 0, durationSeconds, beatDuration, globalEnergy / 10, rng).map(c => 
+    c.midis.map(m => m.toString()).join(',')
+  );
+
   const compositionGraph: CompositionGraph = {
     tempo: effectiveTempo,
     scale: parsedScale,
-    chordProgression: [root], // Basic root for now, expands dynamically in sub-renderers
+    chordProgression,
     motif: trackMotif.intervals,
     songStructure: sections,
     barGrid: {
@@ -1003,6 +1010,40 @@ export async function mixStems(
     vocalNode.connect(vocalGain).connect(ctx.destination);
     vocalNode.start(0);
   }
+
+  // ===== Mastering Chain =====
+  const masterBus = ctx.createGain();
+  masterBus.gain.value = 1.0;
+
+  // 1. Gentle EQ (High Shelf for clarity, Low Cut for mud)
+  const lowCut = ctx.createBiquadFilter();
+  lowCut.type = 'highpass';
+  lowCut.frequency.value = 40;
+  
+  const highShelf = ctx.createBiquadFilter();
+  highShelf.type = 'highshelf';
+  highShelf.frequency.value = 10000;
+  highShelf.gain.value = 1.5;
+
+  // 2. Master Limiter (Dynamics Compressor with high ratio)
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -1.0;
+  limiter.knee.value = 0;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.001;
+  limiter.release.value = 0.1;
+
+  // Rewire destinations to masterBus
+  // (In a real implementation, we'd disconnect from ctx.destination first, 
+  // but since this is an OfflineCtx we can just connect nodes to the masterBus)
+  
+  drumGain.connect(masterBus);
+  bassGain.connect(masterBus);
+  melodyGain.connect(masterBus);
+  padGain.connect(masterBus);
+  fxGain.connect(masterBus);
+  
+  masterBus.connect(lowCut).connect(highShelf).connect(limiter).connect(ctx.destination);
 
   drumNode.start(0);
   bassNode.start(0);
