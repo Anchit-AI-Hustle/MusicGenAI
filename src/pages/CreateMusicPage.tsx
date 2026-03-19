@@ -678,17 +678,20 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   };
 
   const AiToolbar: React.FC<{ field: string }> = ({ field }) => {
-    const isLoading = !!suggestionState.loading[field];
+    const isSuggesting = !!suggestionState.loading[`${field}-suggest`];
+    const isEnhancing = !!suggestionState.loading[`${field}-enhance`];
+    const isNew = !!suggestionState.loading[`${field}-new`];
+    const isLoading = isSuggesting || isEnhancing || isNew;
     return (
       <div className="flex items-center gap-1.5 flex-wrap">
         <Button variant="outline" size="sm" onClick={() => handleAiSuggest(field)} disabled={isLoading} className="text-xs h-7 px-2 border-primary/30 text-primary hover:bg-primary/10">
-          {isLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Wand2 className="w-3 h-3 mr-1" />} AI Suggest
+          {isSuggesting ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Wand2 className="w-3 h-3 mr-1" />} AI Suggest
         </Button>
         <Button variant="outline" size="sm" onClick={() => handleEnhance(field)} disabled={isLoading} className="text-xs h-7 px-2 border-accent/30 text-accent hover:bg-accent/10">
-          {isLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Zap className="w-3 h-3 mr-1" />} Enhance
+          {isEnhancing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Zap className="w-3 h-3 mr-1" />} Enhance
         </Button>
         <Button variant="outline" size="sm" onClick={() => handleNewSuggestion(field)} disabled={isLoading} className="text-xs h-7 px-2 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50">
-          {isLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />} New
+          {isNew ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />} New
         </Button>
         <Button variant="ghost" size="sm" onClick={() => handleClear(field)} disabled={isLoading} className="text-xs h-7 px-2 text-muted-foreground hover:text-destructive">
           <Trash2 className="w-3 h-3 mr-1" /> Clear

@@ -876,9 +876,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     // 2. Generate unique Request ID
     const requestId = crypto.randomUUID();
+    const loadingKey = `${field}-${action}`;
+    
     setSuggestionState(prev => ({
       ...prev,
-      loading: { ...prev.loading, [field]: true },
+      loading: { ...prev.loading, [loadingKey]: true },
       lastRequestId: { ...prev.lastRequestId, [field]: requestId }
     }));
 
@@ -909,6 +911,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       let suggestionValue = parsedSuggestions.find(s => s.field === field)?.value;
       
+      // Prevent technical prompts from leaking into the UI
+      if (suggestionValue && suggestionValue.includes('Target Field:')) {
+        suggestionValue = undefined;
+      }
+      
       if (!suggestionValue && field === 'trackName') {
          const mood = parsedSuggestions.find(s => s.field === 'mood')?.value;
          const genre = parsedSuggestions.find(s => s.field === 'genre')?.value;
@@ -921,8 +928,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       setSuggestionState(prev => {
         if (prev.lastRequestId[field] !== requestId) return prev;
+        const loadingKey = `${field}-${action}`;
         const newLoading = { ...prev.loading };
-        delete newLoading[field];
+        delete newLoading[loadingKey];
         return {
           ...prev,
           loading: newLoading,
@@ -940,8 +948,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         toast.error(err.message || 'Failed to get AI suggestion');
       }
       setSuggestionState(prev => {
+        const loadingKey = `${field}-${action}`;
         const newLoading = { ...prev.loading };
-        delete newLoading[field];
+        delete newLoading[loadingKey];
         return { ...prev, loading: newLoading };
       });
       return null;
