@@ -552,97 +552,115 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   ): Promise<'completed' | 'failed'> => {
     try {
       trackLastUpdateRef.current[trackId] = Date.now();
+      updateTrackLocal(creationId, trackId, { status: 'analyzing', currentStage: 'Analyzing composition', progress: 0.1 });
+      await updateTrackDB(trackId, creationId, 'Analyzing composition', 0.1, 'analyzing');
 
-      // Ensure the context has the right types
-      const context: CreativeContext = {
+      // 1. Create Generation DNA (Unique per song)
+      const dna = createGenerationDNA();
+      const rng = createRng(getGenerationSeedNumber(dna));
+      
+      // 2. Build Music Intent
+      const intent: MusicIntent = {
         genre: input.genres[0] || 'Pop',
-        subgenre: input.subgenre?.[0],
+        subgenre: input.subgenre?.[0] || '',
         tempo: input.tempoBpm || 110,
-        duration: input.durationSeconds,
+        key: input.musicalKey || 'C',
+        scale: 'minor', // Default
         mood: input.mood || 'Neutral',
-        songStructure: input.songStructure || '',
-        vocalStyle: input.vocalStyle || '',
-        vocalIntensity: input.vocalIntensity || 50,
-        vocalLanguage: input.vocalLanguage?.[0] || input.vocalLanguages?.[0] || 'English',
-        vocalLanguages: input.vocalLanguages || [],
-        vocalEffects: input.vocalEffects || [],
-        lyrics: input.lyrics || '',
-        lyricTheme: input.lyricTheme || '',
-        artistInspiration: input.artistInspiration || '',
-        videoStyle: input.videoStyle || '',
-        songDescription: input.musicPrompt || '',
-        vocalGender: input.vocalGender,
-        instrumentalOnly: (input.vocalStructure || '').toLowerCase() === 'instrumental'
+        energy: (input.vocalIntensity || 50) / 10, // scale to 1-10
+        structure: [], // Engine generates structure if empty
+        instruments: [],
+        atmosphere: input.musicPrompt || '',
+        durationSeconds: input.durationSeconds,
+        genres: input.genres,
+        generationDNA: dna
       };
 
-      updateTrackLocal(creationId, trackId, { status: 'starting', currentStage: 'Starting backend job', progress: 0.1 });
-      await updateTrackDB(trackId, creationId, 'Starting backend job', 0.1, 'starting');
+      // 3. Generate Instrumental Stems
+      updateTrackLocal(creationId, trackId, { status: 'processing', currentStage: 'Generating arrangement', progress: 0.2 });
+      const { generateTrack } = await import('@/lib/music-engine');
+      const instrumentalResult = await generateTrack(
+        intent,
+        (stage: string, progress: number) => {
+          updateTrackLocal(creationId, trackId, { 
+            status: 'processing', 
+            currentStage: stage, 
+            progress: 0.2 + (progress * 0.4) // 20% to 60%
+          });
+        }
+      );
 
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(context)
+      let finalBuffer = instrumentalResult.instrumentalBuffer;
+
+      // 4. Generate Vocals if not instrumental-only
+      const isInstrumentalOnly = (input.vocalStructure || '').toLowerCase() === 'instrumental';
+      
+      if (!isInstrumentalOnly && input.lyrics) {
+        updateTrackLocal(creationId, trackId, { status: 'processing', currentStage: 'Synthesizing vocals', progress: 0.65 });
+        
+        const { generateVocals, mixVocalsIntoInstrumental, inferVocalStyle } = await import('@/lib/vocal-engine');
+        
+        const vocalConfig = {
+          lyrics: input.lyrics,
+          tempo: intent.tempo,
+          key: intent.key,
+          scale: intent.scale,
+          structure: instrumentalResult.compositionGraph.songStructure,
+          durationSeconds: intent.durationSeconds,
+          vocalStyle: inferVocalStyle(input.genres, input.vocalStyle),
+          vocalIntensity: input.vocalIntensity || 5,
+          vocalEffects: input.vocalEffects || [],
+          genres: input.genres,
+          mood: intent.mood,
+          language: input.vocalLanguage?.[0] || 'English'
+        };
+
+        const vocalBuffer = await generateVocals(vocalConfig as any, (p) => {
+           updateTrackLocal(creationId, trackId, { 
+            status: 'processing', 
+            currentStage: `Vocals: ${p.stage}`, 
+            progress: 0.65 + (p.progress * 0.2) // 65% to 85%
+          });
+        }, rng);
+
+        if (vocalBuffer) {
+           updateTrackLocal(creationId, trackId, { status: 'processing', currentStage: 'Mixing master stems', progress: 0.9 });
+           finalBuffer = mixVocalsIntoInstrumental(finalBuffer, vocalBuffer, 1.15);
+        }
+      }
+
+      // 5. Mastering
+      updateTrackLocal(creationId, trackId, { status: 'processing', currentStage: 'Finalizing & Mastering', progress: 0.95 });
+      const { masterAudio } = await import('@/lib/audio-utils');
+      const mastered = masterAudio(finalBuffer);
+
+      // 6. Final URL Generation
+      const localAudioUrl = URL.createObjectURL(mastered.blob);
+
+      updateTrackLocal(creationId, trackId, { 
+        status: 'completed', 
+        currentStage: 'Completed', 
+        progress: 1, 
+        audioUrl: localAudioUrl 
       });
       
-      const data = await res.json();
-      
-      if (!res.ok) throw new Error(data.error || 'Failed to start generation');
+      await supabase.from('tracks').update({ 
+        audio_url: localAudioUrl, 
+        status: 'completed', 
+        progress: 1, 
+        current_stage: 'Completed' 
+      }).eq('id', trackId);
 
-      // Fast synchronous path (ElevenLabs etc)
-      if (data.status === 'succeeded' && data.audio) {
-          updateTrackLocal(creationId, trackId, { status: 'completed', currentStage: 'Completed', progress: 1, audioUrl: data.audio });
-          await supabase.from('tracks').update({ audio_url: data.audio, status: 'completed', progress: 1, current_stage: 'Completed' }).eq('id', trackId);
-
-          if (input.generateVideo) {
-              const dna = createGenerationDNA(); // mocked dna for video
-              runAsyncVideoRender(trackId, creationId, input, trackTitle, data.audio, dna, []).catch(console.warn);
-          }
-          return 'completed';
-      }
-
-      // Polling path
-      let isPolling = true;
-      let finalAudioUrl = null;
-      let progressVal = 0.2;
-
-      while(isPolling) {
-          await new Promise(r => setTimeout(r, 4000));
-          try {
-             const statusRes = await fetch(`/api/generate/status?jobId=${data.jobId}`);
-             if (!statusRes.ok) continue;
-
-             const statusData = await statusRes.json();
-             
-             if (statusData.status === 'succeeded' && statusData.output) {
-                 finalAudioUrl = statusData.output;
-                 isPolling = false;
-             } else if (statusData.status === 'failed' || statusData.status === 'canceled') {
-                 throw new Error(statusData.error || 'Backend job failed');
-             } else {
-                 // Update progress gently while polling
-                 progressVal = Math.min(0.9, progressVal + 0.05);
-                 updateTrackLocal(creationId, trackId, { status: 'processing', currentStage: 'Generating audio...', progress: progressVal });
-             }
-          } catch(pollErr: any) {
-              console.warn("Poll skipped due to err", pollErr);
-          }
-      }
-
-      if (!finalAudioUrl) throw new Error("Job succeeded but no audio url returned");
-
-      updateTrackLocal(creationId, trackId, { status: 'completed', currentStage: 'Completed', progress: 1, audioUrl: finalAudioUrl });
-      await supabase.from('tracks').update({ audio_url: finalAudioUrl, status: 'completed', progress: 1, current_stage: 'Completed' }).eq('id', trackId);
-
+      // 7. Handle Video 
       if (input.generateVideo) {
-          const dna = createGenerationDNA(); // mocked dna for video
-          runAsyncVideoRender(trackId, creationId, input, trackTitle, finalAudioUrl, dna, []).catch(console.warn);
+        runAsyncVideoRender(trackId, creationId, input, trackTitle, localAudioUrl, dna, []).catch(console.warn);
       }
 
       return 'completed';
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[${trackId}] Generation failed:`, errorMsg);
+      console.error(`[${trackId}] Browser Generation failed:`, errorMsg);
 
       await supabase.from('tracks').update({
         status: 'failed', current_stage: 'Failed', error_message: errorMsg,
@@ -867,69 +885,65 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     try {
       const history = suggestionHistoryRef.current[field] || [];
       const globalHistory = suggestionHistoryRef.current.__global__ || [];
-      const dna = createGenerationDNA();
-      const randomSeed = getGenerationSeedNumber(dna);
       
-      const previousSuggestions = Array.from(new Set([
-        ...history.slice(-10),
-        ...globalHistory.slice(-25),
-      ]));
+      const { inferContextFromDescription } = await import('@/lib/contextInference');
+      const { parseSuggestionResponse } = await import('@/lib/suggestionParser');
+      
+      const compositePrompt = `
+        Target Field: ${field}
+        Current Value: ${value}
+        Overall Music Description: ${effectiveContext.musicPrompt || "Not provided"}
+        
+        Action: ${action === 'enhance' ? 'Enhance the current value based on the description.' : 'Provide a new value for this field.'}
+      `.trim();
 
-      const maxRetries = 2;
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        if (controller.signal.aborted) return null;
-
-        try {
-          const { inferContextFromDescription } = await import('@/lib/contextInference');
-          const { parseSuggestionResponse } = await import('@/lib/suggestionParser');
-          
-          const rawInference = await inferContextFromDescription(value || effectiveContext.musicPrompt || "");
-          
-          if (!rawInference) throw new Error("Failed to infer");
-          
-          const parsedSuggestions = parseSuggestionResponse(JSON.stringify(rawInference));
-          
-          if (!parsedSuggestions || parsedSuggestions.length === 0) {
-             throw new Error("No suggestions returned");
-          }
-
-          // If looking for a specific field, try to find it in the parsed suggestions
-          let suggestionValue = parsedSuggestions.find(s => s.field === field)?.value;
-          
-          // Fallback if field not found but we have a general suggestion
-          if (!suggestionValue && parsedSuggestions.length > 0) {
-            suggestionValue = parsedSuggestions[0].value;
-          }
-
-          setSuggestionState(prev => {
-            if (prev.lastRequestId[field] !== requestId) return prev;
-            return {
-              ...prev,
-              loading: { ...prev.loading, [field]: false },
-              results: { 
-                 ...prev.results, 
-                 [field]: { field, action, suggestion: suggestionValue, structured: rawInference } 
-              }
-            };
-          });
-
-          return { field, action, suggestion: suggestionValue, structured: rawInference };
-
-        } catch (e: any) {
-          if (e.name === 'AbortError') return null;
-          if (attempt === maxRetries) throw e;
-          await new Promise(r => setTimeout(r, (attempt + 1) * 1000));
-        }
+      const rawInference = await inferContextFromDescription(compositePrompt);
+      
+      if (!rawInference) throw new Error("Failed to infer");
+      
+      const parsedSuggestions = parseSuggestionResponse(JSON.stringify(rawInference));
+      
+      if (!parsedSuggestions || parsedSuggestions.length === 0) {
+         throw new Error("No suggestions returned");
       }
-      return null;
+
+      let suggestionValue = parsedSuggestions.find(s => s.field === field)?.value;
+      
+      if (!suggestionValue && field === 'trackName') {
+         const mood = parsedSuggestions.find(s => s.field === 'mood')?.value;
+         const genre = parsedSuggestions.find(s => s.field === 'genre')?.value;
+         suggestionValue = mood && genre ? `${mood} ${genre} Vibe` : (mood || genre || "New Track");
+      }
+
+      if (!suggestionValue && parsedSuggestions.length > 0) {
+        suggestionValue = parsedSuggestions[0].value;
+      }
+
+      setSuggestionState(prev => {
+        if (prev.lastRequestId[field] !== requestId) return prev;
+        const newLoading = { ...prev.loading };
+        delete newLoading[field];
+        return {
+          ...prev,
+          loading: newLoading,
+          results: { 
+             ...prev.results, 
+             [field]: { field, action, suggestion: suggestionValue, structured: rawInference } 
+          }
+        };
+      });
+
+      return { field, action, suggestion: suggestionValue, structured: rawInference };
+
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         toast.error(err.message || 'Failed to get AI suggestion');
       }
-      setSuggestionState(prev => ({
-        ...prev,
-        loading: { ...prev.loading, [field]: false }
-      }));
+      setSuggestionState(prev => {
+        const newLoading = { ...prev.loading };
+        delete newLoading[field];
+        return { ...prev, loading: newLoading };
+      });
       return null;
     }
   };
