@@ -75,7 +75,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           .single();
 
         if (error || !data) {
-          return { success: false, error: 'Failed to create account. Please try again.' };
+          console.error('Supabase insert error (profiles):', error);
+          return { success: false, error: error?.message || 'Failed to create account. Please try again.' };
         }
         profile = data;
       }
