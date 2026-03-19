@@ -27,14 +27,19 @@ export async function inferContextFromDescription(description: string) {
     
     // Map musicIntent to the format expected by the frontend contextual suggestions
     return {
-      genre: musicIntent.genre,
-      subgenre: musicIntent.subgenre,
+      genre: [musicIntent.genre],
+      subgenre: musicIntent.subgenre ? [musicIntent.subgenre] : [],
       mood: musicIntent.mood,
-      tempo: musicIntent.tempo,
-      artistInspiration: musicIntent.artistInspiration || "",
-      vocalLanguage: "English", // Default or extract if possible
+      energy: musicIntent.energy || musicIntent.mood,
+      tempo: String(musicIntent.tempo),
+      artist_inspiration: musicIntent.artistInspiration || "",
+      artist: musicIntent.artistInspiration || "",
+      language: "English", 
+      lyrics: "", // Default to empty if not generated yet
+      description: description,
+      prompt: description,
       lyricTheme: musicIntent.mood,
-      instrumentalOnly: musicIntent.genreFamily?.toLowerCase() === "ambient" || musicIntent.genreFamily?.toLowerCase() === "classical"
+      instrumental: musicIntent.genreFamily?.toLowerCase() === "ambient" || musicIntent.genreFamily?.toLowerCase() === "classical"
     };
   } catch (error) {
     console.error("[Context Inference] Failed to infer context:", error);

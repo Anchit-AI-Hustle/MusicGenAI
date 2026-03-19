@@ -24,19 +24,19 @@ export function useSuggestion() {
 
       setIsInferring(true);
       try {
-        const res = await fetch('/api/suggest', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ description })
-        });
+        const { inferContextFromDescription } = await import('@/lib/contextInference');
+        const { parseSuggestionResponse } = await import('@/lib/suggestionParser');
         
-        if (!res.ok) throw new Error("Failed");
+        const rawInference = await inferContextFromDescription(description);
         
-        const data = await res.json();
+        if (!rawInference) throw new Error("Failed to infer");
+        
+        // Convert raw JSON inference to our safe parsed suggestion format
+        const suggestions = parseSuggestionResponse(JSON.stringify(rawInference));
         
         // Only update if this is still the latest request we care about
-        if (latestContextRef.current === description && data.suggestions) {
-            setSuggestions(data.suggestions);
+        if (latestContextRef.current === description && suggestions) {
+            setSuggestions(suggestions);
         }
       } catch (err) {
         console.error("Inference failed", err);

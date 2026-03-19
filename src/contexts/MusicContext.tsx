@@ -880,25 +880,26 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (controller.signal.aborted) return null;
 
         try {
-          // Simply call the api/suggest endpoint
-          const response = await fetch(`/api/suggest`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ description: value }),
-            signal: controller.signal
-          });
-
-          if (!response.ok) {
-             throw new Error('AI suggestion failed');
-          }
-
-          const data = await response.json();
+          const { inferContextFromDescription } = await import('@/lib/contextInference');
+          const { parseSuggestionResponse } = await import('@/lib/suggestionParser');
           
-          if (!data.suggestions || data.suggestions.length === 0) {
+          const rawInference = await inferContextFromDescription(value || effectiveContext.musicPrompt || "");
+          
+          if (!rawInference) throw new Error("Failed to infer");
+          
+          const parsedSuggestions = parseSuggestionResponse(JSON.stringify(rawInference));
+          
+          if (!parsedSuggestions || parsedSuggestions.length === 0) {
              throw new Error("No suggestions returned");
           }
 
-          const suggestionValue = data.suggestions[0]?.value;
+          // If looking for a specific field, try to find it in the parsed suggestions
+          let suggestionValue = parsedSuggestions.find(s => s.field === field)?.value;
+          
+          // Fallback if field not found but we have a general suggestion
+          if (!suggestionValue && parsedSuggestions.length > 0) {
+            suggestionValue = parsedSuggestions[0].value;
+          }
 
           setSuggestionState(prev => {
             if (prev.lastRequestId[field] !== requestId) return prev;
@@ -907,12 +908,12 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
               loading: { ...prev.loading, [field]: false },
               results: { 
                  ...prev.results, 
-                 [field]: { field, action, suggestion: suggestionValue, structured: null } 
+                 [field]: { field, action, suggestion: suggestionValue, structured: rawInference } 
               }
             };
           });
 
-          return { field, action, suggestion: suggestionValue };
+          return { field, action, suggestion: suggestionValue, structured: rawInference };
 
         } catch (e: any) {
           if (e.name === 'AbortError') return null;
