@@ -52,33 +52,41 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (name: string, mobileNumber: string): Promise<{ success: boolean; error?: string }> => {
     try {
       // Check if user exists by phone number
-      const { data: existing } = await supabase
+      const { data: existing, error: selectError } = await supabase
         .from('profiles')
         .select('*')
         .eq('mobile_number', mobileNumber.trim())
         .single();
 
-      let profile: any;
+      let profile: { id: string; name: string; mobile_number: string } | null = null;
 
-      if (existing) {
+      if (existing && !selectError) {
         // Existing user — login
         profile = existing;
-      } else {
-        // New user — auto-create
+      } else if (selectError && selectError.code === 'PGRST116') {
+        // No user found, create new user
         if (!name.trim()) {
           return { success: false, error: 'Please enter your name to create an account.' };
         }
-        const { data, error } = await supabase
+        const { data, error: insertError } = await supabase
           .from('profiles')
           .insert({ name: name.trim(), mobile_number: mobileNumber.trim() })
           .select()
           .single();
 
-        if (error || !data) {
-          console.error('Supabase insert error (profiles):', error);
-          return { success: false, error: error?.message || 'Failed to create account. Please try again.' };
+        if (insertError || !data) {
+          console.error('Supabase insert error (profiles):', insertError);
+          return { success: false, error: insertError?.message || 'Failed to create account. Please try again.' };
         }
         profile = data;
+      } else {
+        // Other error occurred
+        console.error('Supabase select error (profiles):', selectError);
+        return { success: false, error: selectError?.message || 'Failed to check user existence. Please try again.' };
+      }
+
+      if (!profile) {
+        return { success: false, error: 'Failed to process user data. Please try again.' };
       }
 
       const loggedInUser: User = { id: profile.id, name: profile.name, mobileNumber: profile.mobile_number };
