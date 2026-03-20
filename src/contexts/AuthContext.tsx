@@ -19,6 +19,18 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function mapAuthError(error?: { message?: string; code?: string } | null): string {
+  const message = error?.message?.toLowerCase() || '';
+  const code = error?.code || '';
+
+  if (code === 'PGRST116') return 'User not found.';
+  if (message.includes('invalid api key')) return 'Authentication service is temporarily unavailable. Please try again.';
+  if (message.includes('failed to fetch') || message.includes('network')) return 'Network error. Please check your connection and try again.';
+  if (message.includes('jwt') || message.includes('token')) return 'Authentication token is invalid. Please refresh the app and try again.';
+
+  return error?.message || 'An authentication error occurred. Please try again.';
+}
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,6 +49,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (data && !error) {
             setUser({ id: data.id, name: data.name, mobileNumber: data.mobile_number });
           } else {
+            if (error && error.code !== 'PGRST116') {
+              console.error('Supabase load user error (profiles):', error);
+            }
             localStorage.removeItem('harmonyai_user_id');
           }
         }
@@ -76,13 +91,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (insertError || !data) {
           console.error('Supabase insert error (profiles):', insertError);
-          return { success: false, error: insertError?.message || 'Failed to create account. Please try again.' };
+          return { success: false, error: mapAuthError(insertError) };
         }
         profile = data;
       } else {
         // Other error occurred
         console.error('Supabase select error (profiles):', selectError);
-        return { success: false, error: selectError?.message || 'Failed to check user existence. Please try again.' };
+        return { success: false, error: mapAuthError(selectError) };
       }
 
       if (!profile) {
@@ -95,7 +110,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { success: true };
     } catch (error) {
       console.error('Login error:', error);
-      return { success: false, error: 'An error occurred. Please try again.' };
+      return { success: false, error: 'Unable to sign in right now. Please try again.' };
     }
   };
 

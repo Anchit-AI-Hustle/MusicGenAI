@@ -1,6 +1,48 @@
 import { supabase } from "@/integrations/supabase/client";
 import { CreativeContext } from "@/types/creative-context";
 
+function inferContextLocally(description: string) {
+  const text = description.toLowerCase();
+
+  const genre =
+    text.includes('hip hop') || text.includes('rap') ? 'Hip Hop' :
+    text.includes('rock') ? 'Rock' :
+    text.includes('edm') || text.includes('electronic') || text.includes('techno') ? 'Electronic' :
+    text.includes('jazz') ? 'Jazz' :
+    text.includes('classical') || text.includes('orchestral') ? 'Classical' :
+    text.includes('lofi') || text.includes('lo-fi') ? 'Lo-fi' :
+    text.includes('pop') ? 'Pop' :
+    'Pop';
+
+  const mood =
+    text.includes('sad') || text.includes('melanch') ? 'Melancholic' :
+    text.includes('calm') || text.includes('chill') ? 'Calm' :
+    text.includes('dark') ? 'Dark' :
+    text.includes('happy') || text.includes('uplift') ? 'Uplifting' :
+    'Energetic';
+
+  const tempo =
+    text.includes('slow') || text.includes('ballad') ? 80 :
+    text.includes('fast') || text.includes('energetic') || text.includes('dance') ? 130 :
+    110;
+
+  return {
+    genre: [genre],
+    subgenre: [],
+    mood,
+    energy: mood,
+    tempo: String(tempo),
+    artist_inspiration: "",
+    artist: "",
+    language: "English",
+    lyrics: "",
+    description,
+    prompt: description,
+    lyricTheme: mood,
+    instrumental: text.includes('instrumental'),
+  };
+}
+
 export async function inferContextFromDescription(description: string) {
   try {
     console.log("[Context Inference] Calling analyze-music for description:", description);
@@ -15,12 +57,12 @@ export async function inferContextFromDescription(description: string) {
 
     if (error) {
       console.error("[Context Inference] analyze-music function error:", error);
-      return null;
+      return inferContextLocally(description);
     }
 
     if (!data?.musicIntent) {
       console.error("[Context Inference] Invalid response format from analyze-music:", data);
-      return null;
+      return inferContextLocally(description);
     }
 
     const { musicIntent } = data;
@@ -43,7 +85,7 @@ export async function inferContextFromDescription(description: string) {
     };
   } catch (error) {
     console.error("[Context Inference] Failed to infer context:", error);
-    return null;
+    return inferContextLocally(description);
   }
 }
 

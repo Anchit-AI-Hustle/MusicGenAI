@@ -876,7 +876,13 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     } catch (err: any) {
       if (err.name !== 'AbortError') {
-        toast.error(err.message || 'Failed to get AI suggestion');
+        const rawMessage = String(err?.message || '');
+        const isProviderIssue =
+          rawMessage.toLowerCase().includes('timeout') ||
+          rawMessage.toLowerCase().includes('invalid api key') ||
+          rawMessage.toLowerCase().includes('providerid') ||
+          rawMessage.toLowerCase().includes('modelid');
+        toast.error(isProviderIssue ? 'AI suggestion is temporarily unavailable. Please try again.' : (err.message || 'Failed to get AI suggestion'));
       }
       setSuggestionState(prev => {
         const loadingKey = `${field}-${action}`;

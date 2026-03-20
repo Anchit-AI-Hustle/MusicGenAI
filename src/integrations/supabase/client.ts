@@ -2,8 +2,23 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const FALLBACK_SUPABASE_PROJECT_ID = 'vgmwpdktxsjaymdszvvn';
+const FALLBACK_SUPABASE_URL = `https://${FALLBACK_SUPABASE_PROJECT_ID}.supabase.co`;
+const FALLBACK_SUPABASE_PUBLISHABLE_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZnbXdwZGt0eHNqYXltZHN6dnZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk4Mzg5NjAsImV4cCI6MjA4NTQxNDk2MH0.onbwrpbMzhEUvjiKG3enp3xapvXi0IEk89Ua8hDTE3s';
+
+function normalizeEnvValue(value: string | undefined): string {
+  if (!value) return '';
+  return value.trim().replace(/^['"]|['"]$/g, '');
+}
+
+const envProjectId = normalizeEnvValue(import.meta.env.VITE_SUPABASE_PROJECT_ID);
+const envSupabaseUrl = normalizeEnvValue(import.meta.env.VITE_SUPABASE_URL);
+const envPublishableKey = normalizeEnvValue(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+
+const SUPABASE_URL =
+  envSupabaseUrl || (envProjectId ? `https://${envProjectId}.supabase.co` : FALLBACK_SUPABASE_URL);
+const SUPABASE_PUBLISHABLE_KEY = envPublishableKey || FALLBACK_SUPABASE_PUBLISHABLE_KEY;
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
