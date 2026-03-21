@@ -48,6 +48,9 @@ export function LANGUAGE_NAMES(): string[] { return LANGUAGE_DATABASE.map(l => l
 export function getVocalQualityAdvisory(language: string): string | null {
   const lang = findLanguage(language);
   if (!lang) return null;
+  if (language.toLowerCase() === "punjabi") {
+    return "Punjabi vocals are best on the ElevenLabs-backed TTS mix path for clearer pronunciation and higher consistency.";
+  }
   if (lang.preferredPath === "limited") return `${language} has limited AI vocal support. Instrumental mode recommended for best results.`;
   if (lang.preferredPath === "tts-mix") return `${language} uses dedicated vocal synthesis for best pronunciation. Generation takes 60-90 seconds.`;
   return null;

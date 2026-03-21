@@ -8,7 +8,7 @@ import { CreativeContext } from "@/types/creative-context";
 import { CompositionPlan } from "./composition-engine";
 import { findGenreByName } from "@/lib/musicData/genres";
 import { findMood } from "@/lib/musicData/moods";
-import { ARTIST_DATABASE } from "@/lib/musicData/artists";
+import { ARTIST_STYLES } from "@/lib/musicData/artists";
 
 export interface MasterPrompts {
   instrumentalPrompt: string;
@@ -35,7 +35,7 @@ export function buildMasterPrompts(
   instrumentalParts.push(`${plan.key} ${plan.scale}`);
   
   // C. Producer/Artist Inspiration
-  const artist = ARTIST_DATABASE.find(a => a.name === context.artistInspiration);
+  const artist = ARTIST_STYLES.find(a => a.name === context.artistInspiration);
   if (artist) {
     instrumentalParts.push(`inspired by the production style of ${artist.name} (${artist.productionNotes})`);
   }
@@ -46,8 +46,8 @@ export function buildMasterPrompts(
   }
   
   // E. Mood Keywords
-  if (mood?.modelPromptKeywords) {
-    instrumentalParts.push(mood.modelPromptKeywords);
+  if (mood?.promptKeywords?.length) {
+    instrumentalParts.push(...mood.promptKeywords);
   }
 
   const instrumentalPrompt = instrumentalParts.join(", ") + ".";
@@ -64,7 +64,7 @@ export function buildMasterPrompts(
   const vocalPrompt = vocalParts.join(", ") + ".";
 
   // 3. Mixing Instructions
-  const mixingInstruction = `Mix the ${context.vocalStyle} vocals ${
+  const mixingInstruction = `High-end mix: blend the ${context.vocalStyle} vocals ${
     genre?.name.toLowerCase().includes("lo-fi") ? "muffled and warm" : 
     genre?.name.toLowerCase().includes("pop") ? "bright and crisp" : 
     "cleanly"

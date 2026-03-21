@@ -57,6 +57,25 @@ export function buildElevenLabsMusicPrompt(context: CreativeContext): string {
 }
 
 export function buildMasterPrompt(context: CreativeContext): string {
-   // A comprehensive prompt describing everything for MusicContext
-   return buildMinimaxPrompt(context);
+  const genreInfo = findGenreByName(context.genre);
+  const subgenre = context.subgenre || "General";
+  const tempo = context.tempo || genreInfo?.bpmTypical || 110;
+  const description = context.songDescription || "No description provided";
+  const language = context.vocalLanguage || "English";
+  const vocalStyle = context.vocalStyle || "Contemporary";
+  const effects = (context.vocalEffects || []).join(", ") || "None";
+  const structure = context.songStructure || context.structureType || "Verse-Chorus-Bridge";
+  const inspiration = context.artistInspiration || "No specific artist";
+  const instrumentation = genreInfo?.primaryInstruments?.join(", ") || "drums, bass, harmony layers";
+
+  return [
+    "[MASTER MUSIC GEN BLUEPRINT]",
+    `IDENTITY: A ${String(context.mood || "dynamic").toLowerCase()} ${context.genre} track in the style of ${subgenre}.`,
+    `SPECS: Tempo: ${tempo} BPM. Duration: ${context.duration || 120}s. Structure: ${structure}.`,
+    `INSTRUMENTATION: ${instrumentation}.`,
+    `VOCALS: ${vocalStyle} vocals in ${language}. Intensity ${context.vocalIntensity || 5}/10. Effects: ${effects}.`,
+    `LYRICS: Theme "${context.lyricsTheme || context.mood || "Open"}".`,
+    `INSPIRATION: Inspired by ${inspiration}: keep production traits, but create an original composition.`,
+    `CONTEXT: ${description}`,
+  ].join("\n");
 }

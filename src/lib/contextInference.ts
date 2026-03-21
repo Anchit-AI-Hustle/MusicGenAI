@@ -1,92 +1,80 @@
-import { supabase } from "@/integrations/supabase/client";
 import { CreativeContext } from "@/types/creative-context";
+import { findGenreByName } from "@/lib/musicData/genres";
 
 function inferContextLocally(description: string) {
   const text = description.toLowerCase();
 
-  const genre =
-    text.includes('hip hop') || text.includes('rap') ? 'Hip Hop' :
-    text.includes('rock') ? 'Rock' :
-    text.includes('edm') || text.includes('electronic') || text.includes('techno') ? 'Electronic' :
-    text.includes('jazz') ? 'Jazz' :
-    text.includes('classical') || text.includes('orchestral') ? 'Classical' :
-    text.includes('lofi') || text.includes('lo-fi') ? 'Lo-fi' :
-    text.includes('pop') ? 'Pop' :
-    'Pop';
+  const genre = text.includes('punjabi') && text.includes('drill')
+    ? 'Punjabi Drill'
+    : text.includes('reggaeton')
+      ? 'Reggaeton'
+      : text.includes('hip hop') || text.includes('rap')
+        ? 'Hip Hop'
+        : text.includes('rock')
+          ? 'Rock'
+          : text.includes('edm') || text.includes('electronic') || text.includes('techno')
+            ? 'Electronic'
+            : text.includes('jazz')
+              ? 'Jazz'
+              : text.includes('classical') || text.includes('orchestral')
+                ? 'Classical'
+                : text.includes('lofi') || text.includes('lo-fi')
+                  ? 'Lo-fi'
+                  : text.includes('pop')
+                    ? 'Pop'
+                    : 'Pop';
+
+  const vocalLanguage =
+    text.includes('punjabi') ? 'Punjabi' :
+    text.includes('spanish') || text.includes('reggaeton') || text.includes('latin') ? 'Spanish' :
+    'English';
 
   const mood =
+    text.includes('aggressive') || text.includes('intense') || text.includes('dark') ? 'Aggressive' :
     text.includes('sad') || text.includes('melanch') ? 'Melancholic' :
     text.includes('calm') || text.includes('chill') ? 'Calm' :
-    text.includes('dark') ? 'Dark' :
     text.includes('happy') || text.includes('uplift') ? 'Uplifting' :
+    text.includes('energetic') ? 'Energetic' :
     'Energetic';
 
-  const tempo =
-    text.includes('slow') || text.includes('ballad') ? 80 :
-    text.includes('fast') || text.includes('energetic') || text.includes('dance') ? 130 :
-    110;
+  const artistInspiration =
+    text.includes('ap dhillon') ? 'AP Dhillon' :
+    text.includes('bad bunny') ? 'Bad Bunny' :
+    '';
+
+  const genreDef = findGenreByName(genre);
+  let tempo = genreDef?.bpmTypical ?? 110;
+  if (text.includes('slow') || text.includes('ballad')) {
+    tempo = Math.round((genreDef?.bpmMin ?? 80));
+  }
+  if (text.includes('energetic') || text.includes('dance') || text.includes('fast') || text.includes('intense')) {
+    const boosted = Math.round((genreDef?.bpmTypical ?? tempo) * 1.15);
+    tempo = Math.min(genreDef?.bpmMax ?? 200, boosted);
+  }
+  tempo = Math.max(genreDef?.bpmMin ?? 60, Math.min(genreDef?.bpmMax ?? 200, tempo));
 
   return {
-    genre: [genre],
-    subgenre: [],
+    genre,
+    subgenre: genre === 'Punjabi Drill' ? 'UK Punjabi drill' : '',
     mood,
     energy: mood,
-    tempo: String(tempo),
-    artist_inspiration: "",
-    artist: "",
-    language: "English",
+    tempo,
+    artistInspiration,
+    artist_inspiration: artistInspiration,
+    artist: artistInspiration,
+    vocalLanguage,
+    language: vocalLanguage,
     lyrics: "",
     description,
     prompt: description,
     lyricTheme: mood,
+    instrumentalOnly: text.includes('instrumental'),
     instrumental: text.includes('instrumental'),
   };
 }
 
-export async function inferContextFromDescription(description: string) {
-  try {
-    console.log("[Context Inference] Calling analyze-music for description:", description);
-    
-    // Call the existing analyze-music function which is already deployed and secure
-    const { data, error } = await supabase.functions.invoke('analyze-music', {
-      body: { 
-        input: { musicPrompt: description },
-        generationDNA: { seed: `${Date.now()}` } // Provide a default seed
-      }
-    });
-
-    if (error) {
-      console.error("[Context Inference] analyze-music function error:", error);
-      return inferContextLocally(description);
-    }
-
-    if (!data?.musicIntent) {
-      console.error("[Context Inference] Invalid response format from analyze-music:", data);
-      return inferContextLocally(description);
-    }
-
-    const { musicIntent } = data;
-    
-    // Map musicIntent to the format expected by the frontend contextual suggestions
-    return {
-      genre: [musicIntent.genre],
-      subgenre: musicIntent.subgenre ? [musicIntent.subgenre] : [],
-      mood: musicIntent.mood,
-      energy: musicIntent.energy || musicIntent.mood,
-      tempo: String(musicIntent.tempo),
-      artist_inspiration: musicIntent.artistInspiration || "",
-      artist: musicIntent.artistInspiration || "",
-      language: "English", 
-      lyrics: "", // Default to empty if not generated yet
-      description: description,
-      prompt: description,
-      lyricTheme: musicIntent.mood,
-      instrumental: musicIntent.genreFamily?.toLowerCase() === "ambient" || musicIntent.genreFamily?.toLowerCase() === "classical"
-    };
-  } catch (error) {
-    console.error("[Context Inference] Failed to infer context:", error);
-    return inferContextLocally(description);
-  }
+export function inferContextFromDescription(description: string) {
+  return inferContextLocally(description);
 }
 
 /**

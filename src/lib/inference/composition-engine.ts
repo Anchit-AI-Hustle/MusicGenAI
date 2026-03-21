@@ -24,7 +24,7 @@ export function generateCompositionPlan(
   duration: number,
   language: string
 ): CompositionPlan {
-  const genre = findGenreByName(genreName);
+  const genre = findGenreByName(genreName) || (genreName.toLowerCase() === "electronic" ? findGenreByName("EDM") : null);
   
   // 1. Calculate BPM
   let bpm = genre?.bpmTypical || 120;
@@ -32,7 +32,7 @@ export function generateCompositionPlan(
     bpm = genre ? Math.max(genre.bpmMin, bpm * 0.85) : 80;
   }
   if (mood.toLowerCase().includes("energetic") || mood.toLowerCase().includes("intense")) {
-    bpm = genre ? Math.min(genre.bpmMax, bpm * 1.15) : 140;
+    bpm = genre ? Math.min(genre.bpmMax, genre.bpmTypical + 4) : 132;
   }
   bpm = Math.round(bpm);
 

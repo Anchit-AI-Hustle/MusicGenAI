@@ -20,3 +20,7 @@ export const MOOD_DATABASE: MoodDefinition[] = [
 ];
 
 export function MOOD_NAMES(): string[] { return MOOD_DATABASE.map(m => m.name); }
+
+export function findMood(name: string): MoodDefinition | null {
+  return MOOD_DATABASE.find(m => m.name.toLowerCase() === name.toLowerCase()) ?? null;
+}
