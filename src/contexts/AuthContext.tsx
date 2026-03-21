@@ -41,16 +41,34 @@ function isSupabaseClientFailure(error?: { message?: string; code?: string } | n
   );
 }
 
+const AUTH_RETRY_DELAYS_MS = [250, 800];
+
+async function withTransientRetry<T>(operation: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= AUTH_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt === AUTH_RETRY_DELAYS_MS.length) break;
+      await new Promise(resolve => setTimeout(resolve, AUTH_RETRY_DELAYS_MS[attempt]));
+    }
+  }
+  throw lastError;
+}
+
 async function restProfilesRequest<T = any>(path: string, init: RequestInit): Promise<T> {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
-    ...init,
-    headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-      ...(init.headers || {}),
-    },
+  const response = await withTransientRetry(async () => {
+    return await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
+      ...init,
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+        ...(init.headers || {}),
+      },
+    });
   });
 
   if (!response.ok) {
@@ -105,11 +123,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         const savedUserId = localStorage.getItem('harmonyai_user_id');
         if (savedUserId) {
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', savedUserId)
-            .single();
+          const { data, error } = await withTransientRetry(async () => {
+            return await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', savedUserId)
+              .single();
+          });
 
           let profile = data;
 
@@ -129,11 +149,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (error && error.code !== 'PGRST116') {
               console.error('Supabase load user error (profiles):', error);
             }
-            localStorage.removeItem('harmonyai_user_id');
+            if (!error || !isSupabaseClientFailure(error)) {
+              localStorage.removeItem('harmonyai_user_id');
+            }
           }
         }
-      } catch {
-        localStorage.removeItem('harmonyai_user_id');
+      } catch (error) {
+        console.error('Auth bootstrap error:', error);
       } finally {
         setIsLoading(false);
       }
@@ -146,11 +168,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const normalizedMobile = mobileNumber.trim();
       const normalizedName = name.trim();
       // Check if user exists by phone number
-      const { data: existing, error: selectError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('mobile_number', normalizedMobile)
-        .single();
+      const { data: existing, error: selectError } = await withTransientRetry(async () => {
+        return await supabase
+          .from('profiles')
+          .select('*')
+          .eq('mobile_number', normalizedMobile)
+          .single();
+      });
 
       let profile: { id: string; name: string; mobile_number: string } | null = null;
 
@@ -181,11 +205,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (!normalizedName) {
           return { success: false, error: 'Please enter your name to create an account.' };
         }
-        const { data, error: insertError } = await supabase
-          .from('profiles')
-          .insert({ name: normalizedName, mobile_number: normalizedMobile })
-          .select()
-          .single();
+        const { data, error: insertError } = await withTransientRetry(async () => {
+          return await supabase
+            .from('profiles')
+            .insert({ name: normalizedName, mobile_number: normalizedMobile })
+            .select()
+            .single();
+        });
 
         if (insertError || !data) {
           console.error('Supabase insert error (profiles):', insertError);
@@ -225,16 +251,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (updates.mobileNumber) dbUpdates.mobile_number = updates.mobileNumber.trim();
 
       if (updates.mobileNumber) {
-        const { data: existing } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('mobile_number', updates.mobileNumber.trim())
-          .neq('id', user.id)
-          .single();
+        const { data: existing } = await withTransientRetry(async () => {
+          return await supabase
+            .from('profiles')
+            .select('id')
+            .eq('mobile_number', updates.mobileNumber.trim())
+            .neq('id', user.id)
+            .single();
+        });
         if (existing) return { success: false, error: 'This phone number is already in use.' };
       }
 
-      const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', user.id);
+      const { error } = await withTransientRetry(async () => {
+        return await supabase.from('profiles').update(dbUpdates).eq('id', user.id);
+      });
       if (error && isSupabaseClientFailure(error)) {
         try {
           await restProfilesRequest(`/profiles?id=eq.${encodeURIComponent(user.id)}`, {
@@ -263,9 +293,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!user) return { success: false, error: 'Not logged in.' };
     try {
       // Delete all user's music creations (tracks cascade via FK or manual)
-      await supabase.from('music_creations').delete().eq('user_id', user.id);
+      await withTransientRetry(async () => {
+        await supabase.from('music_creations').delete().eq('user_id', user.id);
+      });
       // Delete profile
-      const { error } = await supabase.from('profiles').delete().eq('id', user.id);
+      const { error } = await withTransientRetry(async () => {
+        return await supabase.from('profiles').delete().eq('id', user.id);
+      });
       if (error && isSupabaseClientFailure(error)) {
         try {
           await restProfilesRequest(`/profiles?id=eq.${encodeURIComponent(user.id)}`, { method: 'DELETE' });
