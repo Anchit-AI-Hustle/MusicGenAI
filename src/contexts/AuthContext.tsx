@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
 
 interface User {
   id: string;
@@ -31,6 +31,71 @@ function mapAuthError(error?: { message?: string; code?: string } | null): strin
   return error?.message || 'An authentication error occurred. Please try again.';
 }
 
+function isSupabaseClientFailure(error?: { message?: string; code?: string } | null): boolean {
+  const message = error?.message?.toLowerCase() || '';
+  return (
+    message.includes('invalid api key') ||
+    message.includes('failed to fetch') ||
+    message.includes('network') ||
+    message.includes('auth')
+  );
+}
+
+async function restProfilesRequest<T = any>(path: string, init: RequestInit): Promise<T> {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
+    ...init,
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+      ...(init.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    let payload: any = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    const err = new Error(payload?.message || payload?.hint || `Profiles request failed (${response.status})`) as Error & { code?: string };
+    err.code = payload?.code;
+    throw err;
+  }
+
+  if (response.status === 204) return [] as T;
+  return (await response.json()) as T;
+}
+
+async function fetchProfileByMobileFallback(mobileNumber: string) {
+  const rows = await restProfilesRequest<Array<{ id: string; name: string; mobile_number: string }>>(
+    `/profiles?select=id,name,mobile_number&mobile_number=eq.${encodeURIComponent(mobileNumber)}&limit=1`,
+    { method: 'GET' },
+  );
+  return rows?.[0] ?? null;
+}
+
+async function fetchProfileByIdFallback(id: string) {
+  const rows = await restProfilesRequest<Array<{ id: string; name: string; mobile_number: string }>>(
+    `/profiles?select=id,name,mobile_number&id=eq.${encodeURIComponent(id)}&limit=1`,
+    { method: 'GET' },
+  );
+  return rows?.[0] ?? null;
+}
+
+async function insertProfileFallback(name: string, mobileNumber: string) {
+  const rows = await restProfilesRequest<Array<{ id: string; name: string; mobile_number: string }>>(
+    '/profiles',
+    {
+      method: 'POST',
+      body: JSON.stringify([{ name, mobile_number: mobileNumber }]),
+    },
+  );
+  return rows?.[0] ?? null;
+}
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,8 +111,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             .eq('id', savedUserId)
             .single();
 
-          if (data && !error) {
-            setUser({ id: data.id, name: data.name, mobileNumber: data.mobile_number });
+          let profile = data;
+
+          if (!profile && error && isSupabaseClientFailure(error)) {
+            try {
+              profile = await fetchProfileByIdFallback(savedUserId);
+            } catch (fallbackError) {
+              console.error('Supabase fallback load user error (profiles):', fallbackError);
+            }
+          }
+
+          if (profile && !error) {
+            setUser({ id: profile.id, name: profile.name, mobileNumber: profile.mobile_number });
+          } else if (profile) {
+            setUser({ id: profile.id, name: profile.name, mobileNumber: profile.mobile_number });
           } else {
             if (error && error.code !== 'PGRST116') {
               console.error('Supabase load user error (profiles):', error);
@@ -66,11 +143,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (name: string, mobileNumber: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      const normalizedMobile = mobileNumber.trim();
+      const normalizedName = name.trim();
       // Check if user exists by phone number
       const { data: existing, error: selectError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('mobile_number', mobileNumber.trim())
+        .eq('mobile_number', normalizedMobile)
         .single();
 
       let profile: { id: string; name: string; mobile_number: string } | null = null;
@@ -78,14 +157,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (existing && !selectError) {
         // Existing user — login
         profile = existing;
+      } else if (selectError && isSupabaseClientFailure(selectError)) {
+        // Fallback path: direct REST query against the same Supabase backend.
+        try {
+          const fallbackExisting = await fetchProfileByMobileFallback(normalizedMobile);
+          if (fallbackExisting) {
+            profile = fallbackExisting;
+          } else {
+            if (!normalizedName) {
+              return { success: false, error: 'Please enter your name to create an account.' };
+            }
+            profile = await insertProfileFallback(normalizedName, normalizedMobile);
+            if (!profile) {
+              return { success: false, error: 'Unable to create account. Please try again.' };
+            }
+          }
+        } catch (fallbackError: any) {
+          console.error('Supabase fallback auth error (profiles):', fallbackError);
+          return { success: false, error: mapAuthError(fallbackError) };
+        }
       } else if (selectError && selectError.code === 'PGRST116') {
         // No user found, create new user
-        if (!name.trim()) {
+        if (!normalizedName) {
           return { success: false, error: 'Please enter your name to create an account.' };
         }
         const { data, error: insertError } = await supabase
           .from('profiles')
-          .insert({ name: name.trim(), mobile_number: mobileNumber.trim() })
+          .insert({ name: normalizedName, mobile_number: normalizedMobile })
           .select()
           .single();
 
@@ -137,7 +235,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', user.id);
-      if (error) return { success: false, error: 'Failed to update profile.' };
+      if (error && isSupabaseClientFailure(error)) {
+        try {
+          await restProfilesRequest(`/profiles?id=eq.${encodeURIComponent(user.id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(dbUpdates),
+          });
+        } catch {
+          return { success: false, error: 'Failed to update profile.' };
+        }
+      } else if (error) {
+        return { success: false, error: 'Failed to update profile.' };
+      }
 
       setUser(prev => prev ? {
         ...prev,
@@ -157,7 +266,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await supabase.from('music_creations').delete().eq('user_id', user.id);
       // Delete profile
       const { error } = await supabase.from('profiles').delete().eq('id', user.id);
-      if (error) return { success: false, error: 'Failed to delete account.' };
+      if (error && isSupabaseClientFailure(error)) {
+        try {
+          await restProfilesRequest(`/profiles?id=eq.${encodeURIComponent(user.id)}`, { method: 'DELETE' });
+        } catch {
+          return { success: false, error: 'Failed to delete account.' };
+        }
+      } else if (error) {
+        return { success: false, error: 'Failed to delete account.' };
+      }
       logout();
       return { success: true };
     } catch {

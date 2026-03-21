@@ -15,10 +15,11 @@ function normalizeEnvValue(value: string | undefined): string {
 const envProjectId = normalizeEnvValue(import.meta.env.VITE_SUPABASE_PROJECT_ID);
 const envSupabaseUrl = normalizeEnvValue(import.meta.env.VITE_SUPABASE_URL);
 const envPublishableKey = normalizeEnvValue(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+const envAnonKey = normalizeEnvValue(import.meta.env.VITE_SUPABASE_ANON_KEY);
 
-const SUPABASE_URL =
+export const SUPABASE_URL =
   envSupabaseUrl || (envProjectId ? `https://${envProjectId}.supabase.co` : FALLBACK_SUPABASE_URL);
-const SUPABASE_PUBLISHABLE_KEY = envPublishableKey || FALLBACK_SUPABASE_PUBLISHABLE_KEY;
+export const SUPABASE_PUBLISHABLE_KEY = envPublishableKey || envAnonKey || FALLBACK_SUPABASE_PUBLISHABLE_KEY;
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
@@ -30,3 +31,5 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
   }
 });
+
+export const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
