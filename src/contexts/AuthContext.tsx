@@ -23,11 +23,16 @@ const AUTH_USER_ID_KEY = 'harmonyai_user_id';
 const DEFAULT_USER_NAME = 'Anchit Tandon';
 const DEFAULT_USER_MOBILE = '9873945238';
 
-function mapAuthDbError(error: { message?: string } | null | undefined): string {
+function mapAuthDbError(error: { message?: string; code?: string; status?: number } | null | undefined): string {
   const message = (error?.message || '').toLowerCase();
+  const code = (error?.code || '').toLowerCase();
+  const status = Number(error?.status || 0);
 
   if (message.includes('relation') && message.includes('profiles') && message.includes('does not exist')) {
     return 'Supabase preview branch is missing schema (profiles table). Run migrations or use production Supabase env.';
+  }
+  if (status === 401 || code === 'pgrst301' || message.includes('401') || message.includes('unauthorized')) {
+    return 'Database auth failed (stale app cache or invalid key). Refresh the app and try again.';
   }
   if (message.includes('invalid api key') || message.includes('jwt')) {
     return 'Supabase env vars are invalid. Verify URL/anon key in Vercel for this environment.';

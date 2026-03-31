@@ -19,7 +19,7 @@ interface SongDetailPageProps {
 }
 
 const getCreationGenres = (creation: MusicCreation): string[] =>
-  creation.genre
+  (creation.genre || 'Pop')
     .split(',')
     .map(g => g.trim())
     .filter(Boolean);

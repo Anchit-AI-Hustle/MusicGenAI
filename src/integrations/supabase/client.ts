@@ -14,16 +14,24 @@ const env = import.meta.env as Record<string, string | undefined>;
 
 const projectRef =
   normalizeEnvValue(env.VITE_SUPABASE_PROJECT_ID) ||
-  normalizeEnvValue(env.NEXT_PUBLIC_SUPABASE_PROJECT_ID);
+  normalizeEnvValue(env.NEXT_PUBLIC_SUPABASE_PROJECT_ID) ||
+  normalizeEnvValue(env.NEXT_PUBLIC_SUPABASE_MUSIC_GEN_AI_SUPABASE_URL).match(/^https:\/\/([a-z0-9-]+)\.supabase\.co$/)?.[1] ||
+  normalizeEnvValue(env.SUPABASE_MUSIC_GEN_AI_SUPABASE_URL).match(/^https:\/\/([a-z0-9-]+)\.supabase\.co$/)?.[1];
 
 const explicitUrl =
   normalizeEnvValue(env.VITE_SUPABASE_URL) ||
-  normalizeEnvValue(env.NEXT_PUBLIC_SUPABASE_URL);
+  normalizeEnvValue(env.NEXT_PUBLIC_SUPABASE_URL) ||
+  normalizeEnvValue(env.NEXT_PUBLIC_SUPABASE_MUSIC_GEN_AI_SUPABASE_URL) ||
+  normalizeEnvValue(env.SUPABASE_MUSIC_GEN_AI_SUPABASE_URL);
 
 const anonKey =
   normalizeEnvValue(env.VITE_SUPABASE_PUBLISHABLE_KEY) ||
   normalizeEnvValue(env.VITE_SUPABASE_ANON_KEY) ||
-  normalizeEnvValue(env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  normalizeEnvValue(env.NEXT_PUBLIC_SUPABASE_ANON_KEY) ||
+  normalizeEnvValue(env.NEXT_PUBLIC_SUPABASE_MUSIC_GEN_AI_SUPABASE_PUBLISHABLE_KEY) ||
+  normalizeEnvValue(env.NEXT_PUBLIC_SUPABASE_MUSIC_GEN_AI_SUPABASE_ANON_KEY) ||
+  normalizeEnvValue(env.SUPABASE_MUSIC_GEN_AI_SUPABASE_PUBLISHABLE_KEY) ||
+  normalizeEnvValue(env.SUPABASE_MUSIC_GEN_AI_SUPABASE_ANON_KEY);
 
 const forceProductionSupabase =
   normalizeEnvValue(env.VITE_FORCE_PRODUCTION_SUPABASE).toLowerCase() === 'true' ||

@@ -41,7 +41,7 @@ const ACTIVE_STATUSES = ['analyzing', 'seeding', 'inferring', 'planning_structur
 const isActiveStatus = (status: string) => ACTIVE_STATUSES.includes(status);
 
 const getCreationGenres = (creation: MusicCreation): string[] =>
-  creation.genre
+  (creation.genre || 'Pop')
     .split(',')
     .map(g => g.trim())
     .filter(Boolean);
