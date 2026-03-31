@@ -3,7 +3,11 @@ import type { Database } from './types';
 
 function normalizeEnvValue(value: string | undefined): string {
   if (!value) return '';
-  return value.trim().replace(/^['"]|['"]$/g, '');
+  return value
+    .trim()
+    .replace(/^['"]|['"]$/g, '')
+    .replace(/\\n/g, '')
+    .replace(/\r?\n/g, '');
 }
 
 const env = import.meta.env as Record<string, string | undefined>;
@@ -65,4 +69,3 @@ export async function checkSupabaseConnectivity(): Promise<{ ok: boolean; error?
     return { ok: false, error: error?.message || 'Unknown Supabase connectivity error' };
   }
 }
-

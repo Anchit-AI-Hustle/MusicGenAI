@@ -23,6 +23,26 @@ const AUTH_USER_ID_KEY = 'harmonyai_user_id';
 const DEFAULT_USER_NAME = 'Anchit Tandon';
 const DEFAULT_USER_MOBILE = '9873945238';
 
+function mapAuthDbError(error: { message?: string } | null | undefined): string {
+  const message = (error?.message || '').toLowerCase();
+
+  if (message.includes('relation') && message.includes('profiles') && message.includes('does not exist')) {
+    return 'Supabase preview branch is missing schema (profiles table). Run migrations or use production Supabase env.';
+  }
+  if (message.includes('invalid api key') || message.includes('jwt')) {
+    return 'Supabase env vars are invalid. Verify URL/anon key in Vercel for this environment.';
+  }
+  if (message.includes('row-level security') || message.includes('permission denied')) {
+    return 'Supabase RLS policy blocks this operation for anon users.';
+  }
+  if (message.includes('failed to fetch') || message.includes('network')) {
+    return 'Network error while contacting Supabase.';
+  }
+  if (error?.message) return error.message;
+
+  return 'Database is unavailable. Please try again.';
+}
+
 function toUser(row: { id: string; name: string; mobile_number: string }): User {
   return {
     id: row.id,
@@ -38,13 +58,19 @@ async function ensureDefaultAccountExists() {
     .eq('mobile_number', DEFAULT_USER_MOBILE)
     .maybeSingle();
 
-  if (selectError) return;
+  if (selectError) {
+    console.warn('[Auth] Default profile check failed:', selectError.message);
+    return;
+  }
   if (existing) return;
 
-  await supabase.from('profiles').insert({
+  const { error: insertError } = await supabase.from('profiles').insert({
     name: DEFAULT_USER_NAME,
     mobile_number: DEFAULT_USER_MOBILE,
   });
+  if (insertError) {
+    console.warn('[Auth] Default profile seed failed:', insertError.message);
+  }
 }
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -94,7 +120,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       .maybeSingle();
 
     if (selectError) {
-      return { success: false, error: 'Database is unavailable. Please try again.' };
+      return { success: false, error: mapAuthDbError(selectError) };
     }
 
     if (existing) {
@@ -114,7 +140,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       .single();
 
     if (insertError || !created) {
-      return { success: false, error: 'Unable to create account. Please try again.' };
+      return { success: false, error: mapAuthDbError(insertError) };
     }
 
     setUser(toUser(created));
@@ -142,7 +168,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .neq('id', user.id)
         .maybeSingle();
 
-      if (checkError) return { success: false, error: 'Failed to validate phone number.' };
+      if (checkError) return { success: false, error: mapAuthDbError(checkError) };
       if (existing) return { success: false, error: 'This phone number is already in use.' };
     }
 
@@ -153,7 +179,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       .select('id,name,mobile_number')
       .single();
 
-    if (error || !data) return { success: false, error: 'Failed to update profile.' };
+    if (error || !data) return { success: false, error: mapAuthDbError(error) };
 
     setUser(toUser(data));
     return { success: true };
@@ -165,7 +191,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await supabase.from('music_creations').delete().eq('user_id', user.id);
     const { error } = await supabase.from('profiles').delete().eq('id', user.id);
 
-    if (error) return { success: false, error: 'Failed to delete account.' };
+    if (error) return { success: false, error: mapAuthDbError(error) };
 
     logout();
     return { success: true };
