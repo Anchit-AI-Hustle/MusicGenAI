@@ -40,6 +40,12 @@ const ACTIVE_STATUSES = ['analyzing', 'seeding', 'inferring', 'planning_structur
 
 const isActiveStatus = (status: string) => ACTIVE_STATUSES.includes(status);
 
+const getCreationGenres = (creation: MusicCreation): string[] =>
+  creation.genre
+    .split(',')
+    .map(g => g.trim())
+    .filter(Boolean);
+
 const toPlayerTrack = (track: Track, creation: MusicCreation): PlayerTrack => ({
   id: track.id,
   title: track.title,
@@ -49,8 +55,8 @@ const toPlayerTrack = (track: Track, creation: MusicCreation): PlayerTrack => ({
   duration: track.duration,
   creationId: creation.id,
   creationType: creation.type,
-  genres: creation.genres,
-  lyrics: track.lyrics || creation.lyrics,
+  genres: getCreationGenres(creation),
+  lyrics: track.lyrics || creation.lyricsText,
   lyricCues: track.lyricCues,
 });
 
@@ -340,12 +346,12 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
             </div>
           </div>
         </div>
-        {creation.genres.length > 0 && (
+        {getCreationGenres(creation).length > 0 && (
           <div className="flex flex-wrap gap-2 mt-4">
-            {creation.genres.slice(0, 5).map(genre => (
+            {getCreationGenres(creation).slice(0, 5).map(genre => (
               <span key={genre} className="px-2 py-1 text-xs rounded-full bg-secondary text-muted-foreground">{genre}</span>
             ))}
-            {creation.genres.length > 5 && <span className="px-2 py-1 text-xs rounded-full bg-secondary text-muted-foreground">+{creation.genres.length - 5} more</span>}
+            {getCreationGenres(creation).length > 5 && <span className="px-2 py-1 text-xs rounded-full bg-secondary text-muted-foreground">+{getCreationGenres(creation).length - 5} more</span>}
           </div>
         )}
       </div>

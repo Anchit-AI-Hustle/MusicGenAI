@@ -153,6 +153,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const [songDescription, setSongDescription] = useState('');
   const [genre, setGenre] = useState('Pop');
   const [subgenre, setSubgenre] = useState('');
+  const [selectedGenres, setSelectedGenres] = useState<GenreOption[]>(() => normalizeGenreOptions(['Pop']));
+  const [selectedSubgenres, setSelectedSubgenres] = useState<string[]>([]);
   const [genreSearch, setGenreSearch] = useState('');
   const [showGenreDropdown, setShowGenreDropdown] = useState(false);
   const [duration, setDuration] = useState(180);
@@ -271,6 +273,19 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     vocalStyle, structureType, energyLevel, instruments, lyricsTheme,
     vocalsEnabled, updateFormState
   ]);
+
+  useEffect(() => {
+    if (!genre) return;
+    setSelectedGenres(normalizeGenreOptions([genre]));
+  }, [genre]);
+
+  useEffect(() => {
+    if (!subgenre) {
+      setSelectedSubgenres([]);
+      return;
+    }
+    setSelectedSubgenres(subgenre.split(',').map(s => s.trim()).filter(Boolean));
+  }, [subgenre]);
 
   // Sync album track count
   React.useEffect(() => {
@@ -452,13 +467,13 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'vocalStyle': updateSongPrompt({ vocalStyle: '' }); break;
       case 'vocalIntensity': updateSongPrompt({ vocalIntensity: 5 }); break;
       case 'vocalEffects': updateSongPrompt({ vocalEffects: [] }); break;
-      case 'duration': { setDurationSeconds(180); setHours(0); setMinutes(3); setSeconds(0); break; }
+      case 'duration': { setDuration(180); setHours(0); setMinutes(3); setSeconds(0); break; }
     }
   };
 
   const updateFromSlider = (value: number[]) => {
     const total = value[0];
-    setDurationSeconds(total);
+    setDuration(total);
     setHours(Math.floor(total / 3600));
     setMinutes(Math.floor((total % 3600) / 60));
     setSeconds(total % 60);
@@ -466,33 +481,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   const updateFromInputs = useCallback(() => {
     const total = hours * 3600 + minutes * 60 + seconds;
-    setDurationSeconds(Math.min(total, 3600));
+    setDuration(Math.min(total, 3600));
   }, [hours, minutes, seconds]);
 
   React.useEffect(() => { updateFromInputs(); }, [hours, minutes, seconds, updateFromInputs]);
-
-  const toggleGenre = (genre: GenreOption | string) => {
-    const genreObj = typeof genre === 'string' 
-      ? { label: genre, value: genre.toLowerCase().replace(/\s+/g, '-') }
-      : genre;
-      
-    updateSongPrompt(prev => ({
-      ...prev,
-      genre: prev.genre.some(g => g.value === genreObj.value)
-        ? prev.genre.filter(g => g.value !== genreObj.value)
-        : [...prev.genre, genreObj],
-    }));
-  };
-  const toggleLanguage = (lang: string) => updateSongPrompt(prev => ({
-    ...prev,
-    vocalLanguages: prev.vocalLanguages.includes(lang) ? prev.vocalLanguages.filter(l => l !== lang) : [...prev.vocalLanguages, lang],
-  }));
-  const toggleVocalEffect = (effect: string) => updateSongPrompt(prev => ({
-    ...prev,
-    vocalEffects: prev.vocalEffects.includes(effect) ? prev.vocalEffects.filter(e => e !== effect) : [...prev.vocalEffects, effect],
-  }));
-
-  const filteredGenres = GENRE_OPTIONS.filter(g => g.label.toLowerCase().includes(genreSearch.toLowerCase()));
 
   const formatDuration = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -599,7 +591,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         songDescription: albumVibe,
         genre: albumTracks[0]?.genre || 'Pop',
         duration: albumTracks.reduce((acc, t) => acc + t.duration, 0),
-        visualizerEnabled: albumTracks.some(t => t.visualizerEnabled),
+        visualizerEnabled: albumTracks.some(t => t.generateVideo),
         vocalLanguage: albumTracks[0]?.vocalLanguage || 'English',
         albumTracks,
       });
@@ -610,7 +602,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         songTitle: ctx.title || 'Untitled Track',
         title: ctx.title || 'Untitled Track',
         songDescription: ctx.songDescription, 
-        genre: ctx.genre, 
+        genre: selectedGenres[0]?.label || ctx.genre || 'Pop',
         duration: ctx.duration, 
         visualizerEnabled,
         vocalLanguage: ctx.vocalLanguage,
@@ -692,8 +684,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         audioUrl: track.audioUrl,
         videoUrl: track.videoUrl,
         duration: track.duration,
-        genres: currentCreation?.genres,
-        lyrics: track.lyrics || currentCreation?.lyrics,
+        genres: currentCreation?.genre ? [currentCreation.genre] : undefined,
+        lyrics: track.lyrics || currentCreation?.lyricsText,
         lyricCues: track.lyricCues,
       });
     }
@@ -895,7 +887,9 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                 <SmartSearchInput
                   value={selectedGenres.map(g => g.label)}
                   onChange={(val: string[]) => {
-                    setSelectedGenres(normalizeGenreOptions(val));
+                    const normalized = normalizeGenreOptions(val);
+                    setSelectedGenres(normalized);
+                    setGenre(normalized[0]?.label || 'Pop');
                   }}
                   options={GENRE_OPTIONS.map(g => g.label)}
                   placeholder="Type or select genres..."
@@ -911,7 +905,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                 </div>
                 <SmartSearchInput
                   value={selectedSubgenres}
-                  onChange={(val: string[]) => setSelectedSubgenres(val)}
+                  onChange={(val: string[]) => {
+                    setSelectedSubgenres(val);
+                    setSubgenre(val.join(', '));
+                  }}
                   options={[]} // Dynamically populated by AI or empty for custom
                   placeholder="e.g., Deep, Melodic, Industrial..."
                   multiSelect

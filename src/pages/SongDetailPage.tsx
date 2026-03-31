@@ -18,6 +18,12 @@ interface SongDetailPageProps {
   onBack: () => void;
 }
 
+const getCreationGenres = (creation: MusicCreation): string[] =>
+  creation.genre
+    .split(',')
+    .map(g => g.trim())
+    .filter(Boolean);
+
 const toPlayerTrack = (track: Track, creation: MusicCreation): PlayerTrack => ({
   id: track.id,
   title: track.title,
@@ -27,8 +33,8 @@ const toPlayerTrack = (track: Track, creation: MusicCreation): PlayerTrack => ({
   duration: track.duration,
   creationId: creation.id,
   creationType: creation.type,
-  genres: creation.genres,
-  lyrics: track.lyrics || creation.lyrics,
+  genres: getCreationGenres(creation),
+  lyrics: track.lyrics || creation.lyricsText,
   lyricCues: track.lyricCues,
 });
 
@@ -192,16 +198,16 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
               <div className="flex items-center gap-4 text-sm text-muted-foreground justify-center sm:justify-start flex-wrap">
                 <span className="flex items-center gap-1.5">
                   <Clock className="w-4 h-4" />
-                  {formatDuration(track?.duration || creation.durationSeconds)}
+                  {formatDuration(track?.duration || creation.duration)}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Calendar className="w-4 h-4" />
                   {formatDate(creation.createdAt)}
                 </span>
               </div>
-              {creation.genres.length > 0 && (
+              {getCreationGenres(creation).length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-4 justify-center sm:justify-start">
-                  {creation.genres.map(g => (
+                  {getCreationGenres(creation).map(g => (
                     <span key={g} className="px-3 py-1 text-xs rounded-full bg-primary/10 text-primary font-medium">{g}</span>
                   ))}
                 </div>
@@ -231,7 +237,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
         )}
 
         {/* Lyrics section */}
-        {creation.lyrics && (
+        {creation.lyricsText && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass-card rounded-2xl overflow-hidden mb-6">
             <button
               onClick={() => setShowLyrics(!showLyrics)}
@@ -250,7 +256,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
                 >
                   <div className="px-5 pb-5">
                     <pre className="whitespace-pre-wrap text-sm leading-7 text-foreground/80 font-sans">
-                      {creation.lyrics}
+                      {creation.lyricsText}
                     </pre>
                   </div>
                 </motion.div>
@@ -265,7 +271,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
           <div className="space-y-3 text-sm">
             <div>
               <span className="text-muted-foreground">Prompt:</span>
-              <p className="text-foreground mt-1">{creation.musicPrompt}</p>
+              <p className="text-foreground mt-1">{creation.songDescription}</p>
             </div>
             {creation.artistInspiration && (
               <div>
@@ -273,12 +279,10 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
                 <p className="text-foreground mt-1">{creation.artistInspiration}</p>
               </div>
             )}
-            {creation.vocalLanguages.length > 0 && (
-              <div>
-                <span className="text-muted-foreground">Vocal Languages:</span>
-                <p className="text-foreground mt-1">{creation.vocalLanguages.join(', ')}</p>
-              </div>
-            )}
+            <div>
+              <span className="text-muted-foreground">Vocal Language:</span>
+              <p className="text-foreground mt-1">{creation.vocalLanguage}</p>
+            </div>
           </div>
         </motion.div>
 
