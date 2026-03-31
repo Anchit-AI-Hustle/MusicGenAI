@@ -12,8 +12,8 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
-  const [name, setName] = useState('');
-  const [mobileNumber, setMobileNumber] = useState('');
+  const [name, setName] = useState('Anchit Tandon');
+  const [mobileNumber, setMobileNumber] = useState('9873945238');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -29,8 +29,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       if (!result.success) {
         setError(result.error || 'Login failed');
       } else {
-        setName('');
-        setMobileNumber('');
+        setName('Anchit Tandon');
+        setMobileNumber('9873945238');
         onClose();
       }
     } finally {

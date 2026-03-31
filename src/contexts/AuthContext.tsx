@@ -18,6 +18,76 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AUTH_USER_ID_KEY = 'harmonyai_user_id';
+const LOCAL_PROFILES_KEY = 'harmonyai_profiles';
+const DEFAULT_USER_NAME = 'Anchit Tandon';
+const DEFAULT_USER_MOBILE = '9873945238';
+
+type StoredProfile = {
+  id: string;
+  name: string;
+  mobile_number: string;
+};
+
+function readLocalProfiles(): StoredProfile[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_PROFILES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is StoredProfile =>
+        typeof item?.id === 'string' &&
+        typeof item?.name === 'string' &&
+        typeof item?.mobile_number === 'string',
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalProfiles(profiles: StoredProfile[]) {
+  localStorage.setItem(LOCAL_PROFILES_KEY, JSON.stringify(profiles));
+}
+
+function ensureDefaultLocalProfile(): StoredProfile {
+  const profiles = readLocalProfiles();
+  let profile = profiles.find(p => p.mobile_number === DEFAULT_USER_MOBILE);
+  if (!profile) {
+    profile = {
+      id: (globalThis.crypto?.randomUUID?.() ?? `local-${Date.now()}`),
+      name: DEFAULT_USER_NAME,
+      mobile_number: DEFAULT_USER_MOBILE,
+    };
+    writeLocalProfiles([profile, ...profiles]);
+  }
+  return profile;
+}
+
+function findLocalProfileByMobile(mobileNumber: string): StoredProfile | null {
+  return readLocalProfiles().find(p => p.mobile_number === mobileNumber) ?? null;
+}
+
+function findLocalProfileById(id: string): StoredProfile | null {
+  return readLocalProfiles().find(p => p.id === id) ?? null;
+}
+
+function upsertLocalProfile(profile: StoredProfile): StoredProfile {
+  const profiles = readLocalProfiles();
+  const idx = profiles.findIndex(p => p.id === profile.id);
+  if (idx >= 0) {
+    profiles[idx] = profile;
+  } else {
+    profiles.unshift(profile);
+  }
+  writeLocalProfiles(profiles);
+  return profile;
+}
+
+function removeLocalProfile(id: string) {
+  const profiles = readLocalProfiles().filter(p => p.id !== id);
+  writeLocalProfiles(profiles);
+}
 
 function mapAuthError(error?: { message?: string; code?: string } | null): string {
   const message = error?.message?.toLowerCase() || '';
@@ -121,7 +191,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const savedUserId = localStorage.getItem('harmonyai_user_id');
+        const defaultProfile = ensureDefaultLocalProfile();
+        const savedUserId = localStorage.getItem(AUTH_USER_ID_KEY);
         if (savedUserId) {
           const { data, error } = await withTransientRetry(async () => {
             return await supabase
@@ -146,13 +217,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           } else if (profile) {
             setUser({ id: profile.id, name: profile.name, mobileNumber: profile.mobile_number });
           } else {
+            const localProfile = findLocalProfileById(savedUserId);
+            if (localProfile) {
+              setUser({ id: localProfile.id, name: localProfile.name, mobileNumber: localProfile.mobile_number });
+              return;
+            }
+          }
+          if (!profile) {
             if (error && error.code !== 'PGRST116') {
               console.error('Supabase load user error (profiles):', error);
             }
             if (!error || !isSupabaseClientFailure(error)) {
-              localStorage.removeItem('harmonyai_user_id');
+              localStorage.removeItem(AUTH_USER_ID_KEY);
             }
           }
+        } else {
+          // Keep default credentials available in storage as requested.
+          upsertLocalProfile(defaultProfile);
         }
       } catch (error) {
         console.error('Auth bootstrap error:', error);
@@ -198,7 +279,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         } catch (fallbackError: any) {
           console.error('Supabase fallback auth error (profiles):', fallbackError);
-          return { success: false, error: mapAuthError(fallbackError) };
+          const localExisting = findLocalProfileByMobile(normalizedMobile);
+          if (localExisting) {
+            profile = localExisting;
+          } else {
+            if (!normalizedName) {
+              return { success: false, error: 'Please enter your name to create an account.' };
+            }
+            profile = upsertLocalProfile({
+              id: globalThis.crypto?.randomUUID?.() ?? `local-${Date.now()}`,
+              name: normalizedName,
+              mobile_number: normalizedMobile,
+            });
+          }
         }
       } else if (selectError && selectError.code === 'PGRST116') {
         // No user found, create new user
@@ -230,7 +323,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       const loggedInUser: User = { id: profile.id, name: profile.name, mobileNumber: profile.mobile_number };
       setUser(loggedInUser);
-      localStorage.setItem('harmonyai_user_id', profile.id);
+      upsertLocalProfile(profile);
+      localStorage.setItem(AUTH_USER_ID_KEY, profile.id);
       return { success: true };
     } catch (error) {
       console.error('Login error:', error);
@@ -240,7 +334,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('harmonyai_user_id');
+    localStorage.removeItem(AUTH_USER_ID_KEY);
   };
 
   const updateProfile = async (updates: { name?: string; mobileNumber?: string }): Promise<{ success: boolean; error?: string }> => {
@@ -283,6 +377,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         name: updates.name?.trim() || prev.name,
         mobileNumber: updates.mobileNumber?.trim() || prev.mobileNumber,
       } : null);
+      upsertLocalProfile({
+        id: user.id,
+        name: updates.name?.trim() || user.name,
+        mobile_number: updates.mobileNumber?.trim() || user.mobileNumber,
+      });
       return { success: true };
     } catch {
       return { success: false, error: 'An error occurred.' };
@@ -309,6 +408,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else if (error) {
         return { success: false, error: 'Failed to delete account.' };
       }
+      removeLocalProfile(user.id);
       logout();
       return { success: true };
     } catch {
