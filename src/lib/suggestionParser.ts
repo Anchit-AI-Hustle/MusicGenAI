@@ -1,4 +1,4 @@
-import { SuggestionField, CreativeContext } from "@/types/creative-context";
+import { SuggestionField } from "@/types/creative-context";
 import { GENRE_NAMES } from "./musicData/genres";
 import { MOOD_NAMES } from "./musicData/moods";
 import { TEMPO_NAMES, getBpmFromName } from "./musicData/tempo";
@@ -43,25 +43,18 @@ export function parseSuggestionResponse(text: string): ParsedSuggestion[] {
     // Parse Tempo
     if (data.tempo) {
       if (typeof data.tempo === "number") {
-        // Find closest named tempo
-        let closest = "Medium";
-        let minDiff = 999;
-        for (const name of TEMPO_NAMES()) {
-          const bpm = getBpmFromName(name);
-          const diff = Math.abs(bpm - data.tempo);
-          if (diff < minDiff) {
-            minDiff = diff;
-            closest = name;
-          }
-        }
-        suggestions.push({ field: "tempo", value: closest, confidence: 0.8 });
+        const bpm = Math.max(60, Math.min(200, Math.round(data.tempo)));
+        suggestions.push({ field: "tempo", value: String(bpm), confidence: 0.9 });
       } else {
         const match = fuzzyMatch(data.tempo, TEMPO_NAMES().concat(["fast", "slow", "medium", "upbeat", "very fast", "very slow"]));
         if (match) {
-           const standardized = match.toLowerCase() === "fast" ? "Fast" : 
-                                match.toLowerCase() === "slow" ? "Slow" :
-                                match.toLowerCase() === "upbeat" ? "Upbeat" : "Medium";
-           suggestions.push({ field: "tempo", value: standardized, confidence: 0.8 });
+           const mappedName = match.toLowerCase() === "fast" ? "Fast" : 
+                              match.toLowerCase() === "slow" ? "Slow" :
+                              match.toLowerCase() === "upbeat" ? "Upbeat" :
+                              match.toLowerCase() === "very fast" ? "Very Fast" :
+                              match.toLowerCase() === "very slow" ? "Very Slow" :
+                              match;
+           suggestions.push({ field: "tempo", value: String(getBpmFromName(mappedName)), confidence: 0.85 });
         }
       }
     }
@@ -83,11 +76,6 @@ export function parseSuggestionResponse(text: string): ParsedSuggestion[] {
       }
     }
 
-    // Instrumental toggle
-    if (data.instrumental !== undefined) {
-        suggestions.push({ field: "instrumentalOnly", value: !!data.instrumental, confidence: 0.9 });
-    }
-    
   } catch (err) {
     console.error("[Suggestion Parser] Failed to parse JSON", err, text);
   }

@@ -882,7 +882,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="glass-card rounded-xl p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
                   <Label className="text-foreground font-medium">Genres</Label>
-                  <AiToolbar field="genres" />
+                  <AiToolbar field="genre" />
                 </div>
                 <SmartSearchInput
                   value={selectedGenres.map(g => g.label)}
