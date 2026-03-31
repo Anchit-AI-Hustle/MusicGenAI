@@ -12,7 +12,19 @@ import { generateVocals, generateLyricCues, inferVocalStyle, generateDefaultLyri
 import { aiMusicClient } from '@/lib/ai-music-client';
 import type { TrackConfig } from '@/components/AlbumTrackForm';
 import { genreOptionsToLabels } from '@/data/genres';
-import { buildAlbumPlan, buildGenerationIntent } from '@/engine';
+import {
+  buildAlbumPlan,
+  buildGenerationIntent,
+  enhanceField,
+  newAlternativeField,
+  suggestMood,
+  suggestMusicPrompt,
+  suggestSongStructure,
+  suggestTempo,
+  suggestVideoStyle,
+  suggestVocalStyle,
+} from '@/engine';
+import { moodToVector } from '@/engine/normalizer';
 import { applyInferenceToContext, resolveCreativeContext } from '@/lib/contextInference';
 import { CreativeContext } from '@/types/creative-context';
 import type { GenerationIntent, RawUserInput } from '@/engine/types';
@@ -919,6 +931,56 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return text;
   };
 
+  const toSuggestionContext = (context: Record<string, any>) => {
+    const genres = parseList(context.genre);
+    const primaryGenre = genres[0] || 'pop';
+    const secondary = genres.slice(1);
+    const moodLabel = String(context.mood || 'happy');
+    const mood = moodToVector(moodLabel);
+    const artistList = parseList(context.artistInspiration);
+    const languages = parseList(context.vocalLanguage);
+    const effects = Array.isArray(context.vocalEffects) && context.vocalEffects.length > 0
+      ? context.vocalEffects
+      : parseList(context.vocalEffects);
+
+    return {
+      genres: genres.length > 0 ? genres.map((g) => g.toLowerCase()) : ['pop'],
+      genre_profile: {
+        primary: primaryGenre.toLowerCase(),
+        secondary: secondary.map((g) => g.toLowerCase()),
+        instrumentation: [],
+        rhythm_pattern: '',
+      },
+      mood,
+      tempo_bpm: Number(context.tempo || 120),
+      music_prompt: String(context.songDescription || ''),
+      artist_inspiration: artistList.length > 0 ? artistList : ['MuseVibe Reference'],
+      lyric_theme: String(context.lyricsTheme || ''),
+      vocal_style: String(context.vocalStyle || ''),
+      video_style: context.videoStyle ? String(context.videoStyle) : null,
+      vocal_language: languages.length > 0 ? languages : ['English'],
+      vocal_effects: effects,
+      duration_seconds: Number(context.duration || 180),
+    };
+  };
+
+  const buildStructuredSuggestion = (
+    suggestionText: string,
+    suggestionContext: ReturnType<typeof toSuggestionContext>,
+    context: Record<string, any>,
+  ): StructuredPromptSuggestion => ({
+    genre: suggestionContext.genres.map((g) => g[0].toUpperCase() + g.slice(1)),
+    mood: suggestMood(suggestionContext),
+    energy: String(Math.max(1, Math.min(10, Math.round(suggestionContext.mood.arousal)))),
+    tempo: String(suggestTempo(suggestionContext)),
+    artist_inspiration: parseList(context.artistInspiration).join(', ') || 'MuseVibe Reference',
+    lyrics: String(context.lyricsText || ''),
+    description: suggestionText,
+    prompt: suggestionText,
+    subgenre: parseList(context.subgenre),
+    lyricTheme: String(context.lyricsTheme || `${suggestMood(suggestionContext)} ${suggestionContext.genre_profile.primary} narrative`),
+  });
+
   const buildFieldSuggestion = (
     field: string,
     value: string,
@@ -1027,43 +1089,90 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const normalizedField = normalizeField(field);
       const history = suggestionHistoryRef.current[normalizedField] || [];
       const globalHistory = suggestionHistoryRef.current.__global__ || [];
-      
-      const { inferContextFromDescription } = await import('@/lib/contextInference');
-      const { parseSuggestionResponse } = await import('@/lib/suggestionParser');
-      
-      const compositePrompt = `
-Target Field: ${normalizedField}
-Action: ${action}
-Current Value: ${value || '(empty)'}
-Song Description: ${effectiveContext.songDescription || 'Not provided'}
-Genre: ${effectiveContext.genre || 'Not provided'}
-Subgenre: ${effectiveContext.subgenre || 'Not provided'}
-Mood: ${effectiveContext.mood || 'Not provided'}
-Tempo: ${effectiveContext.tempo || 'Not provided'}
-Duration: ${effectiveContext.duration || 'Not provided'}
-Vocal Language: ${effectiveContext.vocalLanguage || 'Not provided'}
-Vocal Style: ${effectiveContext.vocalStyle || 'Not provided'}
-Lyrics Theme: ${effectiveContext.lyricsTheme || 'Not provided'}
-Artist Inspiration: ${effectiveContext.artistInspiration || 'Not provided'}
-Video Style: ${effectiveContext.videoStyle || 'Not provided'}
-Prior Suggestions For This Field: ${history.join(' | ') || 'none'}
-Recent Global Suggestions: ${globalHistory.slice(-5).join(' | ') || 'none'}
-      `.trim();
 
-      const rawInference = await inferContextFromDescription(compositePrompt);
-      
-      if (!rawInference) throw new Error("Failed to infer");
-      
-      const parsedSuggestions = parseSuggestionResponse(JSON.stringify(rawInference));
-      
-      if (!parsedSuggestions || parsedSuggestions.length === 0) {
-         throw new Error("No suggestions returned");
+      const suggestionContext = toSuggestionContext({
+        ...effectiveContext,
+        __history: history,
+        __global: globalHistory,
+      });
+
+      const currentValue = sanitizeSuggestion(value) || '';
+      const baseGenre = suggestionContext.genre_profile.primary;
+      const inferredMood = suggestMood(suggestionContext);
+      const inferredTempo = suggestTempo(suggestionContext);
+      const inferredPrompt = suggestMusicPrompt(suggestionContext);
+
+      let suggestionValue: string | null = null;
+
+      switch (normalizedField) {
+        case 'prompt':
+        case 'albumVibe':
+          suggestionValue = action === 'enhance'
+            ? enhanceField('music_prompt', currentValue || inferredPrompt, suggestionContext)
+            : action === 'new'
+              ? newAlternativeField('music_prompt', currentValue || inferredPrompt, suggestionContext)
+              : inferredPrompt;
+          break;
+        case 'mood':
+          suggestionValue = action === 'new'
+            ? newAlternativeField('mood', currentValue || inferredMood, suggestionContext)
+            : inferredMood;
+          break;
+        case 'tempo':
+          suggestionValue = String(inferredTempo);
+          break;
+        case 'structureType':
+          suggestionValue = action === 'new'
+            ? newAlternativeField('song_structure', currentValue || suggestSongStructure(suggestionContext), suggestionContext)
+            : suggestSongStructure(suggestionContext);
+          break;
+        case 'vocalStyle':
+          suggestionValue = action === 'enhance'
+            ? enhanceField('vocal_style', currentValue || suggestVocalStyle(suggestionContext), suggestionContext)
+            : action === 'new'
+              ? newAlternativeField('vocal_style', currentValue || suggestVocalStyle(suggestionContext), suggestionContext)
+              : suggestVocalStyle(suggestionContext);
+          break;
+        case 'videoStyle':
+          suggestionValue = suggestVideoStyle(suggestionContext);
+          break;
+        case 'genre':
+          suggestionValue = baseGenre[0].toUpperCase() + baseGenre.slice(1);
+          break;
+        case 'subgenre':
+          suggestionValue = currentValue || `${baseGenre} fusion`;
+          break;
+        case 'lyricsTheme':
+          suggestionValue = action === 'enhance'
+            ? enhanceField('lyric_theme', currentValue || `${inferredMood} ${baseGenre} story`, suggestionContext)
+            : currentValue || `${inferredMood} ${baseGenre} storytelling`;
+          break;
+        case 'lyrics':
+          suggestionValue = currentValue || `Theme: ${effectiveContext.lyricsTheme || inferredMood}. Style: ${baseGenre}.`;
+          break;
+        case 'artistInspiration':
+          suggestionValue = currentValue || String(effectiveContext.artistInspiration || 'The Weeknd');
+          break;
+        case 'vocalLanguage':
+          suggestionValue = parseList(effectiveContext.vocalLanguage)[0] || 'English';
+          break;
+        case 'vocalIntensity':
+          suggestionValue = String(Math.max(1, Math.min(10, Math.round(suggestionContext.mood.arousal))));
+          break;
+        case 'duration':
+          suggestionValue = String(Math.max(30, Math.min(600, Math.round(Number(effectiveContext.duration || 180)))));
+          break;
+        case 'trackName':
+          suggestionValue = `${inferredMood} ${baseGenre} track`;
+          break;
+        case 'albumName':
+          suggestionValue = `${inferredMood} ${baseGenre} sessions`;
+          break;
+        default:
+          suggestionValue =
+            buildFieldSuggestion(normalizedField, value, effectiveContext, null, action) ||
+            inferredPrompt;
       }
-
-      let suggestionValue =
-        parsedSuggestions.find(s => s.field === normalizedField)?.value
-        || buildFieldSuggestion(normalizedField, value, effectiveContext, rawInference, action)
-        || (parsedSuggestions.length > 0 ? String(parsedSuggestions[0].value) : null);
 
       suggestionValue = sanitizeSuggestion(suggestionValue);
       if (!suggestionValue) throw new Error('No suggestions returned');
@@ -1086,13 +1195,27 @@ Recent Global Suggestions: ${globalHistory.slice(-5).join(' | ') || 'none'}
           ...prev,
           loading: newLoading,
           results: { 
-             ...prev.results, 
-             [field]: { field: normalizedField, action, suggestion: suggestionValue, structured: rawInference } 
+            ...prev.results,
+            [field]: {
+              field: normalizedField,
+              action,
+              suggestion: suggestionValue,
+              structured: normalizedField === 'prompt'
+                ? buildStructuredSuggestion(suggestionValue, suggestionContext, effectiveContext)
+                : null,
+            }
           }
         };
       });
 
-      return { field: normalizedField, action, suggestion: suggestionValue, structured: rawInference };
+      return {
+        field: normalizedField,
+        action,
+        suggestion: suggestionValue,
+        structured: normalizedField === 'prompt'
+          ? buildStructuredSuggestion(suggestionValue, suggestionContext, effectiveContext)
+          : null,
+      };
 
     } catch (err: any) {
       if (err.name !== 'AbortError') {
