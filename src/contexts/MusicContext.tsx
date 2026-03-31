@@ -913,13 +913,6 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Session suggestion history
   const suggestionHistoryRef = useRef<Record<string, string[]>>({});
-  const suggestionGenreFamilyHistoryRef = useRef<string[]>([]);
-
-  const GENRE_FAMILIES = [
-    'Electronic / Dance', 'Rock / Alternative', 'Hip-Hop / Rap', 'Pop',
-    'Jazz / Blues', 'Classical / Orchestral', 'World',
-    'Ambient / Lo-fi', 'Reggae', 'Latin', 'Indian', 'Experimental'
-  ];
 
   const normalizeField = (field: string) => (field === 'genres' ? 'genre' : field);
 
@@ -980,85 +973,6 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     subgenre: parseList(context.subgenre),
     lyricTheme: String(context.lyricsTheme || `${suggestMood(suggestionContext)} ${suggestionContext.genre_profile.primary} narrative`),
   });
-
-  const buildFieldSuggestion = (
-    field: string,
-    value: string,
-    context: Record<string, any>,
-    rawInference: any,
-    action: AiAction
-  ): string | null => {
-    const normalizedField = normalizeField(field);
-    const c = context || {};
-    const inferred = rawInference || {};
-
-    const inferredGenre = sanitizeSuggestion(inferred.genre) || sanitizeSuggestion(c.genre) || 'Pop';
-    const inferredMood = sanitizeSuggestion(inferred.mood) || sanitizeSuggestion(c.mood) || 'Energetic';
-    const inferredArtist = sanitizeSuggestion(inferred.artist_inspiration) || sanitizeSuggestion(inferred.artist) || sanitizeSuggestion(c.artistInspiration);
-    const inferredLanguage = sanitizeSuggestion(inferred.language) || sanitizeSuggestion(inferred.vocalLanguage) || sanitizeSuggestion(c.vocalLanguage) || 'English';
-    const inferredTempo = Number(inferred.tempo || c.tempo || 120);
-    const tempo = Number.isFinite(inferredTempo) ? Math.max(60, Math.min(200, Math.round(inferredTempo))) : 120;
-    const desc = sanitizeSuggestion(c.songDescription) || sanitizeSuggestion(inferred.description) || 'music concept';
-
-    switch (normalizedField) {
-      case 'trackName':
-        if (action === 'enhance' && sanitizeSuggestion(value)) return `${sanitizeSuggestion(value)} (${inferredMood})`;
-        return `${inferredMood} ${inferredGenre} Vibe`;
-      case 'albumName':
-        return sanitizeSuggestion(value) && action === 'enhance'
-          ? `${sanitizeSuggestion(value)}: ${inferredMood} Collection`
-          : `${inferredMood} ${inferredGenre} Sessions`;
-      case 'albumVibe':
-      case 'prompt':
-        return `${inferredMood} ${inferredGenre} track around ${tempo} BPM with ${inferredLanguage} vocals, ${inferredArtist || 'modern production touches'}, and a ${sanitizeSuggestion(c.videoStyle) || 'cinematic'} atmosphere inspired by "${desc}".`;
-      case 'genre':
-        return inferredGenre;
-      case 'subgenre':
-        return sanitizeSuggestion(inferred.subgenre) || `${inferredGenre} Fusion`;
-      case 'tempo':
-        return String(tempo);
-      case 'duration': {
-        const base = Number(c.duration || 180);
-        const next = action === 'enhance' ? Math.min(300, Math.max(90, base + 20)) : Math.max(90, Math.min(300, base));
-        return String(Math.round(next));
-      }
-      case 'mood':
-        return inferredMood;
-      case 'structureType':
-        return sanitizeSuggestion(c.structureType) || (tempo > 130 ? 'Intro → Build → Drop → Breakdown → Drop → Outro' : 'Verse-Chorus-Bridge');
-      case 'vocalStyle':
-        return sanitizeSuggestion(c.vocalStyle) || (sanitizeSuggestion(inferredGenre)?.toLowerCase().includes('rap') ? 'Rap Vocal' : 'Pop Singing');
-      case 'vocalIntensity': {
-        const base = Number(c.vocalIntensity || 5);
-        const next = inferredMood.toLowerCase().includes('aggressive') || inferredMood.toLowerCase().includes('energetic')
-          ? Math.max(base, 7)
-          : inferredMood.toLowerCase().includes('chill') || inferredMood.toLowerCase().includes('melanch')
-            ? Math.min(base, 4)
-            : base;
-        return String(Math.max(1, Math.min(10, Math.round(next))));
-      }
-      case 'vocalEffects':
-        return inferredMood.toLowerCase().includes('dream') || inferredMood.toLowerCase().includes('atmos')
-          ? 'Reverb, Delay, Chorus'
-          : inferredMood.toLowerCase().includes('aggressive')
-            ? 'Distortion, Compression, Delay'
-            : 'Reverb, Delay';
-      case 'vocalLanguage':
-        return inferredLanguage;
-      case 'lyricsTheme':
-        return sanitizeSuggestion(inferred.lyricTheme) || `${inferredMood} ${inferredGenre} storytelling`;
-      case 'lyrics':
-        return sanitizeSuggestion(c.lyricsText) && action === 'enhance'
-          ? `${sanitizeSuggestion(c.lyricsText)}\n\n(Enhanced with stronger imagery and tighter cadence for ${inferredGenre.toLowerCase()}).`
-          : `Write about ${sanitizeSuggestion(c.lyricsTheme) || inferredMood.toLowerCase()} in a ${inferredGenre.toLowerCase()} style with ${inferredLanguage} phrasing.`;
-      case 'artistInspiration':
-        return inferredArtist || sanitizeSuggestion(c.artistInspiration) || 'Daft Punk';
-      case 'videoStyle':
-        return sanitizeSuggestion(c.videoStyle) || (inferredMood.toLowerCase().includes('dark') ? 'Neon Cityscapes' : 'Abstract Geometric');
-      default:
-        return sanitizeSuggestion(inferred.description) || sanitizeSuggestion(inferred.prompt) || sanitizeSuggestion(value);
-    }
-  };
 
   const aiSuggest = async (
     field: string, 
@@ -1169,9 +1083,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           suggestionValue = `${inferredMood} ${baseGenre} sessions`;
           break;
         default:
-          suggestionValue =
-            buildFieldSuggestion(normalizedField, value, effectiveContext, null, action) ||
-            inferredPrompt;
+          suggestionValue = currentValue || inferredPrompt;
       }
 
       suggestionValue = sanitizeSuggestion(suggestionValue);
