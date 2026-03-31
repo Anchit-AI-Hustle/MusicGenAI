@@ -476,11 +476,29 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     lyricsTheme: tc.lyricsTheme,
   });
 
-  const parseList = (value: string | undefined): string[] =>
-    (value ?? '')
+  const parseList = (value: unknown): string[] => {
+    if (value === null || value === undefined) return [];
+
+    if (Array.isArray(value)) {
+      return value
+        .flatMap((entry) => parseList(entry))
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    if (typeof value === 'object') {
+      const candidate = value as { label?: unknown; value?: unknown; name?: unknown };
+      if (typeof candidate.label === 'string') return [candidate.label.trim()].filter(Boolean);
+      if (typeof candidate.value === 'string') return [candidate.value.trim()].filter(Boolean);
+      if (typeof candidate.name === 'string') return [candidate.name.trim()].filter(Boolean);
+      return [];
+    }
+
+    return String(value)
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean);
+  };
 
   const normalizeStructure = (value: string | undefined): string => {
     const raw = (value ?? 'Intro-Verse-Chorus-Verse-Chorus-Bridge-Chorus-Outro').trim();
