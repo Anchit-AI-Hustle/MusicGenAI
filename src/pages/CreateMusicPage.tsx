@@ -104,7 +104,7 @@ const STATUS_LABELS: Record<string, string> = {
   audio_complete_video_failed: 'Audio ready (video failed)',
 };
 
-const ACTIVE_STATUSES = ['analyzing', 'seeding', 'inferring', 'planning_structure', 'generating_melody', 'synthesizing_instruments', 'generating_vocals', 'vocal_alignment', 'mixing_audio', 'mastering_track', 'analyzing_beat_structure', 'generating_video', 'rendering_video', 'encoding_video', 'transcoding_video', 'finalizing'];
+const ACTIVE_STATUSES = ['analyzing', 'processing', 'seeding', 'inferring', 'planning_structure', 'generating_melody', 'synthesizing_instruments', 'generating_vocals', 'vocal_alignment', 'mixing_audio', 'mastering_track', 'analyzing_beat_structure', 'generating_video', 'rendering_video', 'encoding_video', 'transcoding_video', 'finalizing'];
 
 interface CreateMusicPageProps {
   onAuthClick: () => void;
@@ -129,6 +129,7 @@ interface SongPromptState {
   instruments: string[];
   energyLevel: number;
   structureType: string;
+  vocalArrangement: string;
   visualizerEnabled: boolean;
   videoStyle: string;
   useHighQualityVocals: boolean;
@@ -171,6 +172,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const [mood, setMood] = useState('Energetic');
   
   const [vocalsEnabled, setVocalsEnabled] = useState(true);
+  const [vocalArrangement, setVocalArrangement] = useState('solo');
   const [vocalStyle, setVocalStyle] = useState('Pop Singing');
   const [vocalIntensity, setVocalIntensity] = useState(5);
   const [selectedVocalEffects, setSelectedVocalEffects] = useState<string[]>([]);
@@ -209,6 +211,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     instruments,
     energyLevel,
     structureType,
+    vocalArrangement,
     visualizerEnabled,
     videoStyle,
     useHighQualityVocals: false,
@@ -216,7 +219,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     songDescription, genre, subgenre, mood, tempo, duration,
     vocalsEnabled, vocalStyle, vocalLanguage, vocalIntensity,
     selectedVocalEffects, lyricsText, lyricsTheme, artistInspiration,
-    instruments, energyLevel, structureType, visualizerEnabled, videoStyle
+    instruments, energyLevel, structureType, vocalArrangement, visualizerEnabled, videoStyle
   ]);
 
   const applySongPromptState = useCallback((next: SongPromptState) => {
@@ -237,6 +240,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     setInstruments(next.instruments);
     setEnergyLevel(next.energyLevel);
     setStructureType(next.structureType);
+    setVocalArrangement(next.vocalArrangement);
     setGenerateVideo(next.visualizerEnabled);
     setVideoStyle(next.videoStyle);
   }, []);
@@ -317,6 +321,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     mood, 
     vocalsEnabled,
     vocalStyle, 
+    vocalArrangement,
     vocalIntensity, 
     vocalEffects: selectedVocalEffects,
     structureType,
@@ -345,19 +350,39 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   };
 
   const applyToField = (field: string, value: string) => {
+    const parseCsv = (raw: string): string[] =>
+      raw.split(',').map((token) => token.trim()).filter(Boolean);
+
     switch (field) {
       case 'trackName': setTitle(value); break;
       case 'albumName': setAlbumName(value); break;
       case 'albumVibe': setAlbumVibe(value); break;
       case 'prompt': updateSongPrompt({ songDescription: value }); break;
-      case 'genre': updateSongPrompt({ genre: value }); break;
+      case 'genre': {
+        const parsed = parseCsv(value);
+        const normalized = normalizeGenreOptions(parsed.length > 0 ? parsed : [value]);
+        setSelectedGenres(normalized);
+        updateSongPrompt({ genre: normalized[0]?.label || value });
+        break;
+      }
+      case 'subgenre': {
+        const parsed = parseCsv(value);
+        setSelectedSubgenres(parsed);
+        updateSongPrompt({ subgenre: parsed.join(', ') });
+        break;
+      }
       case 'lyrics': updateSongPrompt({ lyricsText: value }); break;
       case 'artistInspiration': updateSongPrompt({ artistInspiration: value }); break;
-      case 'vocalLanguage': updateSongPrompt({ vocalLanguage: value }); break;
+      case 'vocalLanguage': {
+        const parsed = parseCsv(value);
+        updateSongPrompt({ vocalLanguage: parsed.join(', ') || value });
+        break;
+      }
       case 'videoStyle': updateSongPrompt({ videoStyle: value }); break;
       case 'tempo': updateSongPrompt({ tempo: Math.max(60, Math.min(200, parseInt(value) || 120)) }); break;
       case 'mood': updateSongPrompt({ mood: value }); break;
       case 'structureType': updateSongPrompt({ structureType: value }); break;
+      case 'vocalArrangement': updateSongPrompt({ vocalArrangement: value }); break;
       case 'vocalStyle': updateSongPrompt({ vocalStyle: value }); break;
       case 'vocalIntensity': updateSongPrompt({ vocalIntensity: Math.max(1, Math.min(10, parseInt(value) || 5)) }); break;
       case 'vocalEffects':
@@ -378,6 +403,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         }
         break;
       }
+      case 'lyricsTheme': updateSongPrompt({ lyricsTheme: value }); break;
     }
   };
 
@@ -388,6 +414,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'albumVibe': return albumVibe;
       case 'prompt': return songDescription;
       case 'genre': return genre;
+      case 'subgenre': return subgenre;
       case 'lyrics': return lyricsText;
       case 'artistInspiration': return artistInspiration;
       case 'vocalLanguage': return vocalLanguage;
@@ -395,9 +422,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'tempo': return String(tempo);
       case 'mood': return mood;
       case 'structureType': return structureType;
+      case 'vocalArrangement': return vocalArrangement;
       case 'vocalStyle': return vocalStyle;
       case 'vocalIntensity': return String(vocalIntensity);
       case 'vocalEffects': return selectedVocalEffects.join(', ');
+      case 'lyricsTheme': return lyricsTheme;
       case 'duration': return String(duration);
       default: return '';
     }
@@ -456,6 +485,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         useHighQualityVocals: false,
       }); break;
       case 'genre': updateSongPrompt({ genre: 'Pop' }); break;
+      case 'subgenre': {
+        setSelectedSubgenres([]);
+        updateSongPrompt({ subgenre: '' });
+        break;
+      }
       case 'lyrics': updateSongPrompt({ lyricsText: '' }); break;
       case 'artistInspiration': updateSongPrompt({ artistInspiration: '' }); break;
       case 'vocalLanguage': updateSongPrompt({ vocalLanguage: 'English' }); break;
@@ -463,10 +497,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'tempo': updateSongPrompt({ tempo: 120 }); break;
       case 'mood': updateSongPrompt({ mood: 'Energetic' }); break;
       case 'structureType': updateSongPrompt({ structureType: 'Verse-Chorus-Bridge' }); break;
-      case 'vocalStructure': updateSongPrompt({ vocalStructure: 'Instrumental' }); break;
+      case 'vocalArrangement': updateSongPrompt({ vocalArrangement: 'solo' }); break;
       case 'vocalStyle': updateSongPrompt({ vocalStyle: '' }); break;
       case 'vocalIntensity': updateSongPrompt({ vocalIntensity: 5 }); break;
       case 'vocalEffects': updateSongPrompt({ vocalEffects: [] }); break;
+      case 'lyricsTheme': updateSongPrompt({ lyricsTheme: '' }); break;
       case 'duration': { setDuration(180); setHours(0); setMinutes(3); setSeconds(0); break; }
     }
   };
@@ -496,7 +531,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   useEffect(() => { contextRef.current = getFormContext(); }, [
     title, songDescription, genre, subgenre, duration, vocalLanguage,
     lyricsText, artistInspiration, videoStyle, tempo, mood, vocalsEnabled,
-    vocalStyle, vocalIntensity, selectedVocalEffects, structureType
+    vocalStyle, vocalIntensity, selectedVocalEffects, structureType,
+    vocalArrangement, lyricsTheme
   ]);
 
   const visualizerEnabledTrack = async (ctx: any) => {
@@ -602,7 +638,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         songTitle: ctx.title || 'Untitled Track',
         title: ctx.title || 'Untitled Track',
         songDescription: ctx.songDescription, 
-        genre: selectedGenres[0]?.label || ctx.genre || 'Pop',
+        genre: selectedGenres.length > 0 ? selectedGenres.map((item) => item.label).join(', ') : (ctx.genre || 'Pop'),
         duration: ctx.duration, 
         visualizerEnabled,
         vocalLanguage: ctx.vocalLanguage,
@@ -614,6 +650,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         subgenre: ctx.subgenre,
         vocalsEnabled: ctx.vocalsEnabled,
         vocalStyle: ctx.vocalStyle || undefined,
+        vocalArrangement: ctx.vocalArrangement || undefined,
         vocalIntensity: ctx.vocalIntensity, 
         vocalEffects: ctx.vocalEffects,
         structureType: ctx.structureType || undefined,
@@ -995,11 +1032,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                     <AudioWaveform className="w-5 h-5 text-muted-foreground" />
                     <Label className="text-foreground font-medium">Vocal Arrangement</Label>
                   </div>
-                  <AiToolbar field="structureType" />
+                  <AiToolbar field="vocalArrangement" />
                 </div>
                 <SmartSearchInput
-                  value={structureType}
-                  onChange={(val: string) => updateSongPrompt({ structureType: val })}
+                  value={vocalArrangement}
+                  onChange={(val: string) => updateSongPrompt({ vocalArrangement: val })}
                   options={VOCAL_STRUCTURE_PRESETS}
                   placeholder="e.g., Verse - Chorus - Verse"
                 />
@@ -1066,10 +1103,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <AiToolbar field="vocalLanguage" />
                 </div>
                 <SmartSearchInput
-                  value={vocalLanguage}
-                  onChange={(val: string) => setVocalLanguage(val)}
+                  value={vocalLanguage.split(',').map((item) => item.trim()).filter(Boolean)}
+                  onChange={(val: string[]) => setVocalLanguage(val.join(', '))}
                   options={LANGUAGES}
                   placeholder="Select or type language..."
+                  multiSelect
                 />
               </motion.div>
 

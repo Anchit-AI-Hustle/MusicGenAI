@@ -72,6 +72,7 @@ export interface CreateMusicInput extends Partial<CreativeContext> {
   title: string;
   numberOfTracks?: number;
   musicalKey?: string;
+  vocalArrangement?: 'solo' | 'duet' | 'choir' | 'none' | string;
   // Per-track configs for album mode
   albumTracks?: TrackConfig[];
 }
@@ -519,6 +520,13 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       ? input.vocalEffects
       : ['none'];
 
+    const normalizedArrangement = (() => {
+      if (input.vocalsEnabled === false) return 'none';
+      const raw = String(input.vocalArrangement || 'solo').trim().toLowerCase();
+      if (raw === 'solo' || raw === 'duet' || raw === 'choir' || raw === 'none') return raw;
+      return 'solo';
+    })();
+
     return {
       creation_mode: creationMode,
       album_song_count: creationMode === 'album' ? albumCount : undefined,
@@ -530,7 +538,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       duration_seconds: input.duration ?? 180,
       mood: input.mood || 'happy',
       song_structure: normalizeStructure(input.structureType),
-      vocal_arrangement: input.vocalsEnabled === false ? 'none' : 'solo',
+      vocal_arrangement: normalizedArrangement as RawUserInput['vocal_arrangement'],
       vocal_style: input.vocalStyle || 'mixed voice',
       vocal_intensity: input.vocalIntensity ?? 5,
       vocal_effects: vocalEffects,
@@ -554,6 +562,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     tempo: intent.tempo_bpm,
     mood: intent.mood.label,
     structureType: intent.structure.raw,
+    vocalArrangement: intent.vocal.arrangement,
     vocalsEnabled: intent.vocal.arrangement !== 'none',
     vocalStyle: intent.vocal.style,
     vocalLanguage: intent.vocal.languages.join(', '),
@@ -1035,6 +1044,62 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const inferredPrompt = suggestMusicPrompt(suggestionContext);
 
       let suggestionValue: string | null = null;
+      const titleCase = (token: string) => token ? `${token[0].toUpperCase()}${token.slice(1)}` : token;
+      const unique = (items: string[]) => [...new Set(items.map((item) => item.trim()).filter(Boolean))];
+      const genreArtistMap: Record<string, string[]> = {
+        'hip-hop': ['Kendrick Lamar', 'Drake', 'J Dilla'],
+        trap: ['Travis Scott', 'Future', 'Metro Boomin'],
+        pop: ['Taylor Swift', 'Bruno Mars', 'Billie Eilish'],
+        rnb: ['The Weeknd', 'Frank Ocean', 'Beyonce'],
+        rock: ['Radiohead', 'Led Zeppelin', 'Pink Floyd'],
+        metal: ['Metallica', 'Slipknot', 'Bring Me The Horizon'],
+        jazz: ['Miles Davis', 'John Coltrane', 'Herbie Hancock'],
+        classical: ['Hans Zimmer', 'John Williams', 'Beethoven'],
+        edm: ['Daft Punk', 'Calvin Harris', 'Swedish House Mafia'],
+        house: ['Daft Punk', 'Disclosure', 'KAYTRANADA'],
+        ambient: ['Brian Eno', 'Aphex Twin', 'Nils Frahm'],
+        folk: ['Bon Iver', 'Johnny Cash', 'Bob Dylan'],
+      };
+      const genreSubgenreMap: Record<string, string[]> = {
+        'hip-hop': ['boom bap', 'trap soul', 'lo-fi rap'],
+        trap: ['melodic trap', 'drill', 'dark trap'],
+        pop: ['dance-pop', 'synth-pop', 'electro-pop'],
+        rnb: ['neo-soul', 'alt-rnb', 'trap soul'],
+        rock: ['alt rock', 'indie rock', 'arena rock'],
+        metal: ['metalcore', 'thrash metal', 'industrial metal'],
+        jazz: ['lo-fi jazz', 'nu jazz', 'cool jazz'],
+        classical: ['orchestral', 'neo-classical', 'cinematic classical'],
+        edm: ['future bass', 'progressive house', 'melodic techno'],
+        house: ['deep house', 'tech house', 'progressive house'],
+        ambient: ['drone', 'cinematic ambient', 'dark ambient'],
+        folk: ['indie folk', 'acoustic folk', 'folk-pop'],
+      };
+      const genreEffectsMap: Record<string, string[]> = {
+        'hip-hop': ['delay', 'plate reverb', 'light autotune'],
+        trap: ['autotune', 'delay', 'stereo doubler'],
+        pop: ['bright reverb', 'stereo doubler', 'gentle compression'],
+        rnb: ['lush reverb', 'slap delay', 'subtle autotune'],
+        rock: ['short room reverb', 'saturation', 'parallel compression'],
+        metal: ['saturation', 'short slap delay', 'tight gate'],
+        jazz: ['plate reverb', 'tape delay', 'light saturation'],
+        classical: ['concert hall reverb', 'early reflections', 'stereo room'],
+        edm: ['sidechain ducking', 'delay throws', 'reverb tails'],
+        house: ['sidechain ducking', 'delay', 'tight reverb'],
+        ambient: ['long shimmer reverb', 'ping-pong delay', 'chorus'],
+        folk: ['room reverb', 'tape slap', 'subtle chorus'],
+      };
+      const moodTrackNames: Record<string, string[]> = {
+        dark: ['Neon Shadows', 'Midnight Static', 'Afterlight'],
+        melancholic: ['Fading Polaroids', 'Quiet Rain', 'Last Letter'],
+        euphoric: ['Skyline Pulse', 'Golden Rush', 'Infinite Lift'],
+        epic: ['Iron Horizon', 'Final Ascent', 'Empire of Light'],
+        happy: ['Sunset Run', 'Wildflowers', 'City Smiles'],
+        romantic: ['Velvet Orbit', 'Slow Sparks', 'Moonlit Hearts'],
+        angry: ['Redline', 'Break the Silence', 'No Retreat'],
+        chill: ['Soft Frequency', 'Low Tide', 'Night Drive'],
+        tense: ['Pressure Point', 'Cracked Signals', 'Edge of Dawn'],
+        sad: ['Empty Station', 'Cold Echoes', 'Without You'],
+      };
 
       switch (normalizedField) {
         case 'prompt':
@@ -1069,10 +1134,17 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           suggestionValue = suggestVideoStyle(suggestionContext);
           break;
         case 'genre':
-          suggestionValue = baseGenre[0].toUpperCase() + baseGenre.slice(1);
+          suggestionValue = unique([
+            ...suggestionContext.genres,
+          ])
+            .slice(0, 3)
+            .map(titleCase)
+            .join(', ') || titleCase(baseGenre);
           break;
         case 'subgenre':
-          suggestionValue = currentValue || `${baseGenre} fusion`;
+          suggestionValue = unique(genreSubgenreMap[baseGenre] ?? [`${baseGenre} fusion`, 'melodic', 'cinematic'])
+            .slice(0, 3)
+            .join(', ');
           break;
         case 'lyricsTheme':
           suggestionValue = action === 'enhance'
@@ -1080,22 +1152,44 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             : currentValue || `${inferredMood} ${baseGenre} storytelling`;
           break;
         case 'lyrics':
-          suggestionValue = currentValue || `Theme: ${effectiveContext.lyricsTheme || inferredMood}. Style: ${baseGenre}.`;
+          suggestionValue = currentValue || `City lights fade while we run from yesterday.\nEvery scar is a map to where we are today.\nHold me through the noise until the dawn arrives.\nTurn this ache to fire and bring us back to life.`;
           break;
         case 'artistInspiration':
-          suggestionValue = currentValue || String(effectiveContext.artistInspiration || 'The Weeknd');
+          suggestionValue = currentValue || unique([
+            ...parseList(effectiveContext.artistInspiration),
+            ...(genreArtistMap[baseGenre] ?? ['The Weeknd', 'Kendrick Lamar', 'Hans Zimmer']),
+          ]).slice(0, 3).join(', ');
           break;
         case 'vocalLanguage':
-          suggestionValue = parseList(effectiveContext.vocalLanguage)[0] || 'English';
+          suggestionValue = unique([
+            ...parseList(effectiveContext.vocalLanguage),
+            'English',
+            'Hindi',
+          ]).slice(0, 3).join(', ');
           break;
         case 'vocalIntensity':
           suggestionValue = String(Math.max(1, Math.min(10, Math.round(suggestionContext.mood.arousal))));
+          break;
+        case 'vocalEffects':
+          suggestionValue = unique([
+            ...parseList(effectiveContext.vocalEffects),
+            ...(genreEffectsMap[baseGenre] ?? ['reverb', 'delay', 'compression']),
+          ]).slice(0, 3).join(', ');
+          break;
+        case 'vocalArrangement':
+          suggestionValue = baseGenre === 'classical'
+            ? 'choir'
+            : baseGenre === 'edm' || baseGenre === 'ambient'
+              ? 'solo'
+              : baseGenre === 'rnb'
+                ? 'duet'
+                : 'solo';
           break;
         case 'duration':
           suggestionValue = String(Math.max(30, Math.min(600, Math.round(Number(effectiveContext.duration || 180)))));
           break;
         case 'trackName':
-          suggestionValue = `${inferredMood} ${baseGenre} track`;
+          suggestionValue = (moodTrackNames[inferredMood.toLowerCase()]?.[0] ?? `${titleCase(inferredMood)} ${titleCase(baseGenre)}`).trim();
           break;
         case 'albumName':
           suggestionValue = `${inferredMood} ${baseGenre} sessions`;
