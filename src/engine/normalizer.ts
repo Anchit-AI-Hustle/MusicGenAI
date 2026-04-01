@@ -1,306 +1,302 @@
 import {
+  ALBUM_SONG_COUNT_RANGE,
   CANONICAL_MOODS,
+  DEFAULT_RHYTHM_PATTERN,
   DEFAULT_STRUCTURE,
-  FIELD_LIMITS,
-  KEYWORD_SCORES,
-  RATIO_PRESETS,
-  STRUCTURE_DEFAULT_WEIGHT,
-} from './CONSTANTS';
+  DURATION_RANGE,
+  ENERGY_FROM_TEMPO,
+  GENRE_INSTRUMENTATION_MAP,
+  GENRE_RHYTHM_PATTERN_MAP,
+  HIGH_AROUSAL_WORDS,
+  HIGH_TENSION_WORDS,
+  LOW_AROUSAL_WORDS,
+  LOW_TENSION_WORDS,
+  MAX_INSTRUMENTATION_COUNT,
+  MOOD_MAPPINGS,
+  STRUCTURE_DURATION_RATIOS,
+  TEMPO_RANGES,
+  VOCAL_INTENSITY_RANGE,
+} from './constants'
 import type {
-  ArtistStyleReference,
+  ArtistStyleVector,
   GenreProfile,
   MoodVector,
   NormalizedInput,
   RawUserInput,
   StructureSegment,
-  StyleVector,
   VocalStyleVector,
-} from './types';
+} from './types'
 
-const MOOD_TABLE: Record<string, Omit<MoodVector, 'label'>> = {
-  happy: { valence: 9, arousal: 7, tension: 2 },
-  sad: { valence: 2, arousal: 3, tension: 5 },
-  angry: { valence: 3, arousal: 9, tension: 9 },
-  romantic: { valence: 8, arousal: 5, tension: 3 },
-  epic: { valence: 7, arousal: 9, tension: 8 },
-  melancholic: { valence: 3, arousal: 4, tension: 6 },
-  euphoric: { valence: 10, arousal: 10, tension: 1 },
-  dark: { valence: 2, arousal: 6, tension: 8 },
-  chill: { valence: 6, arousal: 2, tension: 1 },
-  tense: { valence: 4, arousal: 7, tension: 10 },
-};
+const DEFAULT_ARTIST_STYLE: Omit<ArtistStyleVector, 'artist'> = {
+  genre: 'pop',
+  mood: 'neutral',
+  era: '2020s',
+  production_style: 'contemporary',
+}
 
-export const GENRE_INSTRUMENTATION_MAP: Record<string, string[]> = {
-  'hip-hop': ['808 bass', 'trap hi-hats', 'sampler', 'sub kick'],
-  rock: ['electric guitar', 'drums', 'bass guitar', 'distortion'],
-  jazz: ['upright bass', 'piano', 'trumpet', 'brush drums'],
-  edm: ['synthesizer', '4-on-floor kick', 'pad', 'arp', 'sidechain'],
-  classical: ['strings', 'piano', 'woodwinds', 'orchestral percussion'],
-  pop: ['synth bass', 'programmed drums', 'pad', 'guitar', 'keys'],
-  rnb: ['rhodes', '808', 'soul vocals', 'smooth bass'],
-  metal: ['distorted guitar', 'double kick', 'bass drop', 'power chords'],
-};
+const ARTIST_STYLE_MAP: Record<string, Omit<ArtistStyleVector, 'artist'>> = {
+  'the weeknd': { genre: 'rnb', mood: 'dark', era: '2010s', production_style: 'cinematic synth' },
+  'kendrick lamar': { genre: 'hip-hop', mood: 'intense', era: '2010s', production_style: 'jazz-rap' },
+  'hans zimmer': { genre: 'classical', mood: 'epic', era: '2000s', production_style: 'orchestral hybrid' },
+  'daft punk': { genre: 'edm', mood: 'euphoric', era: '2000s', production_style: 'french house' },
+  'taylor swift': { genre: 'pop', mood: 'romantic', era: '2010s', production_style: 'polished pop' },
+  'johnny cash': { genre: 'country', mood: 'melancholic', era: '1960s', production_style: 'stripped acoustic' },
+  radiohead: { genre: 'alternative', mood: 'dark', era: '2000s', production_style: 'glitchy electronic' },
+  'billie eilish': { genre: 'pop', mood: 'dark', era: '2020s', production_style: 'whisper pop' },
+  beethoven: { genre: 'classical', mood: 'epic', era: '1800s', production_style: 'symphonic' },
+  drake: { genre: 'hip-hop', mood: 'romantic', era: '2010s', production_style: 'trap soul' },
+  eminem: { genre: 'hip-hop', mood: 'angry', era: '2000s', production_style: 'raw rap' },
+  'beyoncé': { genre: 'rnb', mood: 'empowering', era: '2010s', production_style: 'stadium pop' },
+  beyonce: { genre: 'rnb', mood: 'empowering', era: '2010s', production_style: 'stadium pop' },
+  'kanye west': { genre: 'hip-hop', mood: 'epic', era: '2000s', production_style: 'maximalist' },
+  'frank ocean': { genre: 'rnb', mood: 'melancholic', era: '2010s', production_style: 'indie soul' },
+  'john williams': { genre: 'classical', mood: 'epic', era: '1980s', production_style: 'cinematic orchestral' },
+  'ennio morricone': { genre: 'classical', mood: 'tense', era: '1970s', production_style: 'spaghetti western' },
+  'pink floyd': { genre: 'rock', mood: 'dark', era: '1970s', production_style: 'psychedelic rock' },
+  'led zeppelin': { genre: 'rock', mood: 'epic', era: '1970s', production_style: 'heavy blues rock' },
+  metallica: { genre: 'metal', mood: 'angry', era: '1990s', production_style: 'thrash metal' },
+  adele: { genre: 'pop', mood: 'melancholic', era: '2010s', production_style: 'orchestral pop' },
+  'bruno mars': { genre: 'pop', mood: 'happy', era: '2010s', production_style: 'retro funk pop' },
+  'j dilla': { genre: 'hip-hop', mood: 'chill', era: '2000s', production_style: 'lo-fi soul' },
+  'brian eno': { genre: 'ambient', mood: 'chill', era: '1980s', production_style: 'ambient generative' },
+  'aphex twin': { genre: 'edm', mood: 'tense', era: '1990s', production_style: 'experimental electronic' },
+  'miles davis': { genre: 'jazz', mood: 'melancholic', era: '1960s', production_style: 'cool jazz' },
+  'john coltrane': { genre: 'jazz', mood: 'intense', era: '1960s', production_style: 'modal jazz' },
+  mozart: { genre: 'classical', mood: 'happy', era: '1780s', production_style: 'classical period' },
+  'bob marley': { genre: 'reggae', mood: 'happy', era: '1970s', production_style: 'roots reggae' },
+  'bon iver': { genre: 'folk', mood: 'melancholic', era: '2010s', production_style: 'indie folk' },
+  portishead: { genre: 'chill', mood: 'dark', era: '1990s', production_style: 'trip-hop' },
+  'childish gambino': { genre: 'hip-hop', mood: 'romantic', era: '2010s', production_style: 'alternative rap' },
+}
 
-const GENRE_RHYTHM_MAP: Record<string, string> = {
-  'hip-hop': 'swung 16ths',
-  rock: 'straight 8ths with backbeat',
-  jazz: 'swung triplets',
-  edm: 'straight 4-on-floor',
-  classical: 'variable, conductor-dependent',
-  pop: 'tight straight 8ths',
-  rnb: 'laid-back syncopation',
-  metal: 'driving double-time accents',
-};
-
-const VOCAL_STYLE_VECTORS: Record<string, VocalStyleVector> = {
+const VOCAL_STYLE_VECTOR_MAP: Record<string, VocalStyleVector> = {
   raspy: { register: 'mid', technique: 'chest', texture: 'rough' },
   falsetto: { register: 'high', technique: 'head', texture: 'airy' },
-  'spoken-word': { register: 'mid', technique: 'speech', texture: 'dry' },
-  spoken: { register: 'mid', technique: 'speech', texture: 'dry' },
+  'spoken word': { register: 'mid', technique: 'speech', texture: 'dry' },
   operatic: { register: 'high', technique: 'classical', texture: 'resonant' },
-};
-
-export const ARTIST_STYLE_MAP: Record<string, ArtistStyleReference> = {
-  'the weeknd': { artist: 'The Weeknd', genre: 'rnb', mood: 'dark', era: '2010s', production_style: 'cinematic synth' },
-  'kendrick lamar': { artist: 'Kendrick Lamar', genre: 'hip-hop', mood: 'intense', era: '2010s', production_style: 'jazz-rap' },
-  'hans zimmer': { artist: 'Hans Zimmer', genre: 'classical', mood: 'epic', era: '2000s', production_style: 'orchestral hybrid' },
-  'daft punk': { artist: 'Daft Punk', genre: 'edm', mood: 'euphoric', era: '2000s', production_style: 'french house' },
-  'taylor swift': { artist: 'Taylor Swift', genre: 'pop', mood: 'romantic', era: '2010s', production_style: 'polished pop' },
-  'johnny cash': { artist: 'Johnny Cash', genre: 'country', mood: 'melancholic', era: '1960s', production_style: 'stripped acoustic' },
-  radiohead: { artist: 'Radiohead', genre: 'alternative', mood: 'dark', era: '2000s', production_style: 'glitchy electronic' },
-  'billie eilish': { artist: 'Billie Eilish', genre: 'pop', mood: 'dark', era: '2020s', production_style: 'whisper pop' },
-  beethoven: { artist: 'Beethoven', genre: 'classical', mood: 'epic', era: '1800s', production_style: 'symphonic' },
-  drake: { artist: 'Drake', genre: 'hip-hop', mood: 'romantic', era: '2010s', production_style: 'trap soul' },
-  eminem: { artist: 'Eminem', genre: 'hip-hop', mood: 'angry', era: '2000s', production_style: 'hard-hitting boom bap' },
-  'ariana grande': { artist: 'Ariana Grande', genre: 'pop', mood: 'euphoric', era: '2020s', production_style: 'maximalist pop' },
-  adele: { artist: 'Adele', genre: 'pop', mood: 'melancholic', era: '2010s', production_style: 'orchestral ballad' },
-  'bruno mars': { artist: 'Bruno Mars', genre: 'pop', mood: 'happy', era: '2010s', production_style: 'retro funk pop' },
-  'michael jackson': { artist: 'Michael Jackson', genre: 'pop', mood: 'euphoric', era: '1980s', production_style: 'groove-driven pop' },
-  metallica: { artist: 'Metallica', genre: 'metal', mood: 'angry', era: '1990s', production_style: 'thrash metal wall' },
-  slipknot: { artist: 'Slipknot', genre: 'metal', mood: 'tense', era: '2000s', production_style: 'industrial metal' },
-  nirvana: { artist: 'Nirvana', genre: 'rock', mood: 'dark', era: '1990s', production_style: 'grunge rawness' },
-  'foo fighters': { artist: 'Foo Fighters', genre: 'rock', mood: 'epic', era: '2000s', production_style: 'arena rock' },
-  'red hot chili peppers': { artist: 'Red Hot Chili Peppers', genre: 'rock', mood: 'happy', era: '2000s', production_style: 'funk rock' },
-  'miles davis': { artist: 'Miles Davis', genre: 'jazz', mood: 'chill', era: '1960s', production_style: 'modal jazz' },
-  'john coltrane': { artist: 'John Coltrane', genre: 'jazz', mood: 'epic', era: '1960s', production_style: 'spiritual jazz' },
-  'nina simone': { artist: 'Nina Simone', genre: 'jazz', mood: 'melancholic', era: '1960s', production_style: 'soulful piano jazz' },
-  'tiesto': { artist: 'Tiësto', genre: 'edm', mood: 'euphoric', era: '2010s', production_style: 'festival house' },
-  skrillex: { artist: 'Skrillex', genre: 'edm', mood: 'angry', era: '2010s', production_style: 'aggressive bass music' },
-  'deadmau5': { artist: 'deadmau5', genre: 'edm', mood: 'dark', era: '2010s', production_style: 'progressive electro' },
-  'ap dhillon': { artist: 'AP Dhillon', genre: 'hip-hop', mood: 'romantic', era: '2020s', production_style: 'punjabi trap' },
-  'ar rahman': { artist: 'A.R. Rahman', genre: 'classical', mood: 'epic', era: '2000s', production_style: 'cinematic indian fusion' },
-  'bad bunny': { artist: 'Bad Bunny', genre: 'pop', mood: 'euphoric', era: '2020s', production_style: 'latin urban' },
-  'lana del rey': { artist: 'Lana Del Rey', genre: 'pop', mood: 'melancholic', era: '2010s', production_style: 'dream noir' },
-  'the beatles': { artist: 'The Beatles', genre: 'rock', mood: 'happy', era: '1960s', production_style: 'vintage analog pop-rock' },
-};
-
-/** Converts a free-form string to lower-case canonical slug. */
-export function slugify(input: string): string {
-  return input.trim().toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  whisper: { register: 'mid', technique: 'breath', texture: 'airy' },
+  belt: { register: 'high', technique: 'chest mix', texture: 'powerful' },
+  growl: { register: 'low', technique: 'fry', texture: 'gritty' },
+  melismatic: { register: 'high', technique: 'agile', texture: 'smooth' },
 }
 
-/** Maps tempo_bpm to 1-10 energy bucket. */
-export function tempoToEnergy(tempoBpm: number): number {
-  if (tempoBpm <= 70) return 2;
-  if (tempoBpm <= 100) return 5;
-  if (tempoBpm <= 130) return 7;
-  if (tempoBpm <= 160) return 9;
-  return 10;
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
 }
 
-/** Builds a mood vector from canonical map or keyword heuristics. */
-export function moodToVector(moodInput: string): MoodVector {
-  const mood = moodInput.trim().toLowerCase();
-  const mapped = MOOD_TABLE[mood];
+function toSlug(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, '-')
+}
+
+function toTitleCase(value: string): string {
+  if (!value) return value
+  return value
+    .split(' ')
+    .map((chunk) => chunk ? `${chunk[0].toUpperCase()}${chunk.slice(1).toLowerCase()}` : chunk)
+    .join(' ')
+}
+
+/** Maps any mood string to a deterministic MoodVector. */
+export function moodToVector(mood: string): MoodVector & { label: string } {
+  const normalized = mood.trim().toLowerCase()
+  const mapped = MOOD_MAPPINGS[normalized as keyof typeof MOOD_MAPPINGS]
   if (mapped) {
-    return { label: mood, ...mapped };
+    return { label: normalized, ...mapped }
   }
 
-  let valence = 5;
-  let arousal = 5;
-  let tension = 5;
+  const tokens = normalized.split(/[^a-z]+/).filter(Boolean)
+  let arousal = 5
+  let tension = 5
+  let valence = 5
 
-  for (const token of mood.split(/\s+/)) {
-    if (KEYWORD_SCORES.AROUSAL_UP.includes(token as never)) arousal += 1;
-    if (KEYWORD_SCORES.AROUSAL_DOWN.includes(token as never)) arousal -= 1;
-    if (KEYWORD_SCORES.TENSION_UP.includes(token as never)) tension += 1;
-    if (['warm', 'soft', 'gentle'].includes(token)) valence += 1;
-    if (['dark', 'cold', 'gritty', 'chaotic'].includes(token)) valence -= 1;
+  for (const token of tokens) {
+    if (HIGH_AROUSAL_WORDS.includes(token as (typeof HIGH_AROUSAL_WORDS)[number])) arousal += 1
+    if (LOW_AROUSAL_WORDS.includes(token as (typeof LOW_AROUSAL_WORDS)[number])) arousal -= 1
+    if (HIGH_TENSION_WORDS.includes(token as (typeof HIGH_TENSION_WORDS)[number])) tension += 1
+    if (LOW_TENSION_WORDS.includes(token as (typeof LOW_TENSION_WORDS)[number])) tension -= 1
+    // Brutality/aggression language implies both pressure and drive.
+    if (token === 'brutal' || token === 'aggressive') arousal += 1
   }
 
-  const clamp = (n: number) => Math.max(1, Math.min(10, Math.round(n)));
+  valence += Math.round((3 - tension) / 2)
+  valence += Math.round((arousal - 5) / 4)
+
   return {
-    label: moodInput.trim() || 'neutral',
-    valence: clamp(valence),
-    arousal: clamp(arousal),
-    tension: clamp(tension),
-  };
-}
-
-function inferUnknownGenreInstrumentation(prompt: string, mood: MoodVector): string[] {
-  const p = prompt.toLowerCase();
-  const instruments = new Set<string>();
-  if (p.includes('guitar')) instruments.add('guitar');
-  if (p.includes('piano')) instruments.add('piano');
-  if (p.includes('synth')) instruments.add('synthesizer');
-  if (p.includes('strings')) instruments.add('strings');
-  if (p.includes('drum')) instruments.add('drums');
-  if (mood.arousal >= 8) instruments.add('punchy percussion');
-  if (mood.tension >= 7) instruments.add('dissonant pads');
-  if (mood.arousal <= 3) instruments.add('ambient textures');
-  if (instruments.size === 0) {
-    instruments.add('drums');
-    instruments.add('bass');
-    instruments.add('keys');
+    label: normalized || 'neutral',
+    valence: clamp(Math.round(valence), 1, 10),
+    arousal: clamp(Math.round(arousal), 1, 10),
+    tension: clamp(Math.round(tension), 1, 10),
   }
-  return [...instruments].slice(0, 10);
 }
 
-/** Parses and normalizes structure segments from structure string. */
-export function parseSongStructure(rawStructure: string): StructureSegment[] {
-  const parts = rawStructure
-    .split('-')
-    .map((p) => p.trim())
-    .filter(Boolean);
+/** Maps tempo to deterministic energy bucket. */
+export function tempoToEnergy(tempo: number): number {
+  for (const entry of ENERGY_FROM_TEMPO) {
+    if (tempo >= entry.range[0] && tempo <= entry.range[1]) {
+      return entry.energy
+    }
+  }
+  return 6
+}
 
-  const effectiveParts = parts.length > 0 ? parts : DEFAULT_STRUCTURE.split('-');
+function inferInstrumentationFromPrompt(prompt: string, mood: MoodVector & { label: string }): string[] {
+  const lower = prompt.toLowerCase()
+  const inferred: string[] = []
 
-  const withWeights = effectiveParts.map((name, idx) => {
-    const key = Object.keys(RATIO_PRESETS).find((k) => k.toLowerCase() === name.toLowerCase());
-    const weight = key ? RATIO_PRESETS[key as keyof typeof RATIO_PRESETS] : STRUCTURE_DEFAULT_WEIGHT;
-    return { name, order: idx + 1, duration_ratio: weight };
-  });
+  if (lower.includes('guitar')) inferred.push('guitar')
+  if (lower.includes('piano')) inferred.push('piano')
+  if (lower.includes('string')) inferred.push('strings')
+  if (lower.includes('synth')) inferred.push('synthesizer')
+  if (lower.includes('808')) inferred.push('808 bass')
+  if (lower.includes('drum')) inferred.push('drums')
+  if (lower.includes('choir')) inferred.push('choir')
 
-  const total = withWeights.reduce((sum, s) => sum + s.duration_ratio, 0);
-  return withWeights.map((segment) => ({
+  if (mood.arousal >= 8) inferred.push('punchy drums')
+  if (mood.tension >= 8) inferred.push('dissonant textures')
+  if (mood.arousal <= 3) inferred.push('soft pad')
+
+  if (inferred.length === 0) {
+    inferred.push('drums', 'bass', 'keys')
+  }
+
+  return [...new Set(inferred)].slice(0, MAX_INSTRUMENTATION_COUNT)
+}
+
+/** Parses song structure into weighted and normalized segments. */
+export function parseSongStructure(raw: string): { raw: string; segments: StructureSegment[] } {
+  const candidate = raw.trim() || DEFAULT_STRUCTURE
+  const parts = candidate.split('-').map((entry) => entry.trim()).filter(Boolean)
+  const normalizedParts = parts.length > 0 ? parts : DEFAULT_STRUCTURE.split('-')
+
+  const weighted = normalizedParts.map((part, index) => {
+    const canonical = Object.keys(STRUCTURE_DURATION_RATIOS).find(
+      (name) => name.toLowerCase() === part.toLowerCase(),
+    )
+    const key = canonical ?? toTitleCase(part)
+    const ratio = canonical ? STRUCTURE_DURATION_RATIOS[canonical] : 0.1
+    return {
+      name: key,
+      order: index + 1,
+      duration_ratio: ratio,
+    }
+  })
+
+  const total = weighted.reduce((sum, segment) => sum + segment.duration_ratio, 0)
+  const normalizedSegments = weighted.map((segment) => ({
     ...segment,
-    duration_ratio: Number((segment.duration_ratio / total).toFixed(4)),
-  }));
-}
+    duration_ratio: Number((segment.duration_ratio / (total || 1)).toFixed(6)),
+  }))
 
-/** Converts vocal style string into style vector. */
-export function vocalStyleToVector(vocalStyle: string): VocalStyleVector {
-  const key = slugify(vocalStyle);
-  const mapped = VOCAL_STYLE_VECTORS[key];
-  if (mapped) return mapped;
-
-  if (key.includes('low') || key.includes('baritone') || key.includes('bass')) {
-    return { register: 'low', technique: 'chest', texture: 'warm' };
-  }
-  if (key.includes('high') || key.includes('head') || key.includes('falsetto')) {
-    return { register: 'high', technique: 'head', texture: 'airy' };
-  }
-  return { register: 'mid', technique: 'mixed', texture: 'clean' };
-}
-
-/** Resolves artist references to canonical style references and averaged style vector. */
-export function artistReferencesToStyleVector(artists: string[]): { references: ArtistStyleReference[]; vector: StyleVector } {
-  const references = artists.map((artist) => {
-    const key = artist.trim().toLowerCase();
-    const mapped = ARTIST_STYLE_MAP[key];
-    return mapped ?? {
-      artist,
-      genre: 'pop',
-      mood: 'chill',
-      era: '2010s',
-      production_style: 'modern clean production',
-    };
-  });
-
-  const genreBias: Record<string, number> = {};
-  const moodBias: Record<string, number> = {};
-  const eraDistribution: Record<string, number> = {};
-  const productionStyleCounts: Record<string, number> = {};
-
-  for (const ref of references) {
-    genreBias[ref.genre] = (genreBias[ref.genre] ?? 0) + 1;
-    moodBias[ref.mood] = (moodBias[ref.mood] ?? 0) + 1;
-    eraDistribution[ref.era] = (eraDistribution[ref.era] ?? 0) + 1;
-    productionStyleCounts[ref.production_style] = (productionStyleCounts[ref.production_style] ?? 0) + 1;
+  const normalizedTotal = normalizedSegments.reduce((sum, segment) => sum + segment.duration_ratio, 0)
+  const delta = Number((1 - normalizedTotal).toFixed(6))
+  if (normalizedSegments.length > 0 && delta !== 0) {
+    const last = normalizedSegments[normalizedSegments.length - 1]
+    last.duration_ratio = Number((last.duration_ratio + delta).toFixed(6))
   }
 
-  const normalizeMap = (map: Record<string, number>): Record<string, number> => {
-    const total = Object.values(map).reduce((a, b) => a + b, 0) || 1;
-    return Object.fromEntries(Object.entries(map).map(([k, v]) => [k, Number((v / total).toFixed(4))]));
-  };
-
-  const vector: StyleVector = {
-    genre_bias: normalizeMap(genreBias),
-    mood_bias: normalizeMap(moodBias),
-    era_distribution: normalizeMap(eraDistribution),
-    production_styles: Object.entries(productionStyleCounts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([style]) => style),
-  };
-
-  return { references, vector };
+  return {
+    raw: normalizedParts.join('-'),
+    segments: normalizedSegments,
+  }
 }
 
-/** Converts a raw input object into a fully normalized deterministic structure. */
-export function normalize(input: RawUserInput): NormalizedInput {
-  const normalizedGenres = input.genres.map(slugify).filter(Boolean);
-  const primaryGenre = normalizedGenres[0] ?? 'pop';
-  const secondaryGenres = normalizedGenres.slice(1);
+/** Converts vocal style text into a vector. */
+export function vocalStyleToVector(style: string): VocalStyleVector {
+  const key = style.trim().toLowerCase()
+  if (VOCAL_STYLE_VECTOR_MAP[key]) {
+    return VOCAL_STYLE_VECTOR_MAP[key]
+  }
+  return { register: 'mid', technique: 'mixed', texture: 'clear' }
+}
 
-  const mood = moodToVector(input.mood);
-  const genreInstrumentation = normalizedGenres.flatMap((g) => GENRE_INSTRUMENTATION_MAP[g] ?? []);
-  const fallbackInstrumentation = inferUnknownGenreInstrumentation(input.music_prompt, mood);
-  const instrumentation = [...new Set([...genreInstrumentation, ...fallbackInstrumentation])].slice(0, 10);
+/** Maps artist names to style references. */
+export function mapArtistsToStyle(artists: string[] | undefined): ArtistStyleVector[] {
+  const safeArtists = (artists ?? []).filter((artist) => artist.trim().length > 0)
+  if (safeArtists.length === 0) {
+    return [{ artist: 'Unknown', ...DEFAULT_ARTIST_STYLE }]
+  }
 
-  const rhythmPattern = GENRE_RHYTHM_MAP[primaryGenre] ?? 'balanced groove';
-  const structureSegments = parseSongStructure(input.song_structure);
-  const vocalStyleVector = vocalStyleToVector(input.vocal_style);
-  const { references, vector } = artistReferencesToStyleVector(input.artist_inspiration);
+  return safeArtists.map((artist) => {
+    const key = artist.trim().toLowerCase()
+    const mapped = ARTIST_STYLE_MAP[key] ?? DEFAULT_ARTIST_STYLE
+    return {
+      artist: artist.trim(),
+      genre: mapped.genre,
+      mood: mapped.mood,
+      era: mapped.era,
+      production_style: mapped.production_style,
+    }
+  })
+}
 
-  const genreProfile: GenreProfile = {
-    primary: primaryGenre,
-    secondary: secondaryGenres,
+function buildGenreProfile(genres: string[], prompt: string, mood: MoodVector & { label: string }): GenreProfile {
+  const normalizedGenres = genres.map(toSlug)
+  const primary = normalizedGenres[0] ?? 'pop'
+  const secondary = normalizedGenres.slice(1)
+
+  const mappedInstruments = normalizedGenres.flatMap((genre) => GENRE_INSTRUMENTATION_MAP[genre] ?? [])
+  const fallbackInstruments = inferInstrumentationFromPrompt(prompt, mood)
+
+  const instrumentation = [...new Set([...mappedInstruments, ...fallbackInstruments])].slice(0, MAX_INSTRUMENTATION_COUNT)
+  const rhythmPattern = GENRE_RHYTHM_PATTERN_MAP[primary] ?? DEFAULT_RHYTHM_PATTERN
+
+  return {
+    primary,
+    secondary,
     instrumentation,
     rhythm_pattern: rhythmPattern,
-  };
+  }
+}
 
-  const lyricsProfile = {
-    theme: input.lyric_theme,
-    content: input.lyrics,
-    sentiment: null,
-    requires_adjustment: false,
-  };
+/** Converts validated raw user input into deterministic normalized input. */
+export function normalize(input: RawUserInput): NormalizedInput {
+  const mood = moodToVector(input.mood)
+  const tempo = clamp(Math.round(input.tempo_bpm), TEMPO_RANGES.MIN, TEMPO_RANGES.MAX)
+  const duration = clamp(Math.round(input.duration_seconds), DURATION_RANGE.MIN, DURATION_RANGE.MAX)
+  const styleReference = mapArtistsToStyle(input.artist_inspiration)
+
+  const genreProfile = buildGenreProfile(input.genres, input.music_prompt, mood)
+  const structure = parseSongStructure(input.song_structure)
+
+  const vocalEffects = [...new Set((input.vocal_effects ?? []).map((item) => item.trim().toLowerCase()).filter(Boolean))]
+  const vocalLanguages = [...new Set((input.vocal_language ?? []).map((item) => item.trim()).filter(Boolean))]
+
+  const vocal = {
+    arrangement: input.vocal_arrangement,
+    style: input.vocal_style.trim(),
+    style_vector: vocalStyleToVector(input.vocal_style),
+    intensity: clamp(Math.round(input.vocal_intensity), VOCAL_INTENSITY_RANGE.MIN, VOCAL_INTENSITY_RANGE.MAX),
+    effects: vocalEffects,
+    languages: vocalLanguages,
+  }
 
   const albumSongCount = input.creation_mode === 'album'
-    ? Math.max(FIELD_LIMITS.ALBUM_MIN, Math.min(FIELD_LIMITS.ALBUM_MAX, input.album_song_count ?? FIELD_LIMITS.ALBUM_MIN))
-    : null;
-
-  const videoStyle = input.generate_video ? input.video_style : null;
+    ? clamp(input.album_song_count ?? 8, ALBUM_SONG_COUNT_RANGE.MIN, ALBUM_SONG_COUNT_RANGE.MAX)
+    : null
 
   return {
     creation_mode: input.creation_mode,
     album_song_count: albumSongCount,
     track_name: input.track_name.trim(),
     music_prompt: input.music_prompt.trim(),
-    genres: normalizedGenres.length > 0 ? normalizedGenres : ['pop'],
     genre_profile: genreProfile,
-    subgenres: input.subgenres.map(slugify).filter(Boolean),
-    tempo_bpm: Math.max(FIELD_LIMITS.TEMPO_MIN, Math.min(FIELD_LIMITS.TEMPO_MAX, Math.round(input.tempo_bpm))),
-    duration_seconds: Math.max(FIELD_LIMITS.DURATION_MIN, Math.min(FIELD_LIMITS.DURATION_MAX, Math.round(input.duration_seconds))),
+    subgenres: (input.subgenres ?? []).map(toSlug).filter(Boolean),
+    tempo_bpm: tempo,
+    duration_seconds: duration,
     mood,
-    song_structure: input.song_structure.trim() || DEFAULT_STRUCTURE,
-    structure_segments: structureSegments,
-    vocal_arrangement: input.vocal_arrangement,
-    vocal_style: input.vocal_style.trim(),
-    vocal_style_vector: vocalStyleVector,
-    vocal_intensity: Math.max(FIELD_LIMITS.VOCAL_INTENSITY_MIN, Math.min(FIELD_LIMITS.VOCAL_INTENSITY_MAX, Math.round(input.vocal_intensity))),
-    vocal_effects: [...new Set(input.vocal_effects.map(slugify).filter(Boolean))],
-    vocal_language: [...new Set(input.vocal_language.map((language) => language.trim()).filter(Boolean))],
-    lyric_theme: input.lyric_theme.trim(),
-    lyrics: input.lyrics,
-    lyrics_profile: lyricsProfile,
-    artist_inspiration: input.artist_inspiration.map((artist) => artist.trim()).filter(Boolean),
-    style_reference: references,
-    style_vector: vector,
+    song_structure: structure,
+    vocal,
+    lyrics: {
+      theme: input.lyric_theme.trim(),
+      content: input.lyrics ?? null,
+      sentiment: null,
+    },
+    style_reference: styleReference,
     generate_video: input.generate_video,
-    video_style: videoStyle,
-  };
+    video_style: input.generate_video ? (input.video_style ?? null) : null,
+    energy: tempoToEnergy(tempo),
+  }
 }
 
-export const moodLabels = CANONICAL_MOODS;
-
+export const canonicalMoods = [...CANONICAL_MOODS]
+export { GENRE_INSTRUMENTATION_MAP }

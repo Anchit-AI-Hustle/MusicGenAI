@@ -1,165 +1,134 @@
-import { ALBUM_MIN_SPREAD_BPM, CANONICAL_MOODS, FIELD_LIMITS } from './CONSTANTS';
-import { moodToVector, parseSongStructure } from './normalizer';
-import type { GenerationIntent } from './types';
+import { ALBUM_MIN_TEMPO_SPREAD, CANONICAL_MOODS, TEMPO_RANGES } from './constants'
+import { moodToVector, parseSongStructure } from './normalizer'
+import type { GenerationIntent } from './types'
 
-const STRUCTURE_VARIANTS = [
-  'Intro-Verse-Chorus-Verse-Chorus-Bridge-Chorus-Outro',
-  'Intro-Verse-Pre-Chorus-Chorus-Verse-Chorus-Bridge-Chorus-Outro',
-  'Intro-Verse-Hook-Verse-Hook-Bridge-Hook-Outro',
-  'Intro-Build-Drop-Break-Build-Drop-Outro',
-  'Intro-Verse-Chorus-Bridge-Chorus-Outro',
-  'Intro-Theme-Development-Recapitulation-Coda',
-];
-
-function clampTempo(tempo: number): number {
-  return Math.max(FIELD_LIMITS.TEMPO_MIN, Math.min(FIELD_LIMITS.TEMPO_MAX, Math.round(tempo)));
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
 }
 
-function uniqueAdjacentMood(previous: string | null, preferred: string): string {
-  if (previous !== preferred) return preferred;
-  const fallback = CANONICAL_MOODS.find((m) => m !== previous);
-  return fallback ?? preferred;
-}
-
-function computeEnergyTargets(count: number): number[] {
-  if (count === 1) return [8.5];
-
-  const targets = new Array<number>(count).fill(6);
-
-  // Song 1: high energy opener.
-  targets[0] = 8.8;
-
-  // Song 2–3: build energy.
-  if (count > 1) targets[1] = 7.4;
-  if (count > 2) targets[2] = 8.2;
-
-  // Middle songs: include a low energy exploration.
-  const middleStart = 3;
-  const middleEnd = Math.max(3, count - 2);
-  for (let i = middleStart; i < middleEnd; i += 1) {
-    targets[i] = i % 2 === 0 ? 4.2 : 6.2;
+function safeTrackName(baseName: string, index: number): string {
+  const cleaned = baseName.trim()
+  if (!cleaned || cleaned.toLowerCase() === 'untitled') {
+    return `Track ${index + 1}`
   }
-  if (count >= 5) {
-    const lowIndex = Math.floor((middleStart + middleEnd - 1) / 2);
-    targets[lowIndex] = 3.2;
+  return `${cleaned} (Part ${index + 1})`
+}
+
+function energyArc(count: number): number[] {
+  const arc = new Array<number>(count).fill(6)
+
+  if (count >= 1) arc[0] = 9
+  if (count >= 2) arc[1] = 8
+  if (count >= 3) arc[2] = 7
+
+  for (let i = 3; i < count - 2; i += 1) {
+    arc[i] = i % 2 === 0 ? 4 : 6
   }
 
-  // Second-to-last: peak energy / emotional climax.
-  if (count >= 2) targets[count - 2] = 9.4;
+  if (count >= 4) {
+    const middle = Math.floor(count / 2)
+    arc[middle] = Math.min(arc[middle], 3)
+  }
 
-  // Last: resolved, lower energy.
-  targets[count - 1] = 4.0;
+  if (count >= 2) arc[count - 2] = 10
+  if (count >= 1) arc[count - 1] = 3
 
-  return targets;
+  return arc.map((value) => clamp(value, 1, 10))
 }
 
-function computeMoodSequence(baseMood: string, count: number): string[] {
-  const canonicalBase = (CANONICAL_MOODS as readonly string[]).includes(baseMood)
-    ? baseMood
-    : 'happy';
+function moodArc(baseMood: string, count: number): string[] {
+  const high = ['epic', 'euphoric', 'angry', 'happy']
+  const mid = ['romantic', 'dark', 'melancholic', 'tense']
+  const low = ['chill', 'melancholic']
 
-  const moods = new Array<string>(count).fill(canonicalBase);
-  const arcPool: string[] = [
-    'epic',
-    'euphoric',
-    'happy',
-    'romantic',
-    'chill',
-    'melancholic',
-    'tense',
-    'dark',
-  ];
+  const moods: string[] = []
 
   for (let i = 0; i < count; i += 1) {
+    let bucket = baseMood
     if (i === 0) {
-      moods[i] = uniqueAdjacentMood(null, canonicalBase === 'chill' ? 'epic' : canonicalBase);
-      continue;
-    }
-    if (i === count - 1) {
-      // Resolved closer, low tension preference.
-      moods[i] = uniqueAdjacentMood(moods[i - 1], canonicalBase === 'dark' ? 'melancholic' : 'chill');
-      continue;
-    }
-    if (i === count - 2) {
-      moods[i] = uniqueAdjacentMood(moods[i - 1], 'epic');
-      continue;
+      bucket = high[(baseMood.length + i) % high.length]
+    } else if (i === count - 1) {
+      bucket = low[(baseMood.length + i) % low.length]
+    } else if (i === count - 2) {
+      bucket = high[(baseMood.length + i + 1) % high.length]
+    } else {
+      bucket = mid[(baseMood.length + i) % mid.length]
     }
 
-    const pick = arcPool[(i + canonicalBase.length) % arcPool.length] ?? canonicalBase;
-    moods[i] = uniqueAdjacentMood(moods[i - 1], pick);
+    if (moods[i - 1] === bucket) {
+      const fallback = CANONICAL_MOODS.find((mood) => mood !== bucket)
+      moods.push(fallback ?? bucket)
+    } else {
+      moods.push(bucket)
+    }
   }
 
-  return moods;
+  return moods
 }
 
-function computeTempoSequence(baseTempo: number, count: number): number[] {
-  if (count === 1) return [clampTempo(baseTempo)];
-
-  const tempos = new Array<number>(count).fill(baseTempo);
-  const spread = Math.max(ALBUM_MIN_SPREAD_BPM, 22);
-  const start = baseTempo + 8;
-  const end = baseTempo - 12;
+function tempoArc(baseTempo: number, count: number): number[] {
+  const offsets = [0, 8, -6, 12, -10, 15, -14, 20, -18, 22]
+  const tempos = new Array<number>(count)
 
   for (let i = 0; i < count; i += 1) {
-    const t = count === 1 ? 0 : i / (count - 1);
-    const curve = start + ((end - start) * t);
-    tempos[i] = clampTempo(curve + (i % 3 === 0 ? 2 : i % 3 === 1 ? -1 : 0));
+    const offset = offsets[i % offsets.length] + Math.floor(i / offsets.length) * 3
+    tempos[i] = clamp(baseTempo + offset, TEMPO_RANGES.MIN, TEMPO_RANGES.MAX)
   }
 
-  const minTempo = Math.min(...tempos);
-  const maxTempo = Math.max(...tempos);
-  if (maxTempo - minTempo < spread) {
-    tempos[count - 2] = clampTempo(tempos[count - 2] + spread);
+  const spread = Math.max(...tempos) - Math.min(...tempos)
+  if (spread < ALBUM_MIN_TEMPO_SPREAD && count > 1) {
+    tempos[count - 2] = clamp(tempos[count - 2] + (ALBUM_MIN_TEMPO_SPREAD - spread), TEMPO_RANGES.MIN, TEMPO_RANGES.MAX)
   }
 
-  return tempos;
+  return tempos
 }
 
-function pickStructure(index: number, primaryGenre: string): string {
-  const genreStructures: Record<string, string> = {
-    pop: STRUCTURE_VARIANTS[0],
-    'hip-hop': STRUCTURE_VARIANTS[2],
-    edm: STRUCTURE_VARIANTS[3],
-    classical: STRUCTURE_VARIANTS[5],
-    jazz: 'Intro-Head-Solo-Head-Outro',
-    rock: 'Intro-Verse-Chorus-Verse-Chorus-Bridge-Solo-Chorus-Outro',
-    metal: 'Intro-Riff-Verse-Chorus-Verse-Chorus-Breakdown-Solo-Chorus-Outro',
-  };
+function structureForIndex(primaryGenre: string, index: number): string {
+  const byGenre: Record<string, string[]> = {
+    pop: [
+      'Intro-Verse-Chorus-Verse-Chorus-Bridge-Chorus-Outro',
+      'Intro-Verse-Pre-Chorus-Chorus-Verse-Chorus-Bridge-Chorus-Outro',
+      'Intro-Verse-Chorus-Bridge-Chorus-Outro',
+    ],
+    'hip-hop': [
+      'Intro-Verse-Hook-Verse-Hook-Bridge-Hook-Outro',
+      'Intro-Verse-Hook-Verse-Hook-Outro',
+      'Intro-Verse-Hook-Bridge-Hook-Outro',
+    ],
+    edm: [
+      'Intro-Build-Drop-Break-Build-Drop-Outro',
+      'Intro-Build-Drop-Break-Drop-Outro',
+      'Intro-Build-Drop-Break-Build-Drop-Break-Outro',
+    ],
+    classical: [
+      'Intro-Theme-Development-Recapitulation-Coda',
+      'Intro-Theme-Development-Theme-Recapitulation-Coda',
+      'Intro-Theme-Development-Bridge-Recapitulation-Coda',
+    ],
+  }
 
-  const base = genreStructures[primaryGenre] ?? STRUCTURE_VARIANTS[index % STRUCTURE_VARIANTS.length];
-  if (index % 2 === 0) return base;
-  return STRUCTURE_VARIANTS[(index + 1) % STRUCTURE_VARIANTS.length] ?? base;
+  const fallback = [
+    'Intro-Verse-Chorus-Verse-Chorus-Bridge-Chorus-Outro',
+    'Intro-Verse-Chorus-Bridge-Chorus-Outro',
+    'Intro-Verse-Pre-Chorus-Chorus-Bridge-Chorus-Outro',
+  ]
+
+  const options = byGenre[primaryGenre] ?? fallback
+  return options[index % options.length]
 }
 
-function buildPrompt(base: GenerationIntent, mood: string, tempo: number, energy: number, structure: string, index: number): string {
-  return [
-    `Album track ${index + 1} continuing ${base.genre_profile.primary} identity with ${mood} emotional focus,`,
-    `tempo ${tempo} BPM, energy ${energy.toFixed(2)}, and structure ${structure}.`,
-    `Keep instrumentation rooted in ${base.genre_profile.instrumentation.slice(0, 6).join(', ')},`,
-    `preserve vocal language context ${base.vocal.languages.join(', ')},`,
-    `and maintain coherent production continuity with evolving arrangement dynamics across the album arc.`,
-  ].join(' ');
-}
-
-/**
- * Builds a deterministic album plan with a narrative arc from a base generation intent.
- */
+/** Builds album track intents with deterministic arc and variation constraints. */
 export function buildAlbumPlan(baseIntent: GenerationIntent, count: number): GenerationIntent[] {
-  const safeCount = Math.max(1, Math.floor(count));
-  const moods = computeMoodSequence(baseIntent.mood.label, safeCount);
-  const energies = computeEnergyTargets(safeCount);
-  const tempos = computeTempoSequence(baseIntent.tempo_bpm, safeCount);
+  const safeCount = Math.max(1, Math.floor(count))
+  const energies = energyArc(safeCount)
+  const moods = moodArc(baseIntent.mood.label, safeCount)
+  const tempos = tempoArc(baseIntent.tempo_bpm, safeCount)
 
   return new Array<GenerationIntent>(safeCount).fill(null).map((_, index) => {
-    const moodLabel = moods[index] ?? baseIntent.mood.label;
-    const moodVector = moodToVector(moodLabel);
-    const structureRaw = pickStructure(index, baseIntent.genre_profile.primary);
-    const structureSegments = parseSongStructure(structureRaw);
-    const energy = Number(Math.max(1, Math.min(10, energies[index] ?? baseIntent.energy)).toFixed(2));
-
-    const visualDirection = baseIntent.visual.enabled && baseIntent.visual.style
-      ? `${baseIntent.visual.style} with album-arc progression for track ${index + 1}`
-      : null;
+    const moodLabel = moods[index]
+    const mood = moodToVector(moodLabel)
+    const structureRaw = structureForIndex(baseIntent.genre_profile.primary, index)
+    const structure = parseSongStructure(structureRaw)
 
     return {
       ...baseIntent,
@@ -167,44 +136,34 @@ export function buildAlbumPlan(baseIntent: GenerationIntent, count: number): Gen
         ...baseIntent.meta,
         creation_mode: 'album',
         album_song_count: safeCount,
-        track_name: `${baseIntent.meta.track_name} - Track ${index + 1}`,
+        track_name: safeTrackName(baseIntent.meta.track_name, index),
       },
-      mood: {
-        label: moodVector.label,
-        valence: moodVector.valence,
-        arousal: moodVector.arousal,
-        tension: index === safeCount - 1 ? Math.min(4, moodVector.tension) : moodVector.tension,
-      },
-      energy,
-      tempo_bpm: tempos[index] ?? baseIntent.tempo_bpm,
+      mood,
+      energy: energies[index],
+      tempo_bpm: tempos[index],
+      structure,
       genre_profile: {
         primary: baseIntent.genre_profile.primary,
         secondary: [...baseIntent.genre_profile.secondary],
         instrumentation: [...baseIntent.genre_profile.instrumentation],
         rhythm_pattern: baseIntent.genre_profile.rhythm_pattern,
       },
-      structure: {
-        raw: structureRaw,
-        segments: structureSegments,
-      },
       vocal: {
         ...baseIntent.vocal,
         languages: [...baseIntent.vocal.languages],
         effects: [...baseIntent.vocal.effects],
       },
-      lyrics: {
-        ...baseIntent.lyrics,
-      },
-      style_reference: baseIntent.style_reference.map((item) => ({ ...item })),
+      style_reference: baseIntent.style_reference.map((entry) => ({ ...entry })),
       audio_parameters: {
         ...baseIntent.audio_parameters,
         instrumentation: [...baseIntent.audio_parameters.instrumentation],
       },
       visual: {
         ...baseIntent.visual,
-        visual_direction: visualDirection,
       },
-      generation_prompt: buildPrompt(baseIntent, moodVector.label, tempos[index] ?? baseIntent.tempo_bpm, energy, structureRaw, index),
-    };
-  });
+      generation_prompt: baseIntent.generation_prompt
+        .replace(baseIntent.meta.track_name, safeTrackName(baseIntent.meta.track_name, index))
+        .replace(`${baseIntent.tempo_bpm} BPM`, `${tempos[index]} BPM`),
+    }
+  })
 }

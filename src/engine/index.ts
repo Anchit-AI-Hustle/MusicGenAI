@@ -1,5 +1,5 @@
-export { buildGenerationIntent } from './intentBuilder';
-export { buildAlbumPlan } from './albumPlanBuilder';
+export { buildGenerationIntent } from './intentBuilder'
+export { buildAlbumPlan } from './albumPlanBuilder'
 export {
   suggestMusicPrompt,
   suggestMood,
@@ -9,5 +9,20 @@ export {
   suggestVideoStyle,
   enhanceField,
   newAlternativeField,
-} from './suggestEngine';
-export type { RawUserInput, GenerationIntent, ConflictReport } from './types';
+} from './suggestEngine'
+export type {
+  RawUserInput,
+  NormalizedInput,
+  GenerationIntent,
+  ConflictReport,
+  ConflictEntry,
+  VocalProfile,
+  LyricsProfile,
+  VisualProfile,
+  AudioParameters,
+  GenreProfile,
+  MoodVector,
+  ArtistStyleVector,
+  StructureSegment,
+} from './types'
+export { RawUserInputSchema } from './schema'
