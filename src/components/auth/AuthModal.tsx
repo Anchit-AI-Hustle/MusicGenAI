@@ -12,8 +12,8 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
-  const [name, setName] = useState('Anchit Tandon');
-  const [mobileNumber, setMobileNumber] = useState('9873945238');
+  const [name, setName] = useState('');
+  const [mobileNumber, setMobileNumber] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -29,8 +29,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       if (!result.success) {
         setError(result.error || 'Login failed');
       } else {
-        setName('Anchit Tandon');
-        setMobileNumber('9873945238');
+        setName('');
+        setMobileNumber('');
         onClose();
       }
     } finally {
@@ -54,12 +54,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             <p className="text-muted-foreground">Enter your details to sign in or create an account</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} autoComplete="off" className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="name" className="text-foreground">Name</Label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <Input id="name" type="text" placeholder="Enter your name" value={name} onChange={(e) => setName(e.target.value)} className="pl-11 h-12 bg-input border-border focus:border-primary" />
+                <Input id="name" type="text" autoComplete="off" placeholder="Enter your name" value={name} onChange={(e) => setName(e.target.value)} className="pl-11 h-12 bg-input border-border focus:border-primary" />
               </div>
               <p className="text-xs text-muted-foreground">Required for new accounts</p>
             </div>
@@ -68,7 +68,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               <Label htmlFor="mobile" className="text-foreground">Phone Number</Label>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <Input id="mobile" type="tel" placeholder="Enter your phone number" value={mobileNumber} onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, ''))} className="pl-11 h-12 bg-input border-border focus:border-primary" />
+                <Input id="mobile" type="tel" autoComplete="off" placeholder="Enter your phone number" value={mobileNumber} onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, ''))} className="pl-11 h-12 bg-input border-border focus:border-primary" />
               </div>
             </div>
 
