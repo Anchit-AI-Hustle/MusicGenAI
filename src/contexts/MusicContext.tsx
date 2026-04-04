@@ -951,6 +951,42 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return text;
   };
 
+  const normalizeToken = (value: string): string => value.toLowerCase().replace(/\s+/g, ' ').trim();
+
+  const pickNovelCandidate = (
+    candidates: string[],
+    currentValue: string,
+    history: string[],
+    globalHistory: string[],
+  ): string => {
+    const pool = Array.from(new Set(
+      candidates
+        .map((item) => sanitizeSuggestion(item))
+        .filter((item): item is string => !!item),
+    ));
+    if (pool.length === 0) return currentValue;
+
+    const seen = new Set<string>([
+      normalizeToken(currentValue),
+      ...history.map(normalizeToken),
+      ...globalHistory.map((entry) => normalizeToken(entry.split(':').slice(1).join(':') || entry)),
+    ]);
+
+    const fresh = pool.find((item) => !seen.has(normalizeToken(item)));
+    return fresh ?? pool[0];
+  };
+
+  const formatSuggestionForField = (field: string, value: string): string => {
+    if (field === 'lyrics') {
+      return value
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .join('\n');
+    }
+    return value.replace(/\s+/g, ' ').trim();
+  };
+
   const toSuggestionContext = (context: Record<string, any>) => {
     const genres = parseList(context.genre);
     const primaryGenre = genres[0] || 'pop';
@@ -1100,6 +1136,66 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         tense: ['Pressure Point', 'Cracked Signals', 'Edge of Dawn'],
         sad: ['Empty Station', 'Cold Echoes', 'Without You'],
       };
+      const genreCompanionMap: Record<string, string[]> = {
+        pop: ['R&B', 'Dance', 'Synthpop'],
+        'hip-hop': ['Trap', 'R&B', 'Boom Bap'],
+        trap: ['Drill', 'Hip-Hop', 'Dark Trap'],
+        edm: ['House', 'Future Bass', 'Melodic Techno'],
+        house: ['Deep House', 'Nu Disco', 'EDM'],
+        rock: ['Alternative Rock', 'Indie Rock', 'Pop Rock'],
+        metal: ['Metalcore', 'Industrial Metal', 'Hard Rock'],
+        jazz: ['Nu Jazz', 'Lo-fi Jazz', 'Soul Jazz'],
+        classical: ['Orchestral', 'Cinematic', 'Neo-Classical'],
+        ambient: ['Downtempo', 'Cinematic Ambient', 'Chillout'],
+        folk: ['Indie Folk', 'Acoustic', 'Americana'],
+        rnb: ['Soul', 'Alt-R&B', 'Pop'],
+      };
+      const lyricThemeMap: Record<string, string[]> = {
+        dark: ['neon loneliness and midnight escape', 'city shadows and hidden truths', 'obsession, risk, and aftermath'],
+        melancholic: ['healing after loss', 'nostalgia for a fading summer', 'letters never sent'],
+        euphoric: ['breaking free into open skies', 'dancefloor catharsis at sunrise', 'friends, freedom, and momentum'],
+        epic: ['rising against impossible odds', 'legacy, sacrifice, and victory', 'a final stand before dawn'],
+        happy: ['everyday joy in small moments', 'carefree roadtrip memories', 'new beginnings and bold optimism'],
+        romantic: ['late-night confession under city lights', 'gravity between two strangers', 'fragile love after distance'],
+        angry: ['turning pain into power', 'refusing control and expectation', 'burning bridges to rebuild stronger'],
+        chill: ['slow mornings and gentle confidence', 'coastal night drive reflections', 'quiet peace after chaos'],
+        tense: ['countdown before impact', 'secrets unraveling in real time', 'adrenaline through uncertainty'],
+        sad: ['empty rooms and echoes', 'goodbye without closure', 'holding on while letting go'],
+      };
+      const genreDurationMap: Record<string, number[]> = {
+        pop: [165, 185, 205],
+        'hip-hop': [150, 180, 210],
+        trap: [150, 175, 200],
+        edm: [180, 210, 240],
+        house: [180, 210, 240],
+        rock: [190, 220, 250],
+        metal: [210, 240, 270],
+        ambient: [240, 300, 360],
+        classical: [240, 300, 420],
+        jazz: [210, 260, 320],
+        folk: [180, 210, 240],
+        rnb: [170, 200, 230],
+      };
+      const albumNameTemplates = [
+        `${titleCase(inferredMood)} ${titleCase(baseGenre)} Sessions`,
+        `${titleCase(inferredMood)} Horizons`,
+        `${titleCase(baseGenre)} After Hours`,
+        `${titleCase(inferredMood)} Reverie`,
+      ];
+      const moodOptionsByGenre: Record<string, string[]> = {
+        pop: ['happy', 'romantic', 'euphoric', 'melancholic'],
+        'hip-hop': ['dark', 'tense', 'angry', 'euphoric'],
+        trap: ['dark', 'tense', 'angry', 'euphoric'],
+        edm: ['euphoric', 'epic', 'happy', 'tense'],
+        house: ['euphoric', 'chill', 'happy', 'romantic'],
+        rock: ['epic', 'tense', 'melancholic', 'angry'],
+        metal: ['angry', 'dark', 'epic', 'tense'],
+        jazz: ['chill', 'romantic', 'melancholic', 'happy'],
+        classical: ['epic', 'romantic', 'melancholic', 'happy'],
+        ambient: ['chill', 'dark', 'melancholic', 'romantic'],
+        folk: ['melancholic', 'romantic', 'happy', 'chill'],
+        rnb: ['romantic', 'melancholic', 'dark', 'chill'],
+      };
 
       switch (normalizedField) {
         case 'prompt':
@@ -1107,98 +1203,244 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           suggestionValue = action === 'enhance'
             ? enhanceField('music_prompt', currentValue || inferredPrompt, suggestionContext)
             : action === 'new'
-              ? newAlternativeField('music_prompt', currentValue || inferredPrompt, suggestionContext)
+              ? pickNovelCandidate(
+                [
+                  newAlternativeField('music_prompt', currentValue || inferredPrompt, suggestionContext),
+                  `${inferredPrompt} Prioritize dynamic contrast, cleaner hooks, and a distinctive sonic identity.`,
+                  `${inferredPrompt} Emphasize cinematic transitions, stronger motif recall, and polished arrangement pacing.`,
+                ],
+                currentValue,
+                history,
+                globalHistory,
+              )
               : inferredPrompt;
           break;
         case 'mood':
           suggestionValue = action === 'new'
-            ? newAlternativeField('mood', currentValue || inferredMood, suggestionContext)
+            ? pickNovelCandidate(
+              [
+                newAlternativeField('mood', currentValue || inferredMood, suggestionContext),
+                ...(moodOptionsByGenre[baseGenre] ?? ['euphoric', 'melancholic', 'dark', 'chill']),
+                'euphoric',
+                'melancholic',
+                'dark',
+                'chill',
+                'tense',
+                'romantic',
+              ],
+              currentValue || inferredMood,
+              history,
+              globalHistory,
+            )
             : inferredMood;
           break;
         case 'tempo':
-          suggestionValue = String(inferredTempo);
+          suggestionValue = action === 'new'
+            ? String(Math.max(60, Math.min(200, inferredTempo + (inferredTempo >= 125 ? -8 : 8))))
+            : String(inferredTempo);
           break;
         case 'structureType':
           suggestionValue = action === 'new'
-            ? newAlternativeField('song_structure', currentValue || suggestSongStructure(suggestionContext), suggestionContext)
+            ? pickNovelCandidate(
+              [
+                newAlternativeField('song_structure', currentValue || suggestSongStructure(suggestionContext), suggestionContext),
+                'Intro-Verse-Pre-Chorus-Chorus-Verse-Chorus-Bridge-Chorus-Outro',
+                'Intro-Build-Drop-Verse-Build-Drop-Break-Outro',
+                'Intro-Theme-Variation-Climax-Coda',
+              ],
+              currentValue,
+              history,
+              globalHistory,
+            )
             : suggestSongStructure(suggestionContext);
           break;
         case 'vocalStyle':
           suggestionValue = action === 'enhance'
             ? enhanceField('vocal_style', currentValue || suggestVocalStyle(suggestionContext), suggestionContext)
             : action === 'new'
-              ? newAlternativeField('vocal_style', currentValue || suggestVocalStyle(suggestionContext), suggestionContext)
+              ? pickNovelCandidate(
+                [
+                  newAlternativeField('vocal_style', currentValue || suggestVocalStyle(suggestionContext), suggestionContext),
+                  'intimate, close-mic phrasing with emotional restraint',
+                  'dynamic mixed-voice delivery with rhythmic accents',
+                  'airy falsetto layers with clean lead articulation',
+                ],
+                currentValue,
+                history,
+                globalHistory,
+              )
               : suggestVocalStyle(suggestionContext);
           break;
         case 'videoStyle':
-          suggestionValue = suggestVideoStyle(suggestionContext);
+          suggestionValue = action === 'new'
+            ? pickNovelCandidate(
+              [
+                suggestVideoStyle(suggestionContext),
+                'cinematic wide-angle storytelling with atmospheric color wash',
+                'stylized handheld realism with grain texture and punchy cuts',
+                'abstract geometric motion synced to rhythmic accents',
+              ],
+              currentValue,
+              history,
+              globalHistory,
+            )
+            : suggestVideoStyle(suggestionContext);
           break;
         case 'genre':
-          suggestionValue = unique([
-            ...suggestionContext.genres,
-          ])
-            .slice(0, 3)
-            .map(titleCase)
-            .join(', ') || titleCase(baseGenre);
+          suggestionValue = pickNovelCandidate(
+            [
+              unique([
+                ...suggestionContext.genres,
+                ...(genreCompanionMap[baseGenre] ?? []),
+              ]).slice(0, 3).map(titleCase).join(', '),
+              unique([titleCase(baseGenre), ...(genreCompanionMap[baseGenre] ?? [])]).slice(0, 3).join(', '),
+            ],
+            currentValue,
+            history,
+            globalHistory,
+          ) || titleCase(baseGenre);
           break;
         case 'subgenre':
-          suggestionValue = unique(genreSubgenreMap[baseGenre] ?? [`${baseGenre} fusion`, 'melodic', 'cinematic'])
-            .slice(0, 3)
-            .join(', ');
+          suggestionValue = pickNovelCandidate(
+            [
+              unique(genreSubgenreMap[baseGenre] ?? [`${baseGenre} fusion`, 'melodic', 'cinematic'])
+                .slice(0, 3)
+                .join(', '),
+              unique([`${baseGenre} fusion`, 'cinematic', `${inferredMood} wave`]).slice(0, 3).join(', '),
+            ],
+            currentValue,
+            history,
+            globalHistory,
+          );
           break;
         case 'lyricsTheme':
           suggestionValue = action === 'enhance'
             ? enhanceField('lyric_theme', currentValue || `${inferredMood} ${baseGenre} story`, suggestionContext)
-            : currentValue || `${inferredMood} ${baseGenre} storytelling`;
+            : pickNovelCandidate(
+              [
+                currentValue || `${inferredMood} ${baseGenre} storytelling`,
+                ...(lyricThemeMap[inferredMood] ?? []),
+              ],
+              currentValue,
+              history,
+              globalHistory,
+            );
           break;
         case 'lyrics':
-          suggestionValue = currentValue || `City lights fade while we run from yesterday.\nEvery scar is a map to where we are today.\nHold me through the noise until the dawn arrives.\nTurn this ache to fire and bring us back to life.`;
+          suggestionValue = action === 'new'
+            ? pickNovelCandidate(
+              [
+                `City lights fade while we run from yesterday.\nEvery scar is a map to where we are today.\nHold me through the noise until the dawn arrives.\nTurn this ache to fire and bring us back to life.`,
+                `Static in the skyline, thunder in my chest.\nI learned to dance with fear and still call this progress.\nIf the night keeps pulling, I will pull back too.\nMake a home in the chaos till the morning cuts through.`,
+                `We were shadows on the overpass, names lost in rain.\nYou said every wound can bloom if we stay through pain.\nWhen the sirens fade, keep your heartbeat close to mine.\nWe'll turn broken neon into something that can shine.`,
+              ],
+              currentValue,
+              history,
+              globalHistory,
+            )
+            : currentValue || `City lights fade while we run from yesterday.\nEvery scar is a map to where we are today.\nHold me through the noise until the dawn arrives.\nTurn this ache to fire and bring us back to life.`;
           break;
         case 'artistInspiration':
-          suggestionValue = currentValue || unique([
-            ...parseList(effectiveContext.artistInspiration),
-            ...(genreArtistMap[baseGenre] ?? ['The Weeknd', 'Kendrick Lamar', 'Hans Zimmer']),
-          ]).slice(0, 3).join(', ');
+          suggestionValue = pickNovelCandidate(
+            [
+              unique([
+                ...parseList(effectiveContext.artistInspiration),
+                ...(genreArtistMap[baseGenre] ?? ['The Weeknd', 'Kendrick Lamar', 'Hans Zimmer']),
+              ]).slice(0, 3).join(', '),
+              unique([...(genreArtistMap[baseGenre] ?? []), 'Tame Impala', 'Rosalia']).slice(0, 3).join(', '),
+            ],
+            currentValue,
+            history,
+            globalHistory,
+          );
           break;
         case 'vocalLanguage':
-          suggestionValue = unique([
-            ...parseList(effectiveContext.vocalLanguage),
-            'English',
-            'Hindi',
-          ]).slice(0, 3).join(', ');
+          suggestionValue = pickNovelCandidate(
+            [
+              unique([
+                ...parseList(effectiveContext.vocalLanguage),
+                'English',
+                'Hindi',
+                'Spanish',
+              ]).slice(0, 3).join(', '),
+              unique(['English', 'Hindi', 'Punjabi']).slice(0, 3).join(', '),
+              unique(['English', 'Spanish', 'French']).slice(0, 3).join(', '),
+            ],
+            currentValue,
+            history,
+            globalHistory,
+          );
           break;
         case 'vocalIntensity':
-          suggestionValue = String(Math.max(1, Math.min(10, Math.round(suggestionContext.mood.arousal))));
+          suggestionValue = action === 'new'
+            ? String(Math.max(1, Math.min(10, Math.round(suggestionContext.mood.arousal + (suggestionContext.mood.arousal >= 6 ? -2 : 2)))))
+            : String(Math.max(1, Math.min(10, Math.round(suggestionContext.mood.arousal))));
           break;
         case 'vocalEffects':
-          suggestionValue = unique([
-            ...parseList(effectiveContext.vocalEffects),
-            ...(genreEffectsMap[baseGenre] ?? ['reverb', 'delay', 'compression']),
-          ]).slice(0, 3).join(', ');
+          suggestionValue = pickNovelCandidate(
+            [
+              unique([
+                ...parseList(effectiveContext.vocalEffects),
+                ...(genreEffectsMap[baseGenre] ?? ['reverb', 'delay', 'compression']),
+              ]).slice(0, 3).join(', '),
+              unique([...(genreEffectsMap[baseGenre] ?? []), 'parallel compression', 'micro pitch']).slice(0, 3).join(', '),
+            ],
+            currentValue,
+            history,
+            globalHistory,
+          );
           break;
         case 'vocalArrangement':
-          suggestionValue = baseGenre === 'classical'
-            ? 'choir'
-            : baseGenre === 'edm' || baseGenre === 'ambient'
-              ? 'solo'
-              : baseGenre === 'rnb'
-                ? 'duet'
-                : 'solo';
+          suggestionValue = pickNovelCandidate(
+            [
+              baseGenre === 'classical'
+                ? 'choir'
+                : baseGenre === 'edm' || baseGenre === 'ambient'
+                  ? 'solo'
+                  : baseGenre === 'rnb'
+                    ? 'duet'
+                    : 'solo',
+              'duet',
+              'solo',
+              'choir',
+            ],
+            currentValue,
+            history,
+            globalHistory,
+          );
           break;
         case 'duration':
-          suggestionValue = String(Math.max(30, Math.min(600, Math.round(Number(effectiveContext.duration || 180)))));
+          suggestionValue = action === 'new'
+            ? pickNovelCandidate(
+              (genreDurationMap[baseGenre] ?? [160, 180, 220]).map((seconds) => String(seconds)),
+              currentValue || String(effectiveContext.duration || 180),
+              history,
+              globalHistory,
+            )
+            : String(Math.max(30, Math.min(600, Math.round(Number(effectiveContext.duration || 180)))));
           break;
         case 'trackName':
-          suggestionValue = (moodTrackNames[inferredMood.toLowerCase()]?.[0] ?? `${titleCase(inferredMood)} ${titleCase(baseGenre)}`).trim();
+          suggestionValue = pickNovelCandidate(
+            moodTrackNames[inferredMood.toLowerCase()] ?? [`${titleCase(inferredMood)} ${titleCase(baseGenre)}`],
+            currentValue,
+            history,
+            globalHistory,
+          ).trim();
           break;
         case 'albumName':
-          suggestionValue = `${inferredMood} ${baseGenre} sessions`;
+          suggestionValue = pickNovelCandidate(
+            albumNameTemplates,
+            currentValue,
+            history,
+            globalHistory,
+          );
           break;
         default:
           suggestionValue = currentValue || inferredPrompt;
       }
 
       suggestionValue = sanitizeSuggestion(suggestionValue);
+      if (suggestionValue) suggestionValue = formatSuggestionForField(normalizedField, suggestionValue);
       if (!suggestionValue) throw new Error('No suggestions returned');
 
       suggestionHistoryRef.current[normalizedField] = [
