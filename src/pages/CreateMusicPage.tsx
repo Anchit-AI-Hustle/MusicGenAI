@@ -137,7 +137,7 @@ interface SongPromptState {
 
 export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick }) => {
   const { isAuthenticated } = useAuth();
-  const { createMusic, currentCreation, isCreating, aiSuggest, updateFormState, suggestionState, creations } = useMusic();
+  const { createMusic, currentCreation, isCreating, aiSuggest, updateFormState, suggestionState, creations = [] } = useMusic();
   const player = usePlayer();
   const [mode, setMode] = useState<'song' | 'album'>('song');
   
@@ -574,7 +574,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     const ctx = contextRef.current;
 
     // Duplicate prompt detection
-    if (mode === 'song') {
+    if (mode === 'song' && creations && Array.isArray(creations)) {
       const isDuplicate = creations.some(c => c.type === 'song' && c.songDescription === ctx.songDescription);
       if (isDuplicate) {
          const keepName = window.confirm("You are regenerating a song with the same prompt. Do you want to keep the same song name? \n\nClick 'OK' to keep the same name.\nClick 'Cancel' to enter a new name.");
