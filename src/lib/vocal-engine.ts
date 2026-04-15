@@ -692,7 +692,7 @@ function buildLanguageLexicon(language?: string) {
       fillers: ['aithe', 'uthe', 'hor', 'vi', 'saddi', 'gall'],
       verseOpeners: ['Sadda vakhra style', 'Pind diyan raahan', 'Dil vich zor', 'Sheran wargi tor'],
       chorusOpeners: ['Sadda haq aithe rakh', 'Duniya hila do', 'Bhangra pao', 'Dil sacha'],
-      bridgeOpeners: ['Rasta saaf hai', 'Manzil door nahi', 'Yaaran de naal'],
+      bridgeOpeners: ['Rasta saaf hai', 'Manzil door nahi', 'Sab de naal'],
       imagery: ['sher', 'pind', 'shaan', 'zor', 'darru', 'bhagra'],
     };
   }

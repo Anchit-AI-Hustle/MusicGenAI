@@ -403,6 +403,15 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         }
         break;
       }
+      case 'energyLevel': updateSongPrompt({ energyLevel: Math.max(1, Math.min(10, parseInt(value) || 5)) }); break;
+      case 'instruments': {
+        const newInst = value.split(',').map(e => e.trim()).filter(Boolean);
+        updateSongPrompt(prev => ({
+          ...prev,
+          instruments: Array.from(new Set([...prev.instruments, ...newInst])),
+        }));
+        break;
+      }
       case 'lyricsTheme': updateSongPrompt({ lyricsTheme: value }); break;
     }
   };
@@ -427,6 +436,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'vocalIntensity': return String(vocalIntensity);
       case 'vocalEffects': return selectedVocalEffects.join(', ');
       case 'lyricsTheme': return lyricsTheme;
+      case 'energyLevel': return String(energyLevel);
+      case 'instruments': return instruments.join(', ');
       case 'duration': return String(duration);
       default: return '';
     }
@@ -502,6 +513,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'vocalIntensity': updateSongPrompt({ vocalIntensity: 5 }); break;
       case 'vocalEffects': updateSongPrompt({ vocalEffects: [] }); break;
       case 'lyricsTheme': updateSongPrompt({ lyricsTheme: '' }); break;
+      case 'energyLevel': updateSongPrompt({ energyLevel: 5 }); break;
+      case 'instruments': updateSongPrompt({ instruments: [] }); break;
       case 'duration': { setDuration(180); setHours(0); setMinutes(3); setSeconds(0); break; }
     }
   };

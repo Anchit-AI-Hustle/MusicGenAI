@@ -622,7 +622,20 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const rng = createRng(getGenerationSeedNumber(dna));
       
       // 2. Build Music Intent
-      const intent: MusicIntent = toMusicIntent(generationIntent, dna, runtimeInput.musicalKey || 'C');
+      const baseIntent: MusicIntent = toMusicIntent(generationIntent, dna, runtimeInput.musicalKey || 'C');
+      
+      // Override parsed intent with explicit user form inputs for exact tracking
+      const intent: MusicIntent = {
+        ...baseIntent,
+        genre: input.genre || baseIntent.genre,
+        subgenre: input.subgenre || baseIntent.subgenre,
+        tempo: input.tempo || baseIntent.tempo,
+        mood: input.mood || baseIntent.mood,
+        energy: input.energyLevel || baseIntent.energy,
+        durationSeconds: input.duration || baseIntent.durationSeconds,
+        instruments: input.instruments && input.instruments.length > 0 ? input.instruments : baseIntent.instruments,
+        atmosphere: input.songDescription || baseIntent.atmosphere,
+      };
 
       // 3. Generate Instrumental Stems
       updateTrackLocal(creationId, trackId, { status: 'processing', currentStage: 'Generating arrangement', progress: 0.2 });
@@ -1409,6 +1422,27 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
               'duet',
               'solo',
               'choir',
+            ],
+            currentValue,
+            history,
+            globalHistory,
+          );
+          break;
+        case 'energyLevel':
+          suggestionValue = action === 'new'
+            ? String(Math.max(1, Math.min(10, Math.round(suggestionContext.mood.arousal + (suggestionContext.mood.arousal >= 6 ? -2 : 2)))))
+            : String(Math.max(1, Math.min(10, Math.round(suggestionContext.mood.arousal))));
+          break;
+        case 'instruments':
+          suggestionValue = pickNovelCandidate(
+            [
+              unique([
+                ...parseList(effectiveContext.instruments),
+                ...(baseGenre === 'rock' ? ['electric guitar', 'bass', 'drums'] : []),
+                ...(baseGenre === 'pop' ? ['synth', 'drum machine', 'acoustic guitar'] : []),
+                ...(baseGenre === 'classical' ? ['strings', 'piano'] : []),
+              ]).slice(0, 3).join(', '),
+              unique(['piano', 'strings', 'synthesizer']).slice(0, 3).join(', '),
             ],
             currentValue,
             history,
