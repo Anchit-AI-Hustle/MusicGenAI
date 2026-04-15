@@ -271,6 +271,25 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, [user?.id]);
 
   // Realtime subscriptions
+  const mapTrack = (t: Track, updated: any): Track =>
+    t.id === updated.id
+      ? {
+        ...t,
+        status: updated.status,
+        audioUrl: updated.audio_url || updated.audioUrl || t.audioUrl,
+        videoUrl: updated.video_url || updated.videoUrl || t.videoUrl,
+        progress: updated.progress ?? t.progress ?? 0,
+        totalSegments: updated.total_segments ?? updated.totalSegments ?? t.totalSegments ?? 1,
+        completedSegments: updated.completed_segments ?? updated.completedSegments ?? t.completedSegments ?? 0,
+        errorMessage: updated.error_message || updated.errorMessage || t.errorMessage,
+        duration: updated.duration_seconds || updated.duration || t.duration,
+        currentStage: updated.current_stage || updated.currentStage || t.currentStage,
+        estimatedTimeLeft: updated.estimated_time_left || updated.estimatedTimeLeft || t.estimatedTimeLeft || 0,
+        lastUpdatedAt: Date.now(),
+      }
+      : t;
+
+  // Realtime subscriptions
   useEffect(() => {
     if (!isAuthenticated || !user?.id) return;
 
@@ -278,32 +297,16 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       .channel('music-realtime')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tracks' }, (payload) => {
         const updated = payload.new as any;
-        const mapTrack = (t: Track): Track =>
-          t.id === updated.id
-            ? {
-              ...t,
-              status: updated.status,
-              audioUrl: updated.audio_url || undefined,
-              videoUrl: updated.video_url || undefined,
-              progress: updated.progress ?? 0,
-              totalSegments: updated.total_segments ?? 1,
-              completedSegments: updated.completed_segments ?? 0,
-              errorMessage: updated.error_message || undefined,
-              duration: updated.duration_seconds,
-              currentStage: updated.current_stage || undefined,
-              estimatedTimeLeft: updated.estimated_time_left ?? 0,
-            }
-            : t;
-
+        
         setCreations(prev => prev.map(c => {
-          const tracks = c.tracks.map(mapTrack);
+          const tracks = c.tracks.map(t => mapTrack(t, updated));
           const { derivedStatus, derivedProgress } = deriveCreationState(tracks);
           return { ...c, tracks, status: derivedStatus, progress: derivedProgress };
         }));
 
         setCurrentCreation(prev => {
           if (!prev) return prev;
-          const tracks = prev.tracks.map(mapTrack);
+          const tracks = prev.tracks.map(t => mapTrack(t, updated));
           const { derivedStatus, derivedProgress } = deriveCreationState(tracks);
           return { ...prev, tracks, status: derivedStatus, progress: derivedProgress };
         });
@@ -321,15 +324,18 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Helper to update track state locally
   const updateTrackLocal = (creationId: string, trackId: string, updates: Partial<Track>) => {
+    const updatedPayload = { id: trackId, ...updates };
+    
     setCreations(prev => prev.map(c => {
       if (c.id !== creationId) return c;
-      const tracks = c.tracks.map(t => t.id === trackId ? { ...t, ...updates, lastUpdatedAt: Date.now() } : t);
+      const tracks = c.tracks.map(t => mapTrack(t, updatedPayload));
       const { derivedStatus, derivedProgress } = deriveCreationState(tracks);
       return { ...c, tracks, status: derivedStatus, progress: derivedProgress };
     }));
+    
     setCurrentCreation(prev => {
       if (prev?.id !== creationId) return prev;
-      const tracks = prev.tracks.map(mapTrack);
+      const tracks = prev.tracks.map(t => mapTrack(t, updatedPayload));
       const { derivedStatus, derivedProgress } = deriveCreationState(tracks);
       return { ...prev, tracks, status: derivedStatus, progress: derivedProgress };
     });
