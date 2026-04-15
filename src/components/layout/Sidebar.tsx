@@ -41,7 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
     <aside
       className={cn(
         "fixed left-0 top-0 h-full bg-black/40 backdrop-blur-3xl border-r border-white/10 flex flex-col z-50 shadow-[4px_0_24px_rgba(0,0,0,0.5)]",
-        isMobile ? "w-72 transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]" : cn(isCollapsed ? "w-20" : "w-64", "transition-all duration-300 ease-in-out"),
+        isMobile ? "w-72 transition-transform duration-300 ease-out" : cn(isCollapsed ? "w-20" : "w-64", "transition-all duration-300 ease-in-out"),
         isMobile && !isMobileOpen && "-translate-x-full",
         isMobile && isMobileOpen && "translate-x-0",
       )}

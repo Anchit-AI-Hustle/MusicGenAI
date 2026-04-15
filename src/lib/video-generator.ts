@@ -626,6 +626,9 @@ export async function generateVideoFromAudio(
         const recordedMime = mediaRecorder.mimeType || selectedMime;
         const recordedType = recordedMime.includes('mp4') ? 'video/mp4' : 'video/webm';
         const rawBlob = new Blob(chunks, { type: recordedType });
+        if (!chunks.length || rawBlob.size < 256) {
+          throw new Error('Video recording produced no usable data. Try again or disable video.');
+        }
         const universalMp4Blob = await ensureUniversalMp4Blob(rawBlob, onProgress);
         resolve(universalMp4Blob);
       } catch (error) {

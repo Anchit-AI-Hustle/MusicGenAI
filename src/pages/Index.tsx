@@ -66,7 +66,7 @@ const AppContent: React.FC = () => {
       <AnimatedBackground />
       <GlobalGenerationTicker onNavigate={handleNavigate} />
       <Sidebar currentPage={currentPage === 'song-detail' ? 'dashboard' : currentPage} onNavigate={handleNavigate} onAuthClick={() => setShowAuthModal(true)} />
-      <main className={`${isMobile ? "pt-16" : "ml-64 transition-all duration-300"} ${currentTrack ? 'pb-24' : ''}`}>
+      <main className={`${isMobile ? "pt-20" : "ml-64 pt-14 transition-all duration-300"} ${currentTrack ? 'pb-24' : ''}`}>
         {renderPage()}
       </main>
       <SystemDemoDiagnostics />

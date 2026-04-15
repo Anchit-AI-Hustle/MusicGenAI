@@ -30,13 +30,15 @@ const STATUS_LABELS: Record<string, string> = {
   rendering_video: 'Rendering visuals',
   encoding_video: 'Encoding video',
   transcoding_video: 'Optimizing MP4',
+  uploading_video: 'Uploading video',
+  processing: 'Generating',
   finalizing: 'Finalizing',
   completed: 'Ready',
   failed: 'Failed',
   audio_complete_video_failed: 'Audio ready (video failed)',
 };
 
-const ACTIVE_STATUSES = ['analyzing', 'seeding', 'inferring', 'planning_structure', 'generating_melody', 'synthesizing_instruments', 'generating_vocals', 'vocal_alignment', 'mixing_audio', 'mastering_track', 'analyzing_beat_structure', 'generating_video', 'rendering_video', 'encoding_video', 'transcoding_video', 'finalizing'];
+const ACTIVE_STATUSES = ['analyzing', 'processing', 'seeding', 'inferring', 'planning_structure', 'generating_melody', 'synthesizing_instruments', 'generating_vocals', 'vocal_alignment', 'mixing_audio', 'mastering_track', 'analyzing_beat_structure', 'generating_video', 'rendering_video', 'encoding_video', 'transcoding_video', 'uploading_video', 'finalizing'];
 
 const isActiveStatus = (status: string) => ACTIVE_STATUSES.includes(status);
 

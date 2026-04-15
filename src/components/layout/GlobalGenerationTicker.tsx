@@ -21,12 +21,19 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
 
   if (displayCreations.length === 0) return null;
 
+  const inPipeline = new Set([
+    'pending', 'analyzing', 'processing', 'analyzing_beat_structure',
+    'generating_video', 'rendering_video', 'encoding_video', 'transcoding_video',
+    'uploading_video', 'finalizing',
+  ]);
+
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 flex flex-col items-center pt-2 px-4 pointer-events-none space-y-2">
+    <div className="fixed top-0 left-0 right-0 z-40 flex flex-col items-center pt-3 px-4 pointer-events-none space-y-2 sm:left-64">
       <AnimatePresence>
         {displayCreations.slice(0, 1).map((creation) => {
-          const activeTrack = creation.tracks.find(t => ['analyzing', 'processing', 'failed'].includes(t.status)) || creation.tracks[0];
-          const isStuck = activeTrack && activeTrack.status !== 'completed' && activeTrack.status !== 'failed' && (activeTrack.lastUpdatedAt && Date.now() - activeTrack.lastUpdatedAt > 90000);
+          const activeTrack = creation.tracks.find(t => inPipeline.has(t.status)) || creation.tracks[0];
+          const isStuck = activeTrack && activeTrack.status !== 'completed' && activeTrack.status !== 'failed' && activeTrack.status !== 'audio_complete_video_failed'
+            && activeTrack.lastUpdatedAt != null && Date.now() - activeTrack.lastUpdatedAt > 120000;
           const isFailed = creation.status === 'failed' || creation.tracks.some(t => t.status === 'failed') || isStuck;
           const progress = creation.progress || 0;
           const currentStage = isStuck ? "Process timed out" : (activeTrack?.currentStage || "Creating magic...");

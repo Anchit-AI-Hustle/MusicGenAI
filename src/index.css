@@ -9,10 +9,10 @@
 @layer base {
   :root {
     /* Dark creative studio palette */
-    --background: 220 20% 4%;
-    --foreground: 210 40% 96%;
+    --background: 230 18% 6%;
+    --foreground: 210 35% 96%;
 
-    --card: 220 18% 7%;
+    --card: 230 16% 9%;
     --card-foreground: 210 40% 96%;
 
     --popover: 220 18% 8%;
@@ -83,7 +83,7 @@
 @layer components {
   /* Glassmorphism card effect */
   .glass-card {
-    @apply bg-white/5 backdrop-blur-2xl border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.12)] shadow-black/40;
+    @apply bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.35)];
   }
 
   /* Glow effects */

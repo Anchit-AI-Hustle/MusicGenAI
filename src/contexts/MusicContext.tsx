@@ -7,7 +7,6 @@ import {
   masterAudio, INTERNAL_SAMPLE_RATE,
 } from '@/lib/audio-utils';
 import { generateTrack, type AudioStems, type GenerateTrackResult, MusicIntent, createRng, createGenerationDNA, getGenerationSeedNumber, mixStems, type GenerationDNA } from '@/lib/music-engine';
-import { generateVideoFromAudio } from '@/lib/video-generator';
 import { generateVocals, generateLyricCues, inferVocalStyle, generateDefaultLyrics, mixVocalsIntoInstrumental, type LyricCue, type VocalConfig, type VocalStyleType } from '@/lib/vocal-engine';
 import { aiMusicClient } from '@/lib/ai-music-client';
 import type { TrackConfig } from '@/components/AlbumTrackForm';
@@ -127,6 +126,24 @@ interface MusicContextType {
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
 
+/** Rejects if promise does not settle within ms (uploads / video can hang indefinitely otherwise). */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  });
+}
+
+const AUDIO_UPLOAD_TIMEOUT_MS = 4 * 60 * 1000;
+const VIDEO_UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+
+function videoRenderTimeoutMs(durationSeconds: number) {
+  return Math.min(45 * 60 * 1000, Math.max(5 * 60 * 1000, durationSeconds * 90 * 1000));
+}
+
 const TERMINAL_TRACK_STATUSES = ['completed', 'audio_complete_video_failed', 'failed'];
 
 function deriveCreationState(tracks: Track[]) {
@@ -218,6 +235,24 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           .in('creation_id', creationIds)
           .order('track_number', { ascending: true });
         if (!tracksError) tracksData = data || [];
+      }
+
+      for (const t of tracksData) {
+        if (typeof t.audio_url === 'string' && t.audio_url.startsWith('blob:')) {
+          const { error: fixErr } = await supabase.from('tracks').update({
+            status: 'failed',
+            current_stage: 'Upload incomplete',
+            error_message: 'Browser session ended before audio was saved to storage. Use Retry to regenerate.',
+            progress: 0,
+          }).eq('id', t.id);
+          if (!fixErr) {
+            t.audio_url = null;
+            t.status = 'failed';
+            t.current_stage = 'Upload incomplete';
+            t.error_message = 'Browser session ended before audio was saved to storage. Use Retry to regenerate.';
+            t.progress = 0;
+          }
+        }
       }
 
       const mapped: MusicCreation[] = (creationsData || []).map(creation => {
@@ -324,7 +359,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Helper to update track state locally
   const updateTrackLocal = (creationId: string, trackId: string, updates: Partial<Track>) => {
-    const updatedPayload = { id: trackId, ...updates };
+    const updatedPayload = { id: trackId, ...updates, lastUpdatedAt: Date.now() };
     
     setCreations(prev => prev.map(c => {
       if (c.id !== creationId) return c;
@@ -348,10 +383,10 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Helper to update track in DB
   const updateTrackDB = async (trackId: string, creationId: string, stage: string, progress: number, status: string) => {
-    await supabase.from('tracks').update({
+    const { error } = await supabase.from('tracks').update({
       current_stage: stage, progress, status,
     }).eq('id', trackId);
-    // Don't update creation status directly - derive from tracks
+    if (error) console.error('[tracks]', trackId, error.message, { stage, status });
   };
 
   const runAsyncVideoRender = async (
@@ -368,50 +403,56 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       await updateTrackDB(trackId, creationId, 'Analyzing beats', 0.84, 'analyzing_beat_structure');
 
       const { generateVideoFromAudio } = await import('@/lib/video-generator');
-      const videoBlob = await generateVideoFromAudio(
-        audioUrl,
-        input.duration || 120,
-        [input.genre || 'Pop'],
-        input.mood || '',
-        input.videoStyle || 'Cinematic',
-        (p) => {
-          const stageLabel = p.stage === 'analyzing_beat_structure'
-            ? 'Analyzing beats'
-            : p.stage === 'rendering_video' || p.stage === 'generating_video'
-              ? 'Rendering visuals'
-              : p.stage === 'transcoding_video'
-                ? 'Optimizing MP4'
-                : 'Encoding video';
+      const dur = input.duration || 120;
+      const videoBlob = await withTimeout(
+        generateVideoFromAudio(
+          audioUrl,
+          dur,
+          [input.genre || 'Pop'],
+          input.mood || '',
+          input.videoStyle || 'Cinematic',
+          (p) => {
+            const stageLabel = p.stage === 'analyzing_beat_structure'
+              ? 'Analyzing beats'
+              : p.stage === 'rendering_video' || p.stage === 'generating_video'
+                ? 'Rendering visuals'
+                : p.stage === 'transcoding_video'
+                  ? 'Optimizing MP4'
+                  : 'Encoding video';
 
-          updateTrackLocal(creationId, trackId, {
-            status: p.stage as string,
-            currentStage: stageLabel,
-            progress: 0.84 + p.progress * 0.12,
-            audioUrl,
-          });
-          updateTrackDB(trackId, creationId, stageLabel, 0.84 + p.progress * 0.12, p.stage).catch(console.warn);
-          trackLastUpdateRef.current[trackId] = Date.now();
-        },
-        {
-          seed: dna.seed,
-          numericSeed: getGenerationSeedNumber(dna),
-          visualEnergy: dna.visualEnergy,
-          colorSignature: dna.colorSignature,
-          arrangementStyle: dna.arrangementStyle,
-        },
-        lyricCues,
+            updateTrackLocal(creationId, trackId, {
+              status: p.stage as string,
+              currentStage: stageLabel,
+              progress: 0.84 + p.progress * 0.12,
+              audioUrl,
+            });
+            void updateTrackDB(trackId, creationId, stageLabel, 0.84 + p.progress * 0.12, p.stage);
+            trackLastUpdateRef.current[trackId] = Date.now();
+          },
+          {
+            seed: dna.seed,
+            numericSeed: getGenerationSeedNumber(dna),
+            visualEnergy: dna.visualEnergy,
+            colorSignature: dna.colorSignature,
+            arrangementStyle: dna.arrangementStyle,
+          },
+          lyricCues,
+        ),
+        videoRenderTimeoutMs(dur),
+        'Video rendering',
       );
 
-      updateTrackLocal(creationId, trackId, { status: 'finalizing', currentStage: 'Uploading video', progress: 0.97, audioUrl });
-      await updateTrackDB(trackId, creationId, 'Uploading video', 0.97, 'finalizing');
+      updateTrackLocal(creationId, trackId, { status: 'uploading_video', currentStage: 'Uploading video', progress: 0.97, audioUrl });
+      await updateTrackDB(trackId, creationId, 'Uploading video', 0.97, 'uploading_video');
 
       const isMp4Video = videoBlob.type.includes('mp4');
       const videoExt = isMp4Video ? 'mp4' : 'webm';
       const videoContentType = isMp4Video ? 'video/mp4' : 'video/webm';
       const videoPath = `tracks/${trackId}/video.${videoExt}`;
-      const { error: vidUploadError } = await supabase.storage
+      const uploadPromise = supabase.storage
         .from('music-files')
         .upload(videoPath, videoBlob, { contentType: videoContentType, upsert: true });
+      const { error: vidUploadError } = await withTimeout(uploadPromise, VIDEO_UPLOAD_TIMEOUT_MS, 'Video upload');
 
       if (vidUploadError) throw new Error(`Video upload failed: ${vidUploadError.message}`);
 
@@ -698,26 +739,35 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const { masterAudio } = await import('@/lib/audio-utils');
       const mastered = masterAudio(finalBuffer);
 
-      // 6. Final URL Generation
-      const localAudioUrl = URL.createObjectURL(mastered.blob);
+      // 6. Persist audio to storage (blob: URLs break after reload and block reliable video fetch)
+      const audioPath = `tracks/${trackId}/master.wav`;
+      const audioUploadPromise = supabase.storage
+        .from('music-files')
+        .upload(audioPath, mastered.blob, { contentType: 'audio/wav', upsert: true });
+      const { error: audioUpErr } = await withTimeout(audioUploadPromise, AUDIO_UPLOAD_TIMEOUT_MS, 'Audio upload');
+      if (audioUpErr) throw new Error(`Could not upload audio: ${audioUpErr.message}`);
 
-      updateTrackLocal(creationId, trackId, { 
-        status: 'completed', 
-        currentStage: 'Completed', 
-        progress: 1, 
-        audioUrl: localAudioUrl 
+      const { data: audioPub } = supabase.storage.from('music-files').getPublicUrl(audioPath);
+      const publicAudioUrl = audioPub.publicUrl;
+
+      updateTrackLocal(creationId, trackId, {
+        status: 'completed',
+        currentStage: 'Completed',
+        progress: 1,
+        audioUrl: publicAudioUrl,
       });
-      
-      await supabase.from('tracks').update({ 
-        audio_url: localAudioUrl, 
-        status: 'completed', 
-        progress: 1, 
-        current_stage: 'Completed' 
-      }).eq('id', trackId);
 
-      // 7. Handle Video 
+      const { error: audioDbErr } = await supabase.from('tracks').update({
+        audio_url: publicAudioUrl,
+        status: 'completed',
+        progress: 1,
+        current_stage: 'Completed',
+      }).eq('id', trackId);
+      if (audioDbErr) console.error('[tracks] audio finalize', trackId, audioDbErr.message);
+
+      // 7. Handle Video (uses stable HTTPS URL)
       if (runtimeInput.videoStyle) {
-        runAsyncVideoRender(trackId, creationId, runtimeInput, trackTitle, localAudioUrl, dna, []).catch(console.warn);
+        runAsyncVideoRender(trackId, creationId, runtimeInput, trackTitle, publicAudioUrl, dna, []).catch(console.warn);
       }
 
       return 'completed';
@@ -1577,6 +1627,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       vocalLanguage: creation.vocalLanguage,
       lyricsText: creation.lyricsText,
       artistInspiration: creation.artistInspiration,
+      videoStyle: creation.videoStyle,
     };
 
     const track = creation.tracks.find(t => t.id === trackId);
