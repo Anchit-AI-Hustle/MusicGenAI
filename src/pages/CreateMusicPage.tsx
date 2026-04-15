@@ -335,17 +335,21 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     const structured = result.structured;
     if (!structured) return false;
 
-    updateSongPrompt(prev => ({
-      ...prev,
-      genre: structured.genre?.length ? structured.genre[0] : prev.genre,
-      mood: structured.mood || prev.mood,
-      tempo: structured.tempo ? Math.max(60, Math.min(200, parseInt(structured.tempo) || prev.tempo)) : prev.tempo,
-      artistInspiration: structured.artist_inspiration || prev.artistInspiration,
-      lyricsText: structured.lyrics || prev.lyricsText,
-      songDescription: structured.description || structured.prompt || result.suggestion || prev.songDescription,
-      subgenre: structured.subgenre && Array.isArray(structured.subgenre) ? structured.subgenre.join(', ') : (structured.subgenre || prev.subgenre),
-      lyricsTheme: structured.lyricTheme || prev.lyricsTheme,
-    }));
+    updateSongPrompt(prev => {
+      const next: SongPromptState = {
+        ...prev,
+        genre: (structured.genre && structured.genre.length > 0) ? structured.genre[0] : prev.genre,
+        mood: structured.mood || prev.mood,
+        tempo: structured.tempo ? Math.max(60, Math.min(200, parseInt(structured.tempo) || prev.tempo)) : prev.tempo,
+        artistInspiration: structured.artist_inspiration || prev.artistInspiration,
+        lyricsText: structured.lyrics || prev.lyricsText,
+        songDescription: structured.description || structured.prompt || result.suggestion || prev.songDescription,
+        subgenre: Array.isArray(structured.subgenre) ? structured.subgenre.join(', ') : (structured.subgenre || prev.subgenre),
+        lyricsTheme: structured.lyricTheme || prev.lyricsTheme,
+        energyLevel: structured.energy ? Math.max(1, Math.min(10, parseInt(structured.energy) || prev.energyLevel)) : prev.energyLevel,
+      };
+      return next;
+    });
     return true;
   };
 
