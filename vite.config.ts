@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "pwa-icon-192.png", "pwa-icon-512.png"],
+      includeAssets: ["favicon.ico", "favicon.png", "pwa-icon-192.png", "pwa-icon-512.png"],
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         navigateFallbackDenylist: [/^\/~oauth/],
@@ -31,7 +31,7 @@ export default defineConfig(({ mode }) => ({
         name: "MuseVibe Studio",
         short_name: "MuseVibe",
         description: "AI-Powered Music Creation Platform",
-        theme_color: "#7c3aed",
+        theme_color: "#22d3ee",
         background_color: "#0a0a0f",
         display: "standalone",
         orientation: "portrait",
