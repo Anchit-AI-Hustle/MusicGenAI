@@ -1203,42 +1203,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                     />
                   </motion.div>
                 </div>
-              </div>ue })} className="bg-input border-border" />
-              </motion.div>
+              </div>
 
-              {/* Video */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="glass-card rounded-xl p-4 sm:p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Video className="w-5 h-5 text-muted-foreground" />
-                    <div>
-                      <Label className="text-foreground font-medium">Generate Video</Label>
-                      <p className="text-sm text-muted-foreground">Create a visual accompaniment</p>
-                    </div>
-                  </div>
-                  <Switch checked={visualizerEnabled} onCheckedChange={setGenerateVideo} />
-                </div>
-                <AnimatePresence>
-                  {visualizerEnabled && (
-                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-6">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
-                        <div className="flex items-center gap-2">
-                          <Palette className="w-5 h-5 text-muted-foreground" />
-                          <Label className="text-foreground font-medium">Video Style</Label>
-                        </div>
-                        <AiToolbar field="videoStyle" />
-                      </div>
-                      <SmartSearchInput
-                        value={videoStyle}
-                        onChange={(val: string) => updateSongPrompt({ videoStyle: val })}
-                        options={PRESET_VIDEO_STYLES}
-                        placeholder="e.g., Abstract geometric visuals..."
-                      />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-                {/* Visualizer Cluster */}
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-accent/30 transition-all">
+            {/* Visualizer Cluster */}
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-accent/30 transition-all">
                   <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-accent to-accent/80 flex items-center justify-center shadow-lg shadow-accent/20">
