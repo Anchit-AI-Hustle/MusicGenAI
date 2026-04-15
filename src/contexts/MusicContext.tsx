@@ -966,6 +966,12 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     ));
     if (pool.length === 0) return currentValue;
 
+    // Shuffle pool to ensure unique random suggestion every time
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+
     const seen = new Set<string>([
       normalizeToken(currentValue),
       ...history.map(normalizeToken),

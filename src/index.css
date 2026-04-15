@@ -83,7 +83,7 @@
 @layer components {
   /* Glassmorphism card effect */
   .glass-card {
-    @apply bg-card/80 backdrop-blur-xl border border-border/50;
+    @apply bg-white/5 backdrop-blur-2xl border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.12)] shadow-black/40;
   }
 
   /* Glow effects */

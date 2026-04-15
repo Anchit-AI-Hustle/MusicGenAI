@@ -11,6 +11,8 @@ import { CreateMusicPage } from './CreateMusicPage';
 import { DashboardPage } from './DashboardPage';
 import { AccountSettingsPage } from './AccountSettingsPage';
 import { SongDetailPage } from './SongDetailPage';
+import { GlobalGenerationTicker } from '@/components/layout/GlobalGenerationTicker';
+import { AnimatedBackground } from '@/components/layout/AnimatedBackground';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Loader2 } from 'lucide-react';
 
@@ -60,7 +62,9 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-transparent relative overflow-x-hidden text-white selection:bg-primary/30">
+      <AnimatedBackground />
+      <GlobalGenerationTicker onNavigate={handleNavigate} />
       <Sidebar currentPage={currentPage === 'song-detail' ? 'dashboard' : currentPage} onNavigate={handleNavigate} onAuthClick={() => setShowAuthModal(true)} />
       <main className={`${isMobile ? "pt-16" : "ml-64 transition-all duration-300"} ${currentTrack ? 'pb-24' : ''}`}>
         {renderPage()}

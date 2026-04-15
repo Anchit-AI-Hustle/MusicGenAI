@@ -535,85 +535,42 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     vocalArrangement, lyricsTheme
   ]);
 
-  const visualizerEnabledTrack = async (ctx: any) => {
-    if (videoPollRef.current) {
-      clearInterval(videoPollRef.current);
-      videoPollRef.current = null;
-    }
-    setVideoStatus("generating");
-    setVideoUrl(null);
-    setVideoError(null);
-
-    try {
-      const res = await fetch("/api/video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(ctx),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? `Video API failed: ${res.status}`);
-      }
-
-      const data = await res.json();
-
-      if (data.videoUrl) {
-        setVideoUrl(data.videoUrl);
-        setVideoStatus("succeeded");
-        return;
-      }
-
-      if (data.jobId) {
-        setVideoStatus("polling");
-        videoPollRef.current = setInterval(async () => {
-          try {
-            const statusRes = await fetch(`/api/video/status?jobId=${data.jobId}`);
-            const statusData = await statusRes.json();
-
-            if (statusData.status === "succeeded" && statusData.videoUrl) {
-              clearInterval(videoPollRef.current!);
-              videoPollRef.current = null;
-              setVideoUrl(statusData.videoUrl);
-              setVideoStatus("succeeded");
-            } else if (statusData.status === "failed" || statusData.status === "canceled") {
-              clearInterval(videoPollRef.current!);
-              videoPollRef.current = null;
-              setVideoStatus("failed");
-              setVideoError(statusData.error ?? "Video generation failed");
-            }
-          } catch (pollErr) {
-            clearInterval(videoPollRef.current!);
-            videoPollRef.current = null;
-            setVideoStatus("failed");
-            setVideoError((pollErr as Error).message);
-          }
-        }, 4000);
-      }
-    } catch (err) {
-      setVideoStatus("failed");
-      setVideoError((err as Error).message);
-    }
-  };
-
   useEffect(() => {
-    return () => {
-      if (videoPollRef.current) clearInterval(videoPollRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    // Determine if audio is done for current session
-    if (currentCreation?.status === "completed" && visualizerEnabled && currentCreation.tracks[0]?.audioUrl && videoStatus === 'idle') {
-      visualizerEnabledTrack(contextRef.current);
+    // Check if the current creation has a track with video status
+    if (currentCreation?.tracks?.[0]) {
+      const track = currentCreation.tracks[0];
+      if (track.videoUrl) {
+         setVideoUrl(track.videoUrl);
+         setVideoStatus("succeeded");
+      } else if (track.status === 'audio_complete_video_failed' || track.status === 'failed') {
+         setVideoStatus("failed");
+         setVideoError(track.errorMessage || "Video generation failed");
+      } else if (visualizerEnabled && track.status !== 'pending' && track.status !== 'idle') {
+         setVideoStatus("generating");
+      }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCreation?.status, currentCreation?.tracks, visualizerEnabled]);
+  }, [currentCreation?.tracks, visualizerEnabled]);
 
   const handleGenerate = async () => {
     if (!isAuthenticated) { onAuthClick(); return; }
 
-    console.log("[Generate] Context being sent:", JSON.stringify(contextRef.current, null, 2));
+    const ctx = contextRef.current;
+
+    // Duplicate prompt detection
+    if (mode === 'song') {
+      const isDuplicate = creations.some(c => c.type === 'song' && c.songDescription === ctx.songDescription);
+      if (isDuplicate) {
+         const keepName = window.confirm("You are regenerating a song with the same prompt. Do you want to keep the same song name? \n\nClick 'OK' to keep the same name.\nClick 'Cancel' to enter a new name.");
+         if (!keepName) {
+            const newName = window.prompt("Enter new song name:", ctx.title || "Untitled Track");
+            if (newName === null) return; // User cancelled
+            ctx.title = newName;
+            setTitle(newName);
+         }
+      }
+    }
+
+    console.log("[Generate] Context being sent:", JSON.stringify(ctx, null, 2));
     
     // Reset video state
     setVideoStatus("idle");
@@ -632,7 +589,6 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         albumTracks,
       });
     } else {
-      const ctx = contextRef.current;
       await createMusic({
         type: 'song',
         songTitle: ctx.title || 'Untitled Track',
