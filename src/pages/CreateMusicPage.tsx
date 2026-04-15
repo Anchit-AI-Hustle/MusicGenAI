@@ -137,7 +137,7 @@ interface SongPromptState {
 
 export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick }) => {
   const { isAuthenticated } = useAuth();
-  const { createMusic, currentCreation, isCreating, aiSuggest, updateFormState, suggestionState } = useMusic();
+  const { createMusic, currentCreation, isCreating, aiSuggest, updateFormState, suggestionState, creations } = useMusic();
   const player = usePlayer();
   const [mode, setMode] = useState<'song' | 'album'>('song');
   
