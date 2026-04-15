@@ -46,6 +46,7 @@ export interface Track {
   errorMessage?: string;
   currentStage?: string;
   estimatedTimeLeft?: number;
+  lastUpdatedAt?: number;
 }
 
 export interface MusicCreation {
@@ -320,10 +321,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Helper to update track state locally
   const updateTrackLocal = (creationId: string, trackId: string, updates: Partial<Track>) => {
-    const mapTrack = (t: Track): Track => t.id === trackId ? { ...t, ...updates } : t;
     setCreations(prev => prev.map(c => {
       if (c.id !== creationId) return c;
-      const tracks = c.tracks.map(mapTrack);
+      const tracks = c.tracks.map(t => t.id === trackId ? { ...t, ...updates, lastUpdatedAt: Date.now() } : t);
       const { derivedStatus, derivedProgress } = deriveCreationState(tracks);
       return { ...c, tracks, status: derivedStatus, progress: derivedProgress };
     }));
@@ -915,6 +915,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           progress: 0,
           totalSegments: 1,
           completedSegments: 0,
+          lastUpdatedAt: Date.now(),
         })),
       };
 
@@ -1555,7 +1556,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }).eq('id', trackId);
 
     const updateTrack = (t: Track): Track =>
-      t.id === trackId ? { ...t, status: 'pending', progress: 0, errorMessage: undefined, completedSegments: 0, currentStage: 'pending', estimatedTimeLeft: 0 } : t;
+      t.id === trackId ? { ...t, status: 'pending', progress: 0, errorMessage: undefined, completedSegments: 0, currentStage: 'pending', estimatedTimeLeft: 0, lastUpdatedAt: Date.now() } : t;
     setCreations(prev => prev.map(c => c.id === creationId ? { ...c, tracks: c.tracks.map(updateTrack) } : c));
 
     toast.success('Retrying track generation...');
