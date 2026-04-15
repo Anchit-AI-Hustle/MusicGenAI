@@ -1,5 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+
+type ApiResponse = {
+  status(code: number): ApiResponse;
+  json(body: unknown): void;
+};
 
 function normalize(value: string | undefined): string {
   if (!value) return '';
@@ -15,7 +19,7 @@ function isPreviewBranchUrl(url: string, projectRef: string): boolean {
   }
 }
 
-export default async function handler(_req: VercelRequest, res: VercelResponse) {
+export default async function handler(_req: unknown, res: ApiResponse) {
   const url =
     normalize(process.env.NEXT_PUBLIC_SUPABASE_URL) ||
     normalize(process.env.VITE_SUPABASE_URL);
@@ -67,4 +71,3 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
     });
   }
 }
-
