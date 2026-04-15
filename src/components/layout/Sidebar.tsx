@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { Home, Music, LayoutDashboard, LogOut, User, ChevronLeft, ChevronRight, Menu, X, Settings } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
