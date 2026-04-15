@@ -704,18 +704,38 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     const isLoading = isSuggesting || isEnhancing || isNew;
     return (
       <div className="flex items-center gap-1.5 flex-wrap">
-        <Button variant="outline" size="sm" onClick={() => handleAiSuggest(field)} disabled={isLoading} className="text-xs h-7 px-2 border-primary/30 text-primary hover:bg-primary/10">
-          {isSuggesting ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Wand2 className="w-3 h-3 mr-1" />} AI Suggest
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => handleEnhance(field)} disabled={isLoading} className="text-xs h-7 px-2 border-accent/30 text-accent hover:bg-accent/10">
-          {isEnhancing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Zap className="w-3 h-3 mr-1" />} Enhance
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => handleNewSuggestion(field)} disabled={isLoading} className="text-xs h-7 px-2 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50">
-          {isNew ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />} New
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => handleClear(field)} disabled={isLoading} className="text-xs h-7 px-2 text-muted-foreground hover:text-destructive">
-          <Trash2 className="w-3 h-3 mr-1" /> Clear
-        </Button>
+        <button 
+          onClick={() => handleAiSuggest(field)} 
+          disabled={isLoading} 
+          title="AI Suggest"
+          className="p-1.5 rounded-lg border border-primary/20 bg-primary/5 text-primary hover:bg-primary hover:text-black transition-all disabled:opacity-50"
+        >
+          {isSuggesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+        </button>
+        <button 
+          onClick={() => handleEnhance(field)} 
+          disabled={isLoading} 
+          title="Enhance"
+          className="p-1.5 rounded-lg border border-accent/20 bg-accent/5 text-accent hover:bg-accent hover:text-black transition-all disabled:opacity-50"
+        >
+          {isEnhancing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+        </button>
+        <button 
+          onClick={() => handleNewSuggestion(field)} 
+          disabled={isLoading} 
+          title="New Alternative"
+          className="p-1.5 rounded-lg border border-white/10 bg-white/5 text-white/60 hover:text-white hover:bg-white/20 transition-all disabled:opacity-50"
+        >
+          {isNew ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+        </button>
+        <button 
+          onClick={() => handleClear(field)} 
+          disabled={isLoading} 
+          title="Clear"
+          className="p-1.5 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-50"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       </div>
     );
   };
@@ -921,204 +941,269 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                 />
               </motion.div>
 
-              {/* Tempo */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }} className="glass-card rounded-xl p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
-                  <div className="flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-muted-foreground" />
-                    <Label className="text-foreground font-medium">Tempo (BPM)</Label>
-                    <span className="ml-2 text-lg font-display text-primary">{tempo} BPM</span>
+              {/* Tempo & Duration Cluster */}
+              <div className="grid sm:grid-cols-2 gap-4">
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.22 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-primary/20 transition-all group">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                        <Activity className="w-5 h-5 text-primary" />
+                      </div>
+                      <Label className="text-white font-bold text-lg tracking-tight">Tempo</Label>
+                    </div>
+                    <AiToolbar field="tempo" />
                   </div>
-                  <AiToolbar field="tempo" />
-                </div>
-                <Slider value={[tempo]} onValueChange={v => updateSongPrompt({ tempo: v[0] })} min={60} max={200} step={1} className="mb-3" />
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>60 BPM (Slow)</span><span>200 BPM (Fast)</span>
-                </div>
-              </motion.div>
+                  <div className="mb-6 flex items-baseline gap-2">
+                    <span className="text-4xl font-black text-white tracking-tighter">{tempo}</span>
+                    <span className="text-xs font-black text-primary/60 tracking-widest uppercase mb-1">BPM</span>
+                  </div>
+                  <Slider value={[tempo]} onValueChange={v => updateSongPrompt({ tempo: v[0] })} min={60} max={200} step={1} />
+                  <div className="flex justify-between text-[10px] uppercase font-black text-white/20 tracking-widest mt-4">
+                    <span>Largo</span><span>Presto</span>
+                  </div>
+                </motion.div>
 
-              {/* Duration */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card rounded-xl p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-4">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-muted-foreground" />
-                    <Label className="text-foreground font-medium">Duration</Label>
-                    <span className="ml-2 text-lg font-display text-primary">{formatDuration(duration)}</span>
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.23 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-primary/20 transition-all group">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                        <Clock className="w-5 h-5 text-primary" />
+                      </div>
+                      <Label className="text-white font-bold text-lg tracking-tight">Length</Label>
+                    </div>
+                    <AiToolbar field="duration" />
                   </div>
-                  <AiToolbar field="duration" />
-                </div>
-                <Slider value={[duration]} onValueChange={updateFromSlider} max={600} min={30} step={1} className="mb-6" />
-                <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <Input type="number" min={0} max={1} value={hours} onChange={e => setHours(Math.min(1, parseInt(e.target.value) || 0))} className="w-14 sm:w-16 bg-input border-border text-center" />
-                    <span className="text-muted-foreground text-sm">HH</span>
+                  <div className="mb-6 flex items-baseline gap-2">
+                    <span className="text-4xl font-black text-white tracking-tighter">{formatDuration(duration)}</span>
+                    <span className="text-xs font-black text-primary/60 tracking-widest uppercase mb-1">M:S</span>
                   </div>
-                  <span className="text-muted-foreground">:</span>
-                  <div className="flex items-center gap-2">
-                    <Input type="number" min={0} max={59} value={minutes} onChange={e => setMinutes(Math.min(59, parseInt(e.target.value) || 0))} className="w-14 sm:w-16 bg-input border-border text-center" />
-                    <span className="text-muted-foreground text-sm">MM</span>
+                  <Slider value={[duration]} onValueChange={v => updateSongPrompt({ duration: v[0] })} min={30} max={600} step={1} />
+                  <div className="flex justify-between text-[10px] uppercase font-black text-white/20 tracking-widest mt-4">
+                    <span>Short</span><span>Epic</span>
                   </div>
-                  <span className="text-muted-foreground">:</span>
-                  <div className="flex items-center gap-2">
-                    <Input type="number" min={0} max={59} value={seconds} onChange={e => setSeconds(Math.min(59, parseInt(e.target.value) || 0))} className="w-14 sm:w-16 bg-input border-border text-center" />
-                    <span className="text-muted-foreground text-sm">SS</span>
+                </motion.div>
+              </div>
+
+              {/* Energy & Instruments Cluster */}
+              <div className="grid sm:grid-cols-2 gap-4">
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.24 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-accent/20 transition-all group">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-accent/10 flex items-center justify-center group-hover:bg-accent/20 transition-colors">
+                        <Zap className="w-5 h-5 text-accent" />
+                      </div>
+                      <Label className="text-white font-bold text-lg tracking-tight">Energy</Label>
+                    </div>
+                    <AiToolbar field="energyLevel" />
                   </div>
-                </div>
-              </motion.div>
+                  <div className="mb-6 flex items-baseline gap-2">
+                    <span className="text-4xl font-black text-white tracking-tighter">{energyLevel}</span>
+                    <span className="text-xs font-black text-accent/60 tracking-widest uppercase mb-1">Intensity</span>
+                  </div>
+                  <Slider value={[energyLevel]} onValueChange={v => updateSongPrompt({ energyLevel: v[0] })} min={1} max={10} step={1} />
+                  <div className="flex justify-between text-[10px] uppercase font-black text-white/20 tracking-widest mt-4">
+                    <span>Ambient</span><span>Aggressive</span>
+                  </div>
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.25 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-accent/20 transition-all">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-accent/10 flex items-center justify-center">
+                        <Music className="w-5 h-5 text-accent" />
+                      </div>
+                      <Label className="text-white font-bold text-lg tracking-tight">Orchestra</Label>
+                    </div>
+                    <AiToolbar field="instruments" />
+                  </div>
+                  <SmartSearchInput
+                    value={instruments}
+                    onChange={(val: string[]) => updateSongPrompt({ instruments: val })}
+                    options={['Grand Piano', 'Acoustic Guitar', 'Hardware Synth', '808 Drums', 'Violin Section', 'Electric Bass']}
+                    placeholder="Specific instruments..."
+                    multiSelect
+                  />
+                </motion.div>
+              </div>
+
+              {/* Performance Section */}
+              <div className="flex items-center gap-3 mb-4 mt-12">
+                <div className="h-0.5 flex-1 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+                <span className="text-[10px] uppercase font-black tracking-[0.4em] text-white/30">Performance & Tone</span>
+                <div className="h-0.5 flex-1 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+              </div>
 
               {/* Mood */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.31 }} className="glass-card rounded-xl p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
-                  <Label className="text-foreground font-medium">Mood</Label>
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.31 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-primary/20 transition-all group mb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                      <Sparkles className="w-5 h-5 text-primary" />
+                    </div>
+                    <Label className="text-white font-bold text-lg tracking-tight">Mood</Label>
+                  </div>
                   <AiToolbar field="mood" />
                 </div>
                 <SmartSearchInput
                   value={mood}
                   onChange={(val: string) => updateSongPrompt({ mood: val })}
                   options={PRESET_MOODS}
-                  placeholder="e.g., Dark, euphoric, melancholic..."
+                  placeholder="Describe the emotional landscape..."
                 />
               </motion.div>
 
               {/* Song Structure */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32 }} className="glass-card rounded-xl p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
-                  <Label className="text-foreground font-medium">Song Structure</Label>
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.32 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-primary/20 transition-all group mb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                      <AudioWaveform className="w-5 h-5 text-primary" />
+                    </div>
+                    <Label className="text-white font-bold text-lg tracking-tight">Song Structure</Label>
+                  </div>
                   <AiToolbar field="structureType" />
                 </div>
                 <SmartSearchInput
                   value={structureType}
                   onChange={(val: string) => updateSongPrompt({ structureType: val })}
                   options={SONG_STRUCTURE_PRESETS}
-                  placeholder="e.g., Intro → Verse → Chorus → Outro"
+                  placeholder="Set the journey (e.g., Intro → Hook → Bridge)..."
                 />
               </motion.div>
 
-              {/* Vocal Structure */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.33 }} className="glass-card rounded-xl p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
-                  <div className="flex items-center gap-2">
-                    <AudioWaveform className="w-5 h-5 text-muted-foreground" />
-                    <Label className="text-foreground font-medium">Vocal Arrangement</Label>
-                  </div>
-                  <AiToolbar field="vocalArrangement" />
-                </div>
-                <SmartSearchInput
-                  value={vocalArrangement}
-                  onChange={(val: string) => updateSongPrompt({ vocalArrangement: val })}
-                  options={VOCAL_STRUCTURE_PRESETS}
-                  placeholder="e.g., Verse - Chorus - Verse"
-                />
-              </motion.div>
-
-              {/* Vocal Style */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.34 }} className="glass-card rounded-xl p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
-                  <div className="flex items-center gap-2">
-                    <Mic2 className="w-5 h-5 text-muted-foreground" />
-                    <Label className="text-foreground font-medium">Vocal Style / Delivery</Label>
-                  </div>
-                  <AiToolbar field="vocalStyle" />
-                </div>
-                <SmartSearchInput
-                  value={vocalStyle}
-                  onChange={(val: string) => updateSongPrompt({ vocalStyle: val })}
-                  options={PRESET_VOCAL_STYLES}
-                  placeholder="e.g., Male Vocal, Rap, Ethereal..."
-                />
-              </motion.div>
-
-              {/* Vocal Intensity */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="glass-card rounded-xl p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-muted-foreground" />
-                    <Label className="text-foreground font-medium">Vocal Intensity</Label>
-                    <span className="ml-2 text-lg font-display text-primary">{vocalIntensity}/10</span>
-                  </div>
-                  <AiToolbar field="vocalIntensity" />
-                </div>
-                <Slider value={[vocalIntensity]} onValueChange={v => updateSongPrompt({ vocalIntensity: v[0] })} min={1} max={10} step={1} className="mb-3" />
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>1 — Soft whisper</span><span>10 — Powerful performance</span>
-                </div>
-              </motion.div>
-
-              {/* Vocal Effects */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.36 }} className="glass-card rounded-xl p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
-                  <div className="flex items-center gap-2">
-                    <AudioWaveform className="w-5 h-5 text-muted-foreground" />
-                    <Label className="text-foreground font-medium">Vocal Effects</Label>
-                  </div>
-                  <AiToolbar field="vocalEffects" />
-                </div>
-                <SmartSearchInput
-                  value={selectedVocalEffects}
-                  onChange={(val: string[]) => setSelectedVocalEffects(val)}
-                  options={VOCAL_EFFECTS_OPTIONS}
-                  placeholder="Select or type effects..."
-                  multiSelect
-                />
-              </motion.div>
-
-              {/* Vocal Language */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.37 }} className="glass-card rounded-xl p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
-                  <div className="flex items-center gap-2">
-                    <Languages className="w-5 h-5 text-muted-foreground" />
-                    <Label className="text-foreground font-medium">Vocal Language(s)</Label>
-                  </div>
-                  <AiToolbar field="vocalLanguage" />
-                </div>
-                <SmartSearchInput
-                  value={vocalLanguage.split(',').map((item) => item.trim()).filter(Boolean)}
-                  onChange={(val: string[]) => setVocalLanguage(val.join(', '))}
-                  options={LANGUAGES}
-                  placeholder="Select or type language..."
-                  multiSelect
-                />
-              </motion.div>
-
-              {/* Lyric Theme */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.38 }} className="glass-card rounded-xl p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
-                  <Label className="text-foreground font-medium">Lyric Theme</Label>
-                  <AiToolbar field="lyricsTheme" />
-                </div>
-                <SmartSearchInput
-                  value={lyricsTheme}
-                  onChange={(val: string) => setLyricsTheme(val)}
-                  options={PRESET_LYRIC_THEMES}
-                  placeholder="e.g., Cyberpunk Future, Nature & Peace..."
-                />
-              </motion.div>
-
-              {/* Lyrics */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass-card rounded-xl p-4 sm:p-6">
-                <div className="flex flex-col gap-2 mb-3">
-                  <div className="flex items-center gap-2">
-                    <Mic2 className="w-5 h-5 text-muted-foreground" />
-                    <div>
-                      <Label className="text-foreground font-medium">Lyrics (optional)</Label>
-                      <p className="text-sm text-muted-foreground">Themes, stories, or full lyrics</p>
+              {/* Voice & Identity Clustering */}
+              <div className="space-y-4 pt-4">
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.35 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-primary/30 transition-all">
+                  <div className="flex items-center justify-between mb-8 overflow-x-auto pb-2 scrollbar-hide">
+                    <div className="flex items-center gap-4 shrink-0">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20">
+                        <Mic2 className="w-6 h-6 text-black" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-black text-white tracking-tight">Voice Engine</h3>
+                        <p className="text-xs font-bold text-white/30 uppercase tracking-widest">Synthesis & Delivery</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/5 border border-white/10 shrink-0">
+                      <span className="text-[10px] font-black uppercase text-white/40">Vocals</span>
+                      <Switch checked={vocalsEnabled} onCheckedChange={setVocalsEnabled} />
                     </div>
                   </div>
-                  <AiToolbar field="lyrics" />
-                </div>
-                <Textarea placeholder="e.g., A story about finding hope after loss..." value={lyricsText} onChange={e => setLyricsText(e.target.value)} className="bg-input border-border min-h-32 resize-none" />
-              </motion.div>
 
-              {/* Artist Inspiration */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="glass-card rounded-xl p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-5 h-5 text-muted-foreground" />
-                    <Label className="text-foreground font-medium">Artist Inspiration</Label>
-                  </div>
-                  <AiToolbar field="artistInspiration" />
+                  <AnimatePresence>
+                    {vocalsEnabled && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }} 
+                        animate={{ opacity: 1, height: 'auto' }} 
+                        exit={{ opacity: 0, height: 0 }}
+                        className="space-y-8 overflow-hidden"
+                      >
+                        <div className="grid sm:grid-cols-2 gap-6">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs font-black uppercase tracking-widest text-white/40">Arrangement</Label>
+                              <AiToolbar field="vocalArrangement" />
+                            </div>
+                            <SmartSearchInput
+                              value={vocalArrangement}
+                              onChange={(val: string) => updateSongPrompt({ vocalArrangement: val })}
+                              options={VOCAL_STRUCTURE_PRESETS}
+                              placeholder="Solo, Duet, etc..."
+                            />
+                          </div>
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs font-black uppercase tracking-widest text-white/40">Language</Label>
+                              <AiToolbar field="vocalLanguage" />
+                            </div>
+                            <SmartSearchInput
+                              value={vocalLanguage.split(',').map((item) => item.trim()).filter(Boolean)}
+                              onChange={(val: string[]) => setVocalLanguage(val.join(', '))}
+                              options={LANGUAGES}
+                              placeholder="English, Spanish, etc..."
+                              multiSelect
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-black uppercase tracking-widest text-white/40">Intensity & Dynamics</Label>
+                            <AiToolbar field="vocalIntensity" />
+                          </div>
+                          <div className="flex items-baseline gap-3 mb-2">
+                             <span className="text-3xl font-black text-primary tracking-tighter">{vocalIntensity}</span>
+                             <span className="text-[10px] uppercase font-bold text-white/20">Energy Scale</span>
+                          </div>
+                          <Slider value={[vocalIntensity]} onValueChange={v => updateSongPrompt({ vocalIntensity: v[0] })} min={1} max={10} step={1} />
+                        </div>
+
+                        <div className="grid sm:grid-cols-2 gap-6">
+                           <div className="space-y-3">
+                             <div className="flex items-center justify-between">
+                               <Label className="text-xs font-black uppercase tracking-widest text-white/40">Vocal Style</Label>
+                               <AiToolbar field="vocalStyle" />
+                             </div>
+                             <SmartSearchInput
+                               value={vocalStyle}
+                               onChange={(val: string) => updateSongPrompt({ vocalStyle: val })}
+                               options={PRESET_VOCAL_STYLES}
+                               placeholder="e.g., Ethereal, Rap..."
+                             />
+                           </div>
+                           <div className="space-y-3">
+                             <div className="flex items-center justify-between">
+                               <Label className="text-xs font-black uppercase tracking-widest text-white/40">Studio Effects</Label>
+                               <AiToolbar field="vocalEffects" />
+                             </div>
+                             <SmartSearchInput
+                               value={selectedVocalEffects}
+                               onChange={(val: string[]) => setSelectedVocalEffects(val)}
+                               options={VOCAL_EFFECTS_OPTIONS}
+                               placeholder="Reverb, Delay..."
+                               multiSelect
+                             />
+                           </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+
+                {/* Lyrics & Inspiration Cluster */}
+                <div className="grid gap-4">
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-primary/20 transition-all">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center">
+                          <Palette className="w-5 h-5 text-white/60" />
+                        </div>
+                        <Label className="text-white font-bold text-lg tracking-tight">Narrative & Lyrics</Label>
+                      </div>
+                      <AiToolbar field="lyrics" />
+                    </div>
+                    <Textarea 
+                      placeholder="Share the story, theme, or specific lyrics..." 
+                      value={lyricsText} 
+                      onChange={e => setLyricsText(e.target.value)} 
+                      className="bg-black/20 border-white/5 min-h-[140px] rounded-2xl focus:border-primary/50 transition-all placeholder:text-white/10" 
+                    />
+                  </motion.div>
+
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.42 }} className="glass-card rounded-[32px] p-6 border-white/5">
+                    <div className="flex items-center justify-between mb-3">
+                      <Label className="text-[10px] uppercase font-black tracking-widest text-white/30">Artist Influence</Label>
+                      <AiToolbar field="artistInspiration" />
+                    </div>
+                    <Input 
+                      placeholder="Target specific artist vibes..." 
+                      value={artistInspiration} 
+                      onChange={e => updateSongPrompt({ artistInspiration: e.target.value })} 
+                      className="bg-black/20 border-white/5 h-14 rounded-xl font-bold text-white focus:ring-primary/20" 
+                    />
+                  </motion.div>
                 </div>
-                <Input placeholder="e.g., Tame Impala, Daft Punk, Billie Eilish..." value={artistInspiration} onChange={e => updateSongPrompt({ artistInspiration: e.target.value })} className="bg-input border-border" />
+              </div>ue })} className="bg-input border-border" />
               </motion.div>
 
               {/* Video */}
@@ -1152,9 +1237,50 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </motion.div>
-            </>
-          )}
+                {/* Visualizer Cluster */}
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-accent/30 transition-all">
+                  <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-accent to-accent/80 flex items-center justify-center shadow-lg shadow-accent/20">
+                        <Video className="w-6 h-6 text-black" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-black text-white tracking-tight">Visual Engine</h3>
+                        <p className="text-xs font-bold text-white/30 uppercase tracking-widest">Video Synthesis</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/5 border border-white/10">
+                      <span className="text-[10px] font-black uppercase text-white/40">Render</span>
+                      <Switch checked={visualizerEnabled} onCheckedChange={setGenerateVideo} />
+                    </div>
+                  </div>
+
+                  <AnimatePresence>
+                    {visualizerEnabled && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }} 
+                        animate={{ opacity: 1, height: 'auto' }} 
+                        exit={{ opacity: 0, height: 0 }}
+                        className="space-y-6 overflow-hidden"
+                      >
+                         <div className="space-y-3">
+                           <div className="flex items-center justify-between">
+                             <Label className="text-xs font-black uppercase tracking-widest text-white/40">Visual Aesthetic</Label>
+                             <AiToolbar field="videoStyle" />
+                           </div>
+                           <SmartSearchInput
+                             value={videoStyle}
+                             onChange={(val: string) => updateSongPrompt({ videoStyle: val })}
+                             options={PRESET_VIDEO_STYLES}
+                             placeholder="Cinematic, 3D Abstract, etc..."
+                           />
+                         </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              </>
+            )}
 
           {/* Generate Button */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}>

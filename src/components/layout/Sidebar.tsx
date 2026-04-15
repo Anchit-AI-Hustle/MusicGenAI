@@ -31,104 +31,120 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
   const showLabels = !isCollapsed || isMobile;
 
   const MobileMenuButton = () => (
-    <button onClick={() => setIsMobileOpen(true)} className="fixed top-4 left-4 z-40 p-3 rounded-xl bg-sidebar border border-sidebar-border lg:hidden">
-      <Menu className="w-5 h-5 text-foreground" />
+    <button onClick={() => setIsMobileOpen(true)} className="fixed top-4 left-4 z-40 p-3 rounded-2xl bg-black/40 backdrop-blur-xl border border-white/10 lg:hidden shadow-2xl">
+      <Menu className="w-5 h-5 text-white" />
     </button>
   );
 
   const sidebarContent = (
     <aside
       className={cn(
-        "fixed left-0 top-0 h-full bg-sidebar border-r border-sidebar-border flex flex-col z-50",
-        isMobile ? "w-64 transition-transform duration-200 ease-out" : cn(isCollapsed ? "w-20" : "w-64", "transition-all duration-200"),
+        "fixed left-0 top-0 h-full bg-black/40 backdrop-blur-3xl border-r border-white/10 flex flex-col z-50 shadow-[4px_0_24px_rgba(0,0,0,0.5)]",
+        isMobile ? "w-72 transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]" : cn(isCollapsed ? "w-20" : "w-64", "transition-all duration-300 ease-in-out"),
         isMobile && !isMobileOpen && "-translate-x-full",
         isMobile && isMobileOpen && "translate-x-0",
       )}
     >
       {isMobile && (
-        <button onClick={() => setIsMobileOpen(false)} className="absolute top-4 right-4 p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors">
+        <button onClick={() => setIsMobileOpen(false)} className="absolute top-6 right-6 p-2 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all">
           <X className="w-5 h-5" />
         </button>
       )}
 
-      <div className="p-6 border-b border-sidebar-border">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center glow-primary flex-shrink-0">
-            <Music className="w-5 h-5 text-primary-foreground" />
+      <div className="p-8 pb-10">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary via-primary/80 to-accent flex items-center justify-center shadow-[0_0_20px_rgba(var(--primary),0.3)] shrink-0">
+            <Music className="w-6 h-6 text-black font-bold" />
           </div>
           {showLabels && (
             <div className="overflow-hidden">
-              <h1 className="font-display font-bold text-lg text-foreground whitespace-nowrap">MuseVibe Studio</h1>
-              <p className="text-xs text-muted-foreground whitespace-nowrap">Create with AI</p>
+              <h1 className="font-display font-bold text-xl text-white tracking-tight -mb-1">MuseVibe</h1>
+              <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-primary/80">Creator Studio</span>
             </div>
           )}
         </div>
       </div>
 
       {!isMobile && (
-        <button onClick={() => setIsCollapsed(!isCollapsed)} className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-sidebar border border-sidebar-border flex items-center justify-center hover:bg-sidebar-accent transition-colors">
-          {isCollapsed ? <ChevronRight className="w-3 h-3 text-muted-foreground" /> : <ChevronLeft className="w-3 h-3 text-muted-foreground" />}
+        <button 
+          onClick={() => setIsCollapsed(!isCollapsed)} 
+          className="absolute -right-3 top-24 w-6 h-6 rounded-full bg-primary border border-white/20 flex items-center justify-center hover:scale-110 transition-all shadow-[0_0_15px_rgba(var(--primary),0.5)]"
+        >
+          {isCollapsed ? <ChevronRight className="w-3 h-3 text-black" /> : <ChevronLeft className="w-3 h-3 text-black" />}
         </button>
       )}
 
-      <nav className="flex-1 p-4">
-        <ul className="space-y-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentPage === item.id;
-            return (
-              <li key={item.id}>
-                <button
-                  onClick={() => handleNavigate(item.id)}
-                  title={!showLabels ? item.label : undefined}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors group",
-                    !showLabels && "justify-center px-3",
-                    isActive ? "bg-sidebar-accent text-sidebar-primary" : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-foreground",
-                  )}
-                >
-                  <Icon className={cn("w-5 h-5 flex-shrink-0", isActive ? "text-sidebar-primary" : "text-muted-foreground group-hover:text-primary")} />
-                  {showLabels && <span className="font-medium whitespace-nowrap overflow-hidden">{item.label}</span>}
-                  {isActive && showLabels && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+      <nav className="flex-1 px-4 space-y-2">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = currentPage === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => handleNavigate(item.id)}
+              className={cn(
+                "w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group relative overflow-hidden",
+                !showLabels && "justify-center px-0",
+                isActive 
+                  ? "bg-white/10 text-white shadow-[0_4px_12px_rgba(0,0,0,0.1)]" 
+                  : "text-white/50 hover:text-white hover:bg-white/5",
+              )}
+            >
+              {isActive && (
+                <motion.div 
+                  layoutId="active-pill" 
+                  className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-full" 
+                />
+              )}
+              <Icon className={cn(
+                "w-5 h-5 transition-all duration-300", 
+                isActive ? "text-primary scale-110" : "group-hover:text-primary group-hover:scale-110"
+              )} />
+              {showLabels && <span className={cn("font-semibold text-sm tracking-wide", isActive ? "opacity-100" : "opacity-80 group-hover:opacity-100")}>{item.label}</span>}
+            </button>
+          );
+        })}
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border">
-        {isAuthenticated ? (
-          <div className="space-y-3">
-            <div className={cn("flex items-center gap-3 px-3 py-2", !showLabels && "justify-center px-0")}>
-              <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
-                <User className="w-4 h-4 text-muted-foreground" />
-              </div>
-              {showLabels && (
-                <div className="flex-1 min-w-0 overflow-hidden">
-                  <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{user?.mobileNumber}</p>
+      <div className="p-6 mt-auto">
+        <div className="p-4 rounded-3xl bg-white/5 border border-white/5 space-y-4">
+          {isAuthenticated ? (
+            <div className="space-y-4">
+              <div className={cn("flex items-center gap-3", !showLabels && "justify-center")}>
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-white/10 to-white/20 flex items-center justify-center shrink-0 border border-white/10">
+                  <User className="w-5 h-5 text-white/80" />
                 </div>
-              )}
+                {showLabels && (
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <p className="text-xs font-bold text-white truncate">{user?.name}</p>
+                    <p className="text-[10px] text-white/40 truncate font-mono">{user?.mobileNumber}</p>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={logout}
+                className={cn(
+                  "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-all duration-300", 
+                  !showLabels && "justify-center px-0"
+                )}
+              >
+                <LogOut className="w-4 h-4" />
+                {showLabels && <span className="text-xs font-bold uppercase tracking-wider">Sign Out</span>}
+              </button>
             </div>
+          ) : (
             <button
-              onClick={logout}
-              title={!showLabels ? "Logout" : undefined}
-              className={cn("w-full flex items-center gap-3 px-4 py-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors", !showLabels && "justify-center px-3")}
+              onClick={() => { onAuthClick(); if (isMobile) setIsMobileOpen(false); }}
+              className={cn(
+                "w-full flex items-center justify-center gap-2 px-4 py-4 rounded-2xl bg-gradient-to-r from-primary to-primary/80 text-black font-bold text-sm tracking-tight transition-all hover:scale-[1.02] active:scale-[0.98] shadow-[0_10px_20px_-5px_rgba(var(--primary),0.4)]", 
+                !showLabels && "px-0"
+              )}
             >
-              <LogOut className="w-4 h-4 flex-shrink-0" />
-              {showLabels && <span className="text-sm whitespace-nowrap overflow-hidden">Logout</span>}
+              <User className="w-5 h-5" />
+              {showLabels && <span>Get Started</span>}
             </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => { onAuthClick(); if (isMobile) setIsMobileOpen(false); }}
-            className={cn("w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-gradient-primary text-primary-foreground font-medium transition-colors hover:opacity-90 glow-primary", !showLabels && "px-3")}
-          >
-            <User className="w-4 h-4 flex-shrink-0" />
-            {showLabels && <span className="whitespace-nowrap overflow-hidden">Sign In</span>}
-          </button>
-        )}
+          )}
+        </div>
       </div>
     </aside>
   );
@@ -137,13 +153,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
     return (
       <>
         <MobileMenuButton />
-        {/* Overlay */}
-        {isMobileOpen && (
-          <div
-            onClick={() => setIsMobileOpen(false)}
-            className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden"
-          />
-        )}
+        <AnimatePresence>
+          {isMobileOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-md z-40 lg:hidden"
+            />
+          )}
+        </AnimatePresence>
         {sidebarContent}
       </>
     );
