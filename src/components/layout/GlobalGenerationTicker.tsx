@@ -1,19 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useMusic } from '@/contexts/MusicContext';
-import { Loader2, Music, ChevronRight, Download, Play, Pause, RefreshCw, X, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Music, ChevronRight, Download, RefreshCw, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { toast } from 'sonner';
 
 export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, params?: Record<string, string>) => void }> = ({ onNavigate }) => {
   const { creations, retryTrack } = useMusic();
-  const [, setTick] = useState(0);
   const [isVisible, setIsVisible] = useState(true);
 
-  useEffect(() => {
-    const interval = setInterval(() => setTick(t => t + 1), 5000);
-    return () => clearInterval(interval);
-  }, []);
-  
   const displayCreations = creations
     .filter(c => c.status !== 'completed')
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -26,25 +19,17 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
     'uploading_video', 'finalizing',
   ]);
 
-  const handleCancel = async (creationId: string, e: React.MouseEvent) => {
+  const handleHide = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsVisible(false);
-    setTimeout(() => {
-      toast.success('Generation hidden. Check dashboard for status.');
-    }, 500);
   };
 
-  const handleDownload = async (creationId: string, track: any, e: React.MouseEvent) => {
+  const handleDownload = async (track: any, e: React.MouseEvent) => {
     e.stopPropagation();
     const audioUrl = track?.audioUrl;
     const videoUrl = track?.videoUrl;
     
-    if (!audioUrl && !videoUrl) {
-      toast.error('No files available to download');
-      return;
-    }
-
-    toast.loading('Preparing download...', { id: 'ticker-download' });
+    if (!audioUrl && !videoUrl) return;
 
     try {
       if (audioUrl) {
@@ -55,6 +40,7 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
         a.href = url;
         a.download = `${track.title || 'track'}.wav`;
         a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
       }
 
@@ -66,12 +52,11 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
         a.href = url;
         a.download = `${track.title || 'track'}-video.mp4`;
         a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
       }
-
-      toast.success('Download started', { id: 'ticker-download' });
     } catch (err) {
-      toast.error('Download failed', { id: 'ticker-download' });
+      console.error('Download failed:', err);
     }
   };
 
@@ -101,17 +86,10 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
               }`}
               onClick={() => onNavigate('dashboard')}
             >
-              {/* Animated gradient background for active */}
-              {!isFailed && (
-                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-              )}
-              
-              {/* Progress bar */}
               {!isFailed && (
                 <div className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-primary to-accent transition-all duration-500" style={{ width: `${progress * 100}%` }} />
               )}
               
-              {/* Icon */}
               <div className="relative flex items-center justify-center w-10 h-10 mr-3 shrink-0 rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg shadow-primary/20">
                 {isFailed ? (
                   <Music className="w-5 h-5 text-white" />
@@ -123,7 +101,6 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
                 )}
               </div>
               
-              {/* Content */}
               <div className="flex flex-col flex-1 min-w-0 mr-3">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
@@ -146,7 +123,6 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
                 </span>
               </div>
 
-              {/* Action buttons */}
               <div className="flex items-center gap-1.5 shrink-0">
                 {isFailed ? (
                   <button
@@ -160,19 +136,17 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
                   </button>
                 ) : (
                   <>
-                    {/* Hide button - replaces X to hide ticker */}
-                <button
-                  onClick={(e) => handleCancel(creation.id, e)}
-                  className="w-8 h-8 rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
-                  title="Hide ticker"
-                >
-                  <EyeOff className="w-4 h-4" />
-                </button>
+                    <button
+                      onClick={handleHide}
+                      className="w-8 h-8 rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                      title="Hide ticker"
+                    >
+                      <EyeOff className="w-4 h-4" />
+                    </button>
                     
-                    {/* Download button - shows when track has audio/video */}
                     {(activeTrack?.audioUrl || activeTrack?.videoUrl) && (
                       <button
-                        onClick={(e) => handleDownload(creation.id, activeTrack, e)}
+                        onClick={(e) => handleDownload(activeTrack, e)}
                         className="w-8 h-8 rounded-lg bg-white/10 text-white/80 hover:bg-white/20 hover:text-white flex items-center justify-center transition-all"
                         title="Download"
                       >
@@ -180,7 +154,6 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
                       </button>
                     )}
                     
-                    {/* Arrow */}
                     <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
                       <ChevronRight className="w-4 h-4 text-white/60" />
                     </div>

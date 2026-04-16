@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Music, Disc, Play, Pause, Download, Calendar, Clock, Filter, Loader2, RefreshCw, X, Check, Circle, RotateCcw, ListMusic, Sparkles, TrendingUp, AudioWaveform, Heart, Zap } from 'lucide-react';
+import { Music, Disc, Play, Pause, Download, Calendar, Clock, Filter, Loader2, RefreshCw, Check, Circle, RotateCcw, ListMusic, Sparkles, TrendingUp, AudioWaveform, Heart, Zap } from 'lucide-react';
 import JSZip from 'jszip';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { Button } from '@/components/ui/button';
@@ -382,7 +382,7 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
     setIsDownloadingZip(false);
   };
 
-  return (
+return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }} 
       animate={{ opacity: 1, y: 0 }} 
