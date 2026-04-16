@@ -38,6 +38,11 @@ export interface CreativeContext {
   variationSeed: string;
   generationMode: 'fast' | 'quality' | 'standard';
 
+  // Additional properties used by router
+  instrumentalOnly?: boolean;
+  useHighQualityVocals?: boolean;
+  lyrics?: string;
+
   // Legacy/Internal (to be phased out or mapped)
   vocalLanguages?: string[];
   songStructure?: string;
