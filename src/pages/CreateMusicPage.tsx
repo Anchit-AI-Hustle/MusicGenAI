@@ -646,28 +646,44 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     document.body.removeChild(a);
   };
 
+  const handleCancelTrack = async (trackId: string) => {
+    if (!currentCreation) return;
+    try {
+      const response = await fetch('/api/generate/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trackId, creationId: currentCreation.id })
+      });
+      if (response.ok) {
+        toast.success('Generation cancelled');
+      }
+    } catch (err) {
+      console.error('Cancel failed:', err);
+    }
+  };
+
   const handleDownload = async (audioUrl?: string, trackTitle?: string) => {
     if (!audioUrl) return;
 
     try {
-      // If it's already a base64 data URL (ElevenLabs path), convert to blob
+      toast.loading('Preparing download...', { id: 'download-audio' });
+      
       if (audioUrl.startsWith("data:")) {
         const response = await fetch(audioUrl);
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         triggerDownload(url, `musevibe-${trackTitle}.mp3`);
         setTimeout(() => URL.revokeObjectURL(url), 10000);
+        toast.success('Download started', { id: 'download-audio' });
         return;
       }
 
-      // If it's a blob: URL
       if (audioUrl.startsWith("blob:")) {
         triggerDownload(audioUrl, `musevibe-${trackTitle}.wav`);
+        toast.success('Download started', { id: 'download-audio' });
         return;
       }
 
-      // If it's an external URL (Replicate or Vercel Blob)
-      // Fetch it through our own proxy to force download headers
       const response = await fetch(`/api/download?url=${encodeURIComponent(audioUrl)}`);
       if (!response.ok) throw new Error("Download fetch failed");
       const blob = await response.blob();
@@ -676,10 +692,27 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       const objectUrl = URL.createObjectURL(blob);
       triggerDownload(objectUrl, `musevibe-${trackTitle}.${ext}`);
       setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+      toast.success('Download started', { id: 'download-audio' });
     } catch (err) {
       console.error("Download failed:", err);
-      // Last resort fallback: open in new tab
-      window.open(audioUrl, "_blank");
+      toast.error('Download failed', { id: 'download-audio' });
+    }
+  };
+
+  const handleDownloadVideo = async (videoUrl?: string, trackTitle?: string) => {
+    if (!videoUrl) return;
+    try {
+      toast.loading('Preparing video download...', { id: 'download-video' });
+      
+      const response = await fetch(videoUrl);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      triggerDownload(url, `musevibe-${trackTitle}-video.mp4`);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      toast.success('Video download started', { id: 'download-video' });
+    } catch (err) {
+      console.error("Video download failed:", err);
+      toast.error('Video download failed', { id: 'download-video' });
     }
   };
 
@@ -1282,7 +1315,20 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
                 <div className="space-y-3 sm:space-y-4">
                   {currentCreation.tracks.map((track, index) => (
-                    <div key={track.id} className="p-3 sm:p-4 bg-secondary/50 rounded-lg">
+                    <div key={track.id} className="p-3 sm:p-4 bg-secondary/50 rounded-lg relative group">
+                      {ACTIVE_STATUSES.includes(track.status) && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Cancel this generation?')) {
+                              handleCancelTrack?.(track.id);
+                            }
+                          }}
+                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-destructive/20 text-destructive hover:bg-destructive/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                          title="Cancel generation"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <div className="flex items-center gap-3 sm:gap-4">
                         {track.audioUrl ? (
                           <button onClick={() => handleTrackPlay(track)} className={`w-10 h-10 rounded-full flex items-center justify-center hover:opacity-90 transition-smooth flex-shrink-0 ${player.currentTrack?.id === track.id ? 'bg-primary' : 'bg-primary/80'}`}>
@@ -1328,22 +1374,31 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                           )}
 
                           {videoStatus === "succeeded" && videoUrl && (
-                            <div className="mt-4">
-                              <video controls src={videoUrl} className="w-full rounded-lg" />
-                              <button
-                                type="button"
-                                className="mt-2 text-sm text-blue-500 hover:underline"
-                                onClick={() => {
-                                  const a = document.createElement("a");
-                                  a.href = videoUrl;
-                                  a.download = "musevibe-video.mp4";
-                                  document.body.appendChild(a);
-                                  a.click();
-                                  document.body.removeChild(a);
-                                }}
+                            <div className="mt-4 flex items-center gap-3">
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => handleDownloadVideo(videoUrl, track.title || 'track')}
+                                className="flex items-center gap-2"
                               >
-                                ⬇ Download Video
-                              </button>
+                                <Download className="w-4 h-4" />
+                                Download Video
+                              </Button>
+                              {track.videoUrl && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => {
+                                    const el = document.createElement('a');
+                                    el.href = track.videoUrl!;
+                                    el.target = '_blank';
+                                    el.rel = 'noopener noreferrer';
+                                    el.click();
+                                  }}
+                                >
+                                  View Video
+                                </Button>
+                              )}
                             </div>
                           )}
 

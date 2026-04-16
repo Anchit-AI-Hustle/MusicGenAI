@@ -23,6 +23,11 @@ export async function POST(req: Request) {
 
     const context: CreativeContext = await req.json();
 
+    // Generate unique seed for each request to ensure unique output
+    const uniqueSeed = `seed-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    (context as any).variationSeed = uniqueSeed;
+    (context as any).uniqueRequestId = uniqueSeed;
+
     const apiKey = process.env.REPLICATE_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "Replicate API Key is not configured." }, { status: 500 });
@@ -32,7 +37,7 @@ export async function POST(req: Request) {
 
     // Determine the best path
     const route = determineGenerationPath(context);
-    console.log(`[Generate API] Determined route: ${route.path} (${route.reason})`);
+    console.log(`[Generate API] Determined route: ${route.path} (${route.reason}), seed: ${uniqueSeed}`);
 
     let jobId = null;
     let audioResult = null;
@@ -47,10 +52,11 @@ export async function POST(req: Request) {
            audioResult = await generateElevenLabsMusic(context);
            // We return it as completed since we awaited the audio buffer directly
            return NextResponse.json({ 
-                jobId: "elevenlabs-" + Date.now(), 
+                jobId: "elevenlabs-" + uniqueSeed, 
                 status: "succeeded",
                 route: route.path,
-                audio: audioResult
+                audio: audioResult,
+                seed: uniqueSeed
            });
        } catch (err: any) {
            console.error("[Generate API] ElevenLabs Music Failed, falling back to ACE-Step", err);
@@ -87,7 +93,8 @@ export async function POST(req: Request) {
         jobId, 
         route: route.path,
         mixData,
-        status: "starting"
+        status: "starting",
+        seed: uniqueSeed
     });
 
   } catch (error: any) {

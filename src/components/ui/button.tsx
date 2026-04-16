@@ -5,28 +5,28 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        outline: "border border-border bg-transparent hover:bg-secondary hover:text-foreground",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-secondary hover:text-foreground",
+        default: "bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20",
+        destructive: "bg-gradient-to-r from-destructive to-destructive/80 text-destructive-foreground hover:from-destructive/90 hover:to-destructive/70 shadow-lg shadow-destructive/20",
+        outline: "border border-white/10 bg-transparent hover:bg-white/5 hover:border-white/20 text-foreground",
+        secondary: "bg-gradient-to-r from-secondary to-secondary/80 text-secondary-foreground hover:from-secondary/90 hover:to-secondary/70",
+        ghost: "hover:bg-white/10 hover:text-white",
         link: "text-primary underline-offset-4 hover:underline",
-        // Custom variants for the music app
-        glow: "bg-gradient-to-r from-primary to-[hsl(200,80%,45%)] text-primary-foreground shadow-[0_0_20px_hsl(var(--primary)/0.3),0_0_40px_hsl(var(--primary)/0.15)] hover:opacity-90",
-        accent: "bg-accent text-accent-foreground hover:bg-accent/90 shadow-[0_0_20px_hsl(var(--accent)/0.3)]",
-        glass: "bg-card/80 backdrop-blur-xl border border-border/50 text-foreground hover:bg-card/90",
-        aiSuggest: "bg-accent/20 text-accent border border-accent/30 hover:bg-accent/30 hover:border-accent/50",
+        glow: "bg-gradient-to-r from-primary via-primary to-accent text-primary-foreground shadow-[0_0_30px_hsl(var(--primary)/0.4),0_0_60px_hsl(var(--primary)/0.2)] hover:opacity-90 hover:shadow-[0_0_40px_hsl(var(--primary)/0.5),0_0_80px_hsl(var(--primary)/0.3)]",
+        accent: "bg-gradient-to-r from-accent to-accent/80 text-accent-foreground hover:from-accent/90 hover:to-accent/70 shadow-lg shadow-accent/20",
+        glass: "bg-white/[0.05] backdrop-blur-xl border border-white/10 text-foreground hover:bg-white/[0.08] hover:border-white/20",
+        aiSuggest: "bg-gradient-to-r from-accent/20 to-primary/20 text-accent border border-accent/30 hover:from-accent/30 hover:to-primary/30 hover:border-accent/50",
+        pulse: "bg-gradient-to-r from-primary to-accent text-white animate-pulse shadow-[0_0_20px_hsl(var(--primary)/0.3)]",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-9 rounded-md px-3",
-        lg: "h-12 rounded-lg px-8 text-base",
-        xl: "h-14 rounded-xl px-10 text-lg",
-        icon: "h-10 w-10",
+        default: "h-11 px-6 py-2",
+        sm: "h-9 rounded-lg px-4 text-xs",
+        lg: "h-13 rounded-xl px-10 text-base",
+        xl: "h-16 rounded-2xl px-12 text-lg",
+        icon: "h-11 w-11 rounded-xl",
       },
     },
     defaultVariants: {
