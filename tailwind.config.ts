@@ -19,8 +19,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Space Grotesk', 'system-ui', 'sans-serif'],
+        sans: ['Outfit', 'system-ui', 'sans-serif'],
+        display: ['Syne', 'system-ui', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -97,6 +97,18 @@ export default {
           "0%, 100%": { boxShadow: "0 0 20px hsl(var(--primary) / 0.3)" },
           "50%": { boxShadow: "0 0 40px hsl(var(--primary) / 0.5)" },
         },
+        "float": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-10px)" },
+        },
+        "shimmer": {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
+        "wave": {
+          "0%, 100%": { transform: "scaleY(0.3)" },
+          "50%": { transform: "scaleY(1)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -104,11 +116,21 @@ export default {
         "fade-in": "fade-in 0.5s ease-out",
         "slide-in-left": "slide-in-left 0.3s ease-out",
         "pulse-glow": "pulse-glow 2s ease-in-out infinite",
+        "float": "float 6s ease-in-out infinite",
+        "shimmer": "shimmer 1.5s infinite",
+        "wave": "wave 1s ease-in-out infinite",
       },
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
         "gradient-primary": "linear-gradient(135deg, hsl(var(--primary)), hsl(200, 80%, 45%))",
         "gradient-accent": "linear-gradient(135deg, hsl(var(--accent)), hsl(45, 95%, 55%))",
+        "gradient-animated": "linear-gradient(-45deg, hsl(var(--primary) / 0.1), hsl(var(--accent) / 0.15), hsl(var(--primary) / 0.1), hsl(var(--accent) / 0.08))",
+      },
+      boxShadow: {
+        'glow-primary': '0 0 20px hsl(var(--primary) / 0.4), 0 0 40px hsl(var(--primary) / 0.2)',
+        'glow-accent': '0 0 20px hsl(var(--accent) / 0.4), 0 0 40px hsl(var(--accent) / 0.2)',
+        'glow-double': '0 0 20px hsl(var(--primary) / 0.3), 0 0 40px hsl(var(--accent) / 0.2)',
+        'card-hover': '0 8px 32px rgba(0,0,0,0.4)',
       },
     },
   },
