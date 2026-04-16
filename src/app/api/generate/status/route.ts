@@ -22,10 +22,32 @@ export async function GET(req: Request) {
 
     const result = await checkJobStatus(jobId, replicate);
 
+    // Check for image input error - this model doesn't support image input
+    const errorMessage = result.error?.toLowerCase() || "";
+    if (result.status === "failed" && (errorMessage.includes("image") || errorMessage.includes("does not support image"))) {
+      console.error("[Generate Status] Model error - image input not supported:", result.error);
+      return Response.json({ 
+        status: "failed", 
+        output: null, 
+        error: "This music model does not support image input. Please try a different prompt or model."
+      });
+    }
+
     return Response.json(result);
 
   } catch (error: any) {
     console.error('Error checking status:', error);
+    
+    // Check if the error is about image input
+    const errorMsg = error.message?.toLowerCase() || "";
+    if (errorMsg.includes("image")) {
+      return Response.json({ 
+        status: "failed", 
+        output: null, 
+        error: "This music model does not support image input. Please try a different prompt or model."
+      }, { status: 500 });
+    }
+    
     return Response.json({ error: error.message || 'Status check failed' }, { status: 500 });
   }
 }
