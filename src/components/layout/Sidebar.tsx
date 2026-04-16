@@ -101,7 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
                 "w-5 h-5 transition-all duration-300", 
                 isActive ? "text-primary scale-110" : "group-hover:text-primary group-hover:scale-110"
               )} />
-              {showLabels && <span className={cn("font-semibold text-sm tracking-wide", isActive ? "opacity-100" : "opacity-80 group-hover:opacity-100")}>{item.label}</span>}
+              {showLabels && <span className={cn("font-semibold text-sm tracking-wide transition-opacity", isActive ? "opacity-100 text-primary" : "opacity-80 text-white/60 group-hover:opacity-100 group-hover:text-white")}>{item.label}</span>}
             </button>
           );
         })}

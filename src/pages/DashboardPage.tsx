@@ -442,7 +442,7 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-2 flex-wrap">
               <button 
-                onClick={(e) => { e.stopPropagation(); onNavigate('song-detail', { creationId: creation.id }); }} 
+                onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }} 
                 className="font-display text-lg font-semibold text-white truncate hover:text-primary transition-colors"
               >
                 {creation.title}

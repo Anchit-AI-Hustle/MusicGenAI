@@ -701,17 +701,34 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   const handleDownloadVideo = async (videoUrl?: string, trackTitle?: string) => {
     if (!videoUrl) return;
+    
     try {
       toast.loading('Preparing video download...', { id: 'download-video' });
       
-      const response = await fetch(videoUrl);
+      let response;
+      if (videoUrl.startsWith('http')) {
+        response = await fetch(videoUrl);
+      } else {
+        response = await fetch(`/api/download?url=${encodeURIComponent(videoUrl)}`);
+      }
+      
+      if (!response.ok) throw new Error('Failed to fetch video');
+      
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
-      triggerDownload(url, `musevibe-${trackTitle}-video.mp4`);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${trackTitle || 'musevibe'}-video.mp4`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
       setTimeout(() => URL.revokeObjectURL(url), 10000);
       toast.success('Video download started', { id: 'download-video' });
     } catch (err) {
-      console.error("Video download failed:", err);
+      console.error('Video download failed:', err);
       toast.error('Video download failed', { id: 'download-video' });
     }
   };
@@ -1388,12 +1405,9 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                                 <Button 
                                   variant="ghost" 
                                   size="sm" 
-                                  onClick={() => {
-                                    const el = document.createElement('a');
-                                    el.href = track.videoUrl!;
-                                    el.target = '_blank';
-                                    el.rel = 'noopener noreferrer';
-                                    el.click();
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownloadVideo(track.videoUrl!, track.title || 'track');
                                   }}
                                 >
                                   View Video
