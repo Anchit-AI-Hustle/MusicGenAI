@@ -3,6 +3,9 @@ import Replicate from "replicate";
 
 const replicate = new Replicate({ auth: process.env.REPLICATE_API_KEY || '' });
 
+// Free model for AI suggestions - meta llama
+const SUGGEST_MODEL = "meta/llama-3-70b-instruct-0d3bbbe1";
+
 export async function POST(req: Request) {
   try {
     const { description } = await req.json();
@@ -15,82 +18,69 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "API Key Configuration Error" }, { status: 500 });
     }
 
-    const uniqueSeed = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    const uniqueSeed = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 
-    // Use a free small language model for suggestions - meta/llama-3-8b-instruct is free and fast
-    const output = await replicate.run(
-      "meta/llama-3-8b-instruct-0707fb3c0afc33ae18353c49e9b",
-      {
-        input: {
-          prompt: `You are an expert music producer. Analyze this song concept and provide creative suggestions.
-Respond JSON only - no markdown formatting.
-Song concept: ${description}
+    // Use Llama 3 for intelligent, creative suggestions
+    const prompt = `You are an expert music producer and creative director. 
+Analyze this song description and provide UNIQUE creative suggestions.
+Be creative, diverse, and avoid generic responses.
+Song description: ${description}
 Seed: ${uniqueSeed}
 
-Provide one suggestion each for these 9 fields (be creative and unique every time):
+Respond with ONLY valid JSON (no other text):
+{
+  "genre": "specific genre",
+  "mood": "emotional tone",
+  "tempo": number,
+  "vocalLanguage": "language",
+  "artistInspiration": "modern artist",
+  "vocalStyle": "delivery style",
+  "instrumentation": "key instruments",
+  "lyricTheme": "narrative theme",
+  "videoStyle": "visual concept"
+}
 
-Genre: [best matching genre - be specific like "UK Punjabi Drill", "Hyperpop", "Phonk", "Afrobeats"]
-Mood: [emotional tone]
-Tempo: [number 70-170]
-VocalLanguage: [language - English/Spanish/Punjabi/etc]
-ArtistInspiration: [1 modern artist name that fits]
-VocalStyle: [delivery style]
-Instrumentation: [3-4 key instruments]
-LyricTheme: [2-4 word narrative]
-VideoStyle: [visual concept]
+Use current music trends. Make each response UNIQUE based on the seed.`;
 
-Use the seed to vary your responses - ${uniqueSeed}
-Be diverse and creative - don't repeat the same answers.`,
-          max_tokens: 400,
-          temperature: 0.95,
-        }
+    const output = await replicate.run(SUGGEST_MODEL, {
+      input: {
+        prompt,
+        temperature: 0.95,
+        max_tokens: 500,
       }
-    );
+    });
 
     const responseText = Array.isArray(output) ? output.map(o => o.text || o).join('') : String(output);
 
-    // Parse the response
+    // Parse JSON from response
     const suggestions: any[] = [];
-    const lines = responseText.split('\n');
-
-    for (const line of lines) {
-      const match = line.match(/^\s*(\w+):\s*\[?(.*?)\]?\s*$/i);
-      if (match) {
-        const [, field, value] = match;
-        const cleanValue = value.replace(/[\[\]]/g, '').trim();
-        if (!cleanValue) continue;
-
-        const fieldMap: Record<string, string> = {
-          'genre': 'genre',
-          'mood': 'mood',
-          'tempo': 'tempo',
-          'vocallanguage': 'vocalLanguage',
-          'artistinspiration': 'artistInspiration',
-          'vocalstyle': 'vocalStyle',
-          'instrumentation': 'instrumentation',
-          'lyrictheme': 'lyricTheme',
-          'videostyle': 'videoStyle',
-        };
-
-        const mappedField = fieldMap[field.toLowerCase()];
-        if (mappedField && cleanValue) {
-          if (mappedField === 'tempo') {
-            const num = parseInt(cleanValue.replace(/[^0-9]/g, ''));
-            if (num >= 60 && num <= 180) {
-              suggestions.push({ field: mappedField, value: String(num), confidence: 0.9 });
-            }
-          } else {
-            suggestions.push({ field: mappedField, value: cleanValue, confidence: 0.85 });
-          }
+    const jsonStart = responseText.indexOf('{');
+    const jsonEnd = responseText.lastIndexOf('}');
+    
+    if (jsonStart >= 0 && jsonEnd > jsonStart) {
+      const jsonString = responseText.substring(jsonStart, jsonEnd + 1);
+      try {
+        const data = JSON.parse(jsonString);
+        
+        if (data.genre) suggestions.push({ field: "genre", value: data.genre, confidence: 0.95 });
+        if (data.mood) suggestions.push({ field: "mood", value: data.mood, confidence: 0.95 });
+        if (data.tempo && typeof data.tempo === 'number') {
+          const bpm = Math.max(60, Math.min(180, data.tempo));
+          suggestions.push({ field: "tempo", value: String(bpm), confidence: 0.9 });
         }
+        if (data.vocalLanguage) suggestions.push({ field: "vocalLanguage", value: data.vocalLanguage, confidence: 0.9 });
+        if (data.artistInspiration) suggestions.push({ field: "artistInspiration", value: data.artistInspiration, confidence: 0.85 });
+        if (data.vocalStyle) suggestions.push({ field: "vocalStyle", value: data.vocalStyle, confidence: 0.85 });
+        if (data.instrumentation) suggestions.push({ field: "instrumentation", value: data.instrumentation, confidence: 0.85 });
+        if (data.lyricTheme) suggestions.push({ field: "lyricTheme", value: data.lyricTheme, confidence: 0.9 });
+        if (data.videoStyle) suggestions.push({ field: "videoStyle", value: data.videoStyle, confidence: 0.85 });
+      } catch (parseErr) {
+        console.error("Parse error:", parseErr, responseText);
       }
     }
 
-    // Fallback if parsing failed
     if (suggestions.length === 0) {
-      return NextResponse.json({ 
-        error: "Could not parse suggestions. Try again." 
-      }, { status: 500 });
+      return NextResponse.json({ error: "Could not parse suggestions" }, { status: 500 });
     }
 
     return NextResponse.json({ suggestions, seed: uniqueSeed });
