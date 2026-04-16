@@ -24,3 +24,8 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Environment files (use Vercel Dashboard for all secrets)
+.env
+.env.local
+.env.production
