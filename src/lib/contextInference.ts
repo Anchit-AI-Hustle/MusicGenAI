@@ -1,6 +1,38 @@
 import { CreativeContext } from "@/types/creative-context";
 import { findGenreByName } from "@/lib/musicData/genres";
 
+export function applyInferenceToContext(ctx: Partial<CreativeContext>, inferred: Partial<CreativeContext>): CreativeContext {
+  // Merge inferred values with context
+  return { ...ctx, ...inferred } as CreativeContext;
+}
+
+export function resolveCreativeContext(context: Partial<CreativeContext>): CreativeContext {
+  const resolved = { ...context } as CreativeContext;
+  
+  // Provide defaults for mandatory fields
+  resolved.songDescription = resolved.songDescription || "";
+  resolved.songTitle = resolved.songTitle || "Untitled Track";
+  resolved.genre = resolved.genre || "Pop";
+  resolved.mood = resolved.mood || "Energetic";
+  resolved.tempo = resolved.tempo || 110;
+  resolved.duration = resolved.duration || 120;
+  resolved.vocalsEnabled = resolved.vocalsEnabled !== undefined ? resolved.vocalsEnabled : true;
+  resolved.vocalLanguage = resolved.vocalLanguage || "English";
+  resolved.vocalStyle = resolved.vocalStyle || "Contemporary";
+  resolved.vocalIntensity = resolved.vocalIntensity || 5;
+  resolved.artistInspiration = resolved.artistInspiration || "";
+  resolved.instruments = resolved.instruments || [];
+  resolved.energyLevel = resolved.energyLevel || 5;
+  resolved.structureType = resolved.structureType || "Verse-Chorus-Bridge";
+  resolved.lyricsTheme = resolved.lyricsTheme || "Story of Us";
+  resolved.videoStyle = resolved.videoStyle || "Neon City Night";
+  resolved.creativityLevel = resolved.creativityLevel || 5;
+  resolved.variationSeed = resolved.variationSeed || `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  resolved.generationMode = resolved.generationMode || 'standard';
+  
+  return resolved;
+}
+
 function inferContextLocally(description: string, seed: string) {
   const text = description.toLowerCase();
   const random = parseInt(seed) % 100;
