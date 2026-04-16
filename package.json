@@ -14,7 +14,10 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "supabase:login": "npx supabase login",
+    "supabase:link": "npx supabase link --project-ref vgmwpdktxsjaymdszvvn",
+    "supabase:db:push": "npx supabase db push"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
