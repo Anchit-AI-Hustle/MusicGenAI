@@ -68,21 +68,6 @@ interface DashboardPageProps {
   onNavigate: (page: string, params?: Record<string, string>) => void;
 }
 
-const handleCancelCreation = async (creationId: string, e: React.MouseEvent) => {
-  e.stopPropagation();
-  if (!window.confirm('Cancel this generation? You can retry later.')) return;
-  try {
-    await fetch('/api/generate/cancel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ creationId })
-    });
-    toast.success('Generation cancelled');
-  } catch (err) {
-    console.error('Cancel failed:', err);
-  }
-};
-
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onAuthClick, onNavigate }) => {
   const { isAuthenticated } = useAuth();
   const { creations, isLoading, refreshCreations, retryTrack } = useMusic();
@@ -407,8 +392,9 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
         isProcessing ? 'ring-1 ring-primary/30' : ''
       }`}
     >
-      {/* Cancel button for active generations */}
-      {isProcessing && (
+      {/* Cancel button for active generations - removed from dashboard */}
+      {/* 
+      {(isProcessing || creation.tracks.some(t => isActiveStatus(t.status))) && (
         <motion.button
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -421,9 +407,10 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
           <X className="w-4 h-4" />
         </motion.button>
       )}
-      
-      <div 
-        onClick={() => setIsExpanded(!isExpanded)} 
+      */}
+    
+    <div 
+      onClick={() => setIsExpanded(!isExpanded)} 
         className="p-5 sm:p-6 cursor-pointer transition-all duration-300 hover:bg-white/[0.02]"
       >
         <div className="flex items-center gap-4 sm:gap-5">

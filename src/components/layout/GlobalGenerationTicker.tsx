@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useMusic } from '@/contexts/MusicContext';
-import { Loader2, Music, ChevronRight, X, Download, Play, Pause, RefreshCw } from 'lucide-react';
+import { Loader2, Music, ChevronRight, Download, Play, Pause, RefreshCw, X, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
 export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, params?: Record<string, string>) => void }> = ({ onNavigate }) => {
   const { creations, retryTrack } = useMusic();
   const [, setTick] = useState(0);
+  const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
     const interval = setInterval(() => setTick(t => t + 1), 5000);
@@ -27,17 +28,10 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
 
   const handleCancel = async (creationId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm('Cancel this generation?')) return;
-    try {
-      await fetch('/api/generate/cancel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ creationId })
-      });
-      toast.success('Generation cancelled');
-    } catch (err) {
-      console.error('Cancel failed:', err);
-    }
+    setIsVisible(false);
+    setTimeout(() => {
+      toast.success('Generation hidden. Check dashboard for status.');
+    }, 500);
   };
 
   const handleDownload = async (creationId: string, track: any, e: React.MouseEvent) => {
@@ -166,16 +160,14 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
                   </button>
                 ) : (
                   <>
-                    {/* Cancel button - ONLY shows when active */}
-                    {isActive && (
-                      <button
-                        onClick={(e) => handleCancel(creation.id, e)}
-                        className="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/40 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
-                        title="Cancel"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
+                    {/* Hide button - replaces X to hide ticker */}
+                <button
+                  onClick={(e) => handleCancel(creation.id, e)}
+                  className="w-8 h-8 rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                  title="Hide ticker"
+                >
+                  <EyeOff className="w-4 h-4" />
+                </button>
                     
                     {/* Download button - shows when track has audio/video */}
                     {(activeTrack?.audioUrl || activeTrack?.videoUrl) && (
