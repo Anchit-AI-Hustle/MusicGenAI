@@ -1,10 +1,6 @@
 import { NextResponse } from 'next/server';
-import Replicate from "replicate";
 
-const replicate = new Replicate({ auth: process.env.REPLICATE_API_KEY || '' });
-
-// Free model for AI suggestions - meta llama
-const SUGGEST_MODEL = "meta/llama-3-70b-instruct-0d3bbbe1";
+const HF_API_URL = "https://api-inference.huggingface.co/models/meta-llama/Llama-3.1-8B-Instruct";
 
 export async function POST(req: Request) {
   try {
@@ -14,45 +10,57 @@ export async function POST(req: Request) {
       return NextResponse.json({ suggestions: [] });
     }
 
-    if (!process.env.REPLICATE_API_KEY) {
-      return NextResponse.json({ error: "API Key Configuration Error" }, { status: 500 });
+    const hfToken = process.env.HUGGINGFACE_API_KEY;
+    if (!hfToken) {
+      return NextResponse.json({ error: "HuggingFace API key not configured" }, { status: 500 });
     }
 
     const uniqueSeed = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 
-    // Use Llama 3 for intelligent, creative suggestions
-    const prompt = `You are an expert music producer and creative director. 
-Analyze this song description and provide UNIQUE creative suggestions.
-Be creative, diverse, and avoid generic responses.
-Song description: ${description}
+    const prompt = `You are an expert music producer. Analyze this song description and provide creative suggestions.
+Song: ${description}
 Seed: ${uniqueSeed}
 
-Respond with ONLY valid JSON (no other text):
+Respond ONLY with valid JSON (no other text):
 {
-  "genre": "specific genre",
+  "genre": "specific genre like UK Drill, Phonk, Hyperpop, Afrobeats",
   "mood": "emotional tone",
-  "tempo": number,
-  "vocalLanguage": "language",
-  "artistInspiration": "modern artist",
+  "tempo": number betwene 70-170,
+  "vocalLanguage": "English/Spanish/Punjabi/etc",
+  "artistInspiration": "1 modern artist",
   "vocalStyle": "delivery style",
-  "instrumentation": "key instruments",
-  "lyricTheme": "narrative theme",
+  "instrumentation": "3-4 key instruments",
+  "lyricTheme": "narrative theme", 
   "videoStyle": "visual concept"
 }
 
-Use current music trends. Make each response UNIQUE based on the seed.`;
+Be creative and unique.`;
 
-    const output = await replicate.run(SUGGEST_MODEL, {
-      input: {
-        prompt,
-        temperature: 0.95,
-        max_tokens: 500,
-      }
+    const response = await fetch(HF_API_URL, {
+      headers: {
+        Authorization: `Bearer ${hfToken}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      body: JSON.stringify({
+        inputs: prompt,
+        parameters: {
+          temperature: 0.95,
+          max_new_tokens: 400,
+          return_full_text: false,
+        }
+      })
     });
 
-    const responseText = Array.isArray(output) ? output.map(o => o.text || o).join('') : String(output);
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("HF API error:", err);
+      return NextResponse.json({ error: "AI service temporarily unavailable" }, { status: 503 });
+    }
 
-    // Parse JSON from response
+    const result = await response.json();
+    const responseText = Array.isArray(result) ? result[0]?.generated_text || '' : result.generated_text || '';
+
     const suggestions: any[] = [];
     const jsonStart = responseText.indexOf('{');
     const jsonEnd = responseText.lastIndexOf('}');
