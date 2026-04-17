@@ -108,28 +108,76 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onAuthClick, onNav
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 sm:p-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5" />
-        <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 20% 80%, rgba(34, 211, 238, 0.1) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(168, 85, 247, 0.1) 0%, transparent 50%)' }} />
+      <div className="min-h-screen flex items-center justify-center p-4 sm:p-8 relative overflow-hidden perspective-3d">
+        {/* 3D Background Effects */}
+        <div className="absolute inset-0 bg-gradient-mesh opacity-60" />
+        
+        {/* Animated Gradient Orbs */}
         <motion.div 
-          initial={{ opacity: 0, y: 30, scale: 0.95 }} 
-          animate={{ opacity: 1, y: 0, scale: 1 }} 
+          animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
+          transition={{ duration: 8, repeat: Infinity }}
+          className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-primary/10 rounded-full blur-[100px]" 
+        />
+        <motion.div 
+          animate={{ scale: [1.1, 1, 1.1], opacity: [0.2, 0.4, 0.2] }}
+          transition={{ duration: 10, repeat: Infinity }}
+          className="absolute bottom-1/4 right-1/4 w-[350px] h-[350px] bg-accent/10 rounded-full blur-[100px]" 
+        />
+        
+        {/* Grid Pattern */}
+        <div className="absolute inset-0 grid-pattern opacity-20" />
+        
+        <motion.div 
+          initial={{ opacity: 0, y: 30, scale: 0.95, rotateX: -10 }}
+          animate={{ opacity: 1, y: 0, scale: 1, rotateX: 0 }}
           transition={{ duration: 0.5 }}
-          className="relative text-center max-w-lg"
+          className="relative text-center max-w-lg preserve-3d"
         >
-          <div className="relative mb-8">
-            <div className="absolute inset-0 bg-gradient-to-r from-primary to-accent blur-3xl opacity-20 animate-pulse" />
-            <div className="relative w-28 h-28 rounded-3xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mx-auto border border-white/10 backdrop-blur-xl">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/30">
+          <div className="relative mb-8 perspective-3d">
+            {/* Holographic Orb */}
+            <motion.div 
+              animate={{ rotateZ: [0, 360] }}
+              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+              className="absolute inset-0 w-40 h-40 mx-auto left-0 right-0"
+              style={{ filter: 'blur(40px)' }}
+            >
+              <div className="absolute w-20 h-20 rounded-full bg-primary/40 top-0 left-1/2 -translate-x-1/2" />
+              <div className="absolute w-16 h-16 rounded-full bg-accent/40 top-4 left-1/2 -translate-x-1/2" />
+            </motion.div>
+            
+            <div className="relative w-28 h-28 rounded-3xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mx-auto border border-white/10 backdrop-blur-xl holographic">
+              <div className="absolute inset-0 rounded-2xl neon-pulse opacity-20" />
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary to-accent shadow-lg shadow-primary/30 sphere-effect" />
+              <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
                 <Music className="w-10 h-10 text-white" />
               </div>
             </div>
           </div>
-          <h2 className="font-display text-4xl font-bold bg-gradient-to-r from-white via-primary to-accent bg-clip-text text-transparent mb-4">Your Music Awaits</h2>
+          
+          <motion.h2 
+            initial={{ opacity: 0, translateZ: -20 }}
+            animate={{ opacity: 1, translateZ: 0 }}
+            className="font-display text-4xl font-bold bg-gradient-to-r from-white via-primary to-accent bg-clip-text text-transparent mb-4"
+          >
+            Your Music Awaits
+          </motion.h2>
           <p className="text-muted-foreground text-lg mb-8">Sign in to access your music library and start creating amazing tracks with AI</p>
-          <Button onClick={onAuthClick} variant="glow" size="lg" className="text-lg px-10 py-6">
-            <Sparkles className="w-5 h-5 mr-2" /> Sign In to Continue
-          </Button>
+          
+          <motion.div
+            whileHover={{ scale: 1.05, translateZ: 10 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <Button onClick={onAuthClick} variant="glow" size="lg" className="text-lg px-10 py-6 relative overflow-hidden">
+              <motion.div 
+                initial={{ x: '-100%' }}
+                whileHover={{ x: '100%' }}
+                transition={{ duration: 0.5 }}
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent" 
+              />
+              <Sparkles className="w-5 h-5 mr-2 relative z-10" /> 
+              <span className="relative z-10">Sign In to Continue</span>
+            </Button>
+          </motion.div>
         </motion.div>
       </div>
     );
@@ -155,45 +203,78 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onAuthClick, onNav
   }
 
   return (
-    <div className="min-h-screen p-4 sm:p-6 lg:p-8 overflow-y-auto relative">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.03] via-transparent to-accent/[0.05]" />
-      <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 30% 20%, rgba(34, 211, 238, 0.08) 0%, transparent 40%), radial-gradient(circle at 70% 80%, rgba(168, 85, 247, 0.08) 0%, transparent 40%)' }} />
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8 overflow-y-auto relative perspective-3d">
+      {/* 3D Background */}
+      <div className="absolute inset-0 bg-gradient-mesh opacity-50" />
       
-      <div className="max-w-6xl mx-auto relative">
+      {/* Animated Gradient Orbs */}
+      <motion.div 
+        animate={{ scale: [1, 1.15, 1], x: [0, 30, 0], y: [0, -20, 0] }}
+        transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+        className="absolute top-[10%] left-[20%] w-[500px] h-[500px] bg-primary/8 rounded-full blur-[120px]" 
+      />
+      <motion.div 
+        animate={{ scale: [1.1, 1, 1.1], x: [0, -25, 0], y: [0, 35, 0] }}
+        transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
+        className="absolute bottom-[20%] right-[15%] w-[450px] h-[450px] bg-accent/8 rounded-full blur-[100px]" 
+      />
+      
+      {/* Grid Pattern */}
+      <div className="absolute inset-0 grid-pattern opacity-15" />
+      
+      <div className="max-w-6xl mx-auto relative preserve-3d">
         <motion.div 
-          initial={{ opacity: 0, y: -20 }} 
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: -20, translateZ: -20 }}
+          animate={{ opacity: 1, y: 0, translateZ: 0 }}
           className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8"
         >
           <div>
-            <h1 className="font-display text-3xl sm:text-4xl font-bold text-white mb-1">
-              <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Studio</span> Dashboard
+            <h1 className="font-display text-3xl sm:text-4xl font-bold text-white mb-1 preserve-3d">
+              <motion.span 
+                initial={{ opacity: 0, translateZ: -10 }}
+                animate={{ opacity: 1, translateZ: 0 }}
+                className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent"
+              >
+                Studio
+              </motion.span>
+              {' '}Dashboard
             </h1>
             <p className="text-muted-foreground">Your creative journey in one place</p>
           </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleRefresh} 
-            disabled={isRefreshing}
-            className="border-white/10 hover:bg-white/5"
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> 
-            {isRefreshing ? 'Refreshing...' : 'Refresh'}
-          </Button>
+          
+          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleRefresh} 
+              disabled={isRefreshing}
+              className="border-white/10 hover:bg-white/5 glass-card"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> 
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            </Button>
+          </motion.div>
         </motion.div>
 
-        {/* Enhanced Stats with gradient cards */}
+        {/* Enhanced Stats with 3D gradient cards */}
         <motion.div 
-          initial={{ opacity: 0, y: 20 }} 
-          animate={{ opacity: 1, y: 0 }} 
+          initial={{ opacity: 0, y: 20, translateZ: -20 }}
+          animate={{ opacity: 1, y: 0, translateZ: 0 }}
           transition={{ delay: 0.1 }}
-          className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8"
+          className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8 perspective-3d"
         >
-          <div className="glass-card rounded-2xl p-5 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-primary/20 to-transparent rounded-full blur-2xl group-hover:from-primary/30 transition-all" />
+          <motion.div 
+            whileHover={{ translateZ: 10, scale: 1.02 }}
+            className="glass-card rounded-2xl p-5 relative overflow-hidden group preserve-3d"
+          >
+            {/* Gradient Glow */}
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-primary/30 to-transparent rounded-full blur-3xl group-hover:from-primary/50 transition-all" />
+            
+            {/* Card Stack Effect */}
+            <div className="absolute -bottom-2 -right-2 w-full h-full rounded-2xl bg-primary/10 -z-10 blur-md opacity-0 group-hover:opacity-100 transition-all" />
+            
             <div className="relative flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/20">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/20 group-hover:shadow-primary/40 transition-shadow">
                 <Music className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -201,12 +282,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onAuthClick, onNav
                 <p className="text-xs text-muted-foreground uppercase tracking-wider">Songs</p>
               </div>
             </div>
-          </div>
+          </motion.div>
           
-          <div className="glass-card rounded-2xl p-5 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-accent/20 to-transparent rounded-full blur-2xl group-hover:from-accent/30 transition-all" />
+          <motion.div 
+            whileHover={{ translateZ: 10, scale: 1.02 }}
+            className="glass-card rounded-2xl p-5 relative overflow-hidden group preserve-3d"
+          >
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-accent/30 to-transparent rounded-full blur-3xl group-hover:from-accent/50 transition-all" />
+            <div className="absolute -bottom-2 -right-2 w-full h-full rounded-2xl bg-accent/10 -z-10 blur-md opacity-0 group-hover:opacity-100 transition-all" />
             <div className="relative flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent to-accent/60 flex items-center justify-center shadow-lg shadow-accent/20">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent to-accent/60 flex items-center justify-center shadow-lg shadow-accent/20 group-hover:shadow-accent/40 transition-shadow">
                 <Disc className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -214,12 +299,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onAuthClick, onNav
                 <p className="text-xs text-muted-foreground uppercase tracking-wider">Albums</p>
               </div>
             </div>
-          </div>
+          </motion.div>
 
-          <div className="glass-card rounded-2xl p-5 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-green-500/20 to-transparent rounded-full blur-2xl group-hover:from-green-500/30 transition-all" />
+          <motion.div 
+            whileHover={{ translateZ: 10, scale: 1.02 }}
+            className="glass-card rounded-2xl p-5 relative overflow-hidden group preserve-3d"
+          >
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-green-500/30 to-transparent rounded-full blur-3xl group-hover:from-green-500/50 transition-all" />
+            <div className="absolute -bottom-2 -right-2 w-full h-full rounded-2xl bg-green-500/10 -z-10 blur-md opacity-0 group-hover:opacity-100 transition-all" />
             <div className="relative flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-green-500/60 flex items-center justify-center shadow-lg shadow-green-500/20">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-green-500/60 flex items-center justify-center shadow-lg shadow-green-500/20 group-hover:shadow-green-500/40 transition-shadow">
                 <Check className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -227,12 +316,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onAuthClick, onNav
                 <p className="text-xs text-muted-foreground uppercase tracking-wider">Completed</p>
               </div>
             </div>
-          </div>
+          </motion.div>
 
-          <div className="glass-card rounded-2xl p-5 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-amber-500/20 to-transparent rounded-full blur-2xl group-hover:from-amber-500/30 transition-all" />
+          <motion.div 
+            whileHover={{ translateZ: 10, scale: 1.02 }}
+            className="glass-card rounded-2xl p-5 relative overflow-hidden group preserve-3d"
+          >
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-amber-500/30 to-transparent rounded-full blur-3xl group-hover:from-amber-500/50 transition-all" />
+            <div className="absolute -bottom-2 -right-2 w-full h-full rounded-2xl bg-amber-500/10 -z-10 blur-md opacity-0 group-hover:opacity-100 transition-all" />
             <div className="relative flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-500/60 flex items-center justify-center shadow-lg shadow-amber-500/20">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-500/60 flex items-center justify-center shadow-lg shadow-amber-500/20 group-hover:shadow-amber-500/40 transition-shadow">
                 <Clock className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -240,30 +333,32 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onAuthClick, onNav
                 <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Time</p>
               </div>
             </div>
-          </div>
+          </motion.div>
         </motion.div>
 
-        {/* Filter tabs styled as pill badges */}
+        {/* Filter tabs styled as 3D pill badges */}
         <motion.div 
-          initial={{ opacity: 0, y: 20 }} 
-          animate={{ opacity: 1, y: 0 }} 
+          initial={{ opacity: 0, y: 20, translateZ: -10 }}
+          animate={{ opacity: 1, y: 0, translateZ: 0 }}
           transition={{ delay: 0.15 }}
           className="flex items-center gap-3 mb-6"
         >
           <Filter className="w-4 h-4 text-muted-foreground" />
-          <div className="flex gap-2">
+          <div className="flex gap-2 perspective-3d">
             {(['all', 'songs', 'albums'] as FilterType[]).map(f => (
-              <button 
+              <motion.button 
                 key={f} 
+                whileHover={{ translateZ: 5, scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => setFilter(f)} 
-                className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-300 ${
+                className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-300 preserve-3d ${
                   filter === f 
-                    ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg shadow-primary/25' 
-                    : 'bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-white'
+                    ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg shadow-primary/25 neon-pulse' 
+                    : 'bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-white glass-card'
                 }`}
               >
                 {f.charAt(0).toUpperCase() + f.slice(1)}
-              </button>
+              </motion.button>
             ))}
           </div>
         </motion.div>

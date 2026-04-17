@@ -125,6 +125,8 @@ export default {
         "gradient-primary": "linear-gradient(135deg, hsl(var(--primary)), hsl(200, 80%, 45%))",
         "gradient-accent": "linear-gradient(135deg, hsl(var(--accent)), hsl(45, 95%, 55%))",
         "gradient-animated": "linear-gradient(-45deg, hsl(var(--primary) / 0.1), hsl(var(--accent) / 0.15), hsl(var(--primary) / 0.1), hsl(var(--accent) / 0.08))",
+        "gradient-mesh": "radial-gradient(at 40% 20%, hsla(187,86%,53%,0.15) 0px, transparent 50%), radial-gradient(at 80% 0%, hsla(270,84%,56%,0.15) 0px, transparent 50%), radial-gradient(at 0% 50%, hsla(187,86%,53%,0.1) 0px, transparent 50%), radial-gradient(at 80% 50%, hsla(270,84%,56%,0.1) 0px, transparent 50%), radial-gradient(at 0% 100%, hsla(187,86%,53%,0.15) 0px, transparent 50%), radial-gradient(at 80% 100%, hsla(270,84%,56%,0.15) 0px, transparent 50%)",
+        "gradient-3d": "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 50%, rgba(0,0,0,0.1) 100%)",
       },
       boxShadow: {
         'glow-primary': '0 0 20px hsl(var(--primary) / 0.4), 0 0 40px hsl(var(--primary) / 0.2)',
