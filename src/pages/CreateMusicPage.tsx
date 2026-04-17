@@ -121,7 +121,7 @@ interface SongPromptState {
   duration: number;
   vocalsEnabled: boolean;
   vocalStyle: string;
-  vocalGender?: 'male' | 'female' | 'neutral';
+  vocalGender: 'male' | 'female' | 'neutral';
   vocalLanguage: string;
   vocalIntensity: number;
   vocalEffects: string[];
@@ -176,6 +176,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const [vocalsEnabled, setVocalsEnabled] = useState(true);
   const [vocalArrangement, setVocalArrangement] = useState('solo');
   const [vocalStyle, setVocalStyle] = useState('Pop Singing');
+  const [vocalGender, setVocalGender] = useState<'male' | 'female' | 'neutral'>('neutral');
   const [vocalIntensity, setVocalIntensity] = useState(5);
   const [selectedVocalEffects, setSelectedVocalEffects] = useState<string[]>([]);
   const [showVocalEffectsDropdown, setShowVocalEffectsDropdown] = useState(false);
@@ -204,6 +205,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     duration,
     vocalsEnabled,
     vocalStyle,
+    vocalGender,
     vocalLanguage,
     vocalIntensity,
     vocalEffects: selectedVocalEffects,
@@ -219,7 +221,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     useHighQualityVocals: false,
   }), [
     songDescription, genre, subgenre, mood, tempo, duration,
-    vocalsEnabled, vocalStyle, vocalLanguage, vocalIntensity,
+    vocalsEnabled, vocalStyle, vocalGender, vocalLanguage, vocalIntensity,
     selectedVocalEffects, lyricsText, lyricsTheme, artistInspiration,
     instruments, energyLevel, structureType, vocalArrangement, visualizerEnabled, videoStyle
   ]);
@@ -1206,20 +1208,41 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                                options={PRESET_VOCAL_STYLES}
                                placeholder="e.g., Ethereal, Rap..."
                              />
-                           </div>
-                           <div className="space-y-3">
-                             <div className="flex items-center justify-between">
-                               <Label className="text-xs font-black uppercase tracking-widest text-white/40">Studio Effects</Label>
-                               <AiToolbar field="vocalEffects" />
-                             </div>
-                             <SmartSearchInput
-                               value={selectedVocalEffects}
-                               onChange={(val: string[]) => setSelectedVocalEffects(val)}
-                               options={VOCAL_EFFECTS_OPTIONS}
-                               placeholder="Reverb, Delay..."
-                               multiSelect
-                             />
-                           </div>
+</div>
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs font-black uppercase tracking-widest text-white/40">Voice Gender</Label>
+                              </div>
+                              <div className="flex gap-2">
+                                {(['male', 'female', 'neutral'] as const).map((g) => (
+                                  <button
+                                    key={g}
+                                    onClick={() => setVocalGender(g)}
+                                    className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold transition-all ${
+                                      vocalGender === g
+                                        ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg shadow-primary/20'
+                                        : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/10'
+                                    }`}
+                                  >
+                                    {g.charAt(0).toUpperCase() + g.slice(1)}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-black uppercase tracking-widest text-white/40">Studio Effects</Label>
+                            <AiToolbar field="vocalEffects" />
+                          </div>
+                          <SmartSearchInput
+                            value={selectedVocalEffects}
+                            onChange={(val: string[]) => setSelectedVocalEffects(val)}
+                            options={VOCAL_EFFECTS_OPTIONS}
+                            placeholder="Reverb, Delay..."
+                            multiSelect
+                          />
                         </div>
                       </motion.div>
                     )}
