@@ -159,84 +159,50 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
   };
 
   return (
-    <div className="min-h-screen p-4 sm:p-6 lg:p-8 overflow-y-auto relative perspective-3d">
-      {/* 3D Background */}
-      <div className="absolute inset-0 bg-gradient-mesh opacity-40" />
-      <motion.div 
-        animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
-        transition={{ duration: 8, repeat: Infinity }}
-        className="absolute top-[20%] right-[10%] w-[300px] h-[300px] bg-primary/10 rounded-full blur-[80px]" 
-      />
-      <motion.div 
-        animate={{ scale: [1.1, 1, 1.1], opacity: [0.2, 0.4, 0.2] }}
-        transition={{ duration: 10, repeat: Infinity }}
-        className="absolute bottom-[20%] left-[10%] w-[250px] h-[250px] bg-accent/10 rounded-full blur-[80px]" 
-      />
-      <div className="absolute inset-0 grid-pattern opacity-10" />
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8 overflow-y-auto relative">
+      {/* Static Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.03] via-transparent to-accent/[0.03]" />
+      <div className="absolute inset-0" style={{ 
+        backgroundImage: 'radial-gradient(circle at 20% 30%, rgba(34, 211, 238, 0.06) 0%, transparent 40%)' 
+      }} />
 
       <div className="max-w-4xl mx-auto relative">
-        {/* Back button with 3D effect */}
+        {/* Simple Back button */}
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
           <Button variant="ghost" onClick={onBack} className="mb-6 hover:bg-white/5">
             <ArrowLeft className="w-4 h-4 mr-2" /> Back to Dashboard
           </Button>
         </motion.div>
 
-        {/* Hero section with 3D depth */}
+        {/* Hero Section */}
         <motion.div
-          initial={{ opacity: 0, y: 20, rotateX: -5 }}
-          animate={{ opacity: 1, y: 0, rotateX: 0 }}
-          transition={{ duration: 0.6 }}
-          className="glass-card rounded-2xl overflow-hidden mb-6 relative preserve-3d"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="glass-card rounded-2xl overflow-hidden mb-6 relative"
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10" />
-          
-          {/* Animated Glow */}
-          <motion.div 
-            animate={{ opacity: [0.3, 0.5, 0.3] }}
-            transition={{ duration: 4, repeat: Infinity }}
-            className="absolute inset-0 bg-gradient-radial from-primary/20 to-transparent"
-          />
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
           
           <div className="relative p-6 sm:p-8 flex flex-col sm:flex-row gap-6">
-            {/* Cover art with 3D sphere effect */}
-            <div className="relative perspective-3d">
-              <motion.div 
-                animate={{ rotateZ: [0, 360] }}
-                transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-                className="absolute inset-0 w-40 h-40 sm:w-48 sm:h-48 mx-auto left-0 right-0 blur-[30px]"
-              >
-                <div className="w-20 h-20 rounded-full bg-primary/40 top-0 left-1/2 -translate-x-1/2" />
-                <div className="w-16 h-16 rounded-full bg-accent/40 top-2 left-1/2 -translate-x-1/2" />
-              </motion.div>
-              
-              <motion.div 
-                whileHover={{ rotateY: [0, 15, 0], rotateX: [0, -10, 0] }}
-                transition={{ duration: 0.5 }}
-                className="relative w-40 h-40 sm:w-48 sm:h-48 rounded-2xl bg-gradient-to-br from-primary/30 via-accent/20 to-secondary flex items-center justify-center flex-shrink-0 mx-auto sm:mx-0 shadow-2xl sphere-effect"
-              >
+            {/* Cover Art - Simple */}
+            <div className="relative">
+              <div className="w-40 h-40 sm:w-48 sm:h-48 rounded-2xl bg-gradient-to-br from-primary/30 via-accent/20 to-secondary flex items-center justify-center flex-shrink-0 mx-auto sm:mx-0 shadow-xl">
                 {creation.type === 'album' ? (
                   <Disc className="w-20 h-20 text-accent/80" />
                 ) : (
                   <Music className="w-20 h-20 text-primary/80" />
                 )}
-              </motion.div>
+              </div>
             </div>
 
-            {/* Info with depth */}
+            {/* Info */}
             <div className="flex-1 flex flex-col justify-center text-center sm:text-left">
-              <motion.div
-                initial={{ opacity: 0, translateZ: -20 }}
-                animate={{ opacity: 1, translateZ: 0 }}
-                className="preserve-3d"
-              >
-                <Badge variant="secondary" className="w-fit mx-auto sm:mx-0 mb-2 capitalize glass-card">
-                  {creation.type}
-                </Badge>
-                <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground mb-2 bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
-                  {track ? track.title : creation.title}
-                </h1>
-              </motion.div>
+              <Badge variant="secondary" className="w-fit mx-auto sm:mx-0 mb-2 capitalize">
+                {creation.type}
+              </Badge>
+              <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground mb-2">
+                {track ? track.title : creation.title}
+              </h1>
               
               {creation.type === 'album' && track && (
                 <p className="text-muted-foreground mb-2">from {creation.title}</p>
@@ -295,24 +261,17 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
           </div>
         </motion.div>
 
-        {/* Video player section with 3D depth */}
+        {/* Video player section */}
         {track?.videoUrl && (
           <motion.div 
-            initial={{ opacity: 0, y: 20, translateZ: -20 }}
-            animate={{ opacity: 1, y: 0, translateZ: 0 }}
-            transition={{ delay: 0.1, duration: 0.5 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
             className="mb-6"
           >
-            <motion.div 
-              whileHover={{ translateZ: 5 }}
-              className="glass-card rounded-2xl p-4 relative overflow-hidden"
-            >
-              {/* Glow effect */}
-              <div className="absolute inset-0 bg-gradient-to-br from-accent/10 to-primary/5" />
-              <div className="absolute top-0 right-0 w-32 h-32 bg-accent/20 rounded-full blur-[60px]" />
-              
-              <div className="relative flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent/30 to-accent/10 flex items-center justify-center shadow-lg shadow-accent/20">
+            <div className="glass-card rounded-2xl p-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center">
                   <MonitorPlay className="w-5 h-5 text-accent" />
                 </div>
                 <div>
@@ -321,7 +280,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
                 </div>
               </div>
               <VideoPlayer videoUrl={track.videoUrl} title={track.title} duration={track.duration} />
-            </motion.div>
+            </div>
           </motion.div>
         )}
 
