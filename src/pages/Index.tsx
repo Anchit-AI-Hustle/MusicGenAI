@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { cn } from '@/lib/utils';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { MusicProvider } from '@/contexts/MusicContext';
 import { PlayerProvider, usePlayer } from '@/contexts/PlayerContext';
@@ -66,7 +67,11 @@ const AppContent: React.FC = () => {
       <AnimatedBackground />
       <GlobalGenerationTicker onNavigate={handleNavigate} />
       <Sidebar currentPage={currentPage === 'song-detail' ? 'dashboard' : currentPage} onNavigate={handleNavigate} onAuthClick={() => setShowAuthModal(true)} />
-      <main className={`${isMobile ? "pt-20" : "ml-64 pt-14 transition-all duration-300"} ${currentTrack ? 'pb-24' : ''}`}>
+      <main className={cn(
+        "h-screen overflow-y-auto",
+        isMobile ? "pt-20" : "ml-64 pt-14",
+        currentTrack ? "pb-24" : ""
+      )}>
         {renderPage()}
       </main>
       <SystemDemoDiagnostics />
