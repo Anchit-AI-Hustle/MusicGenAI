@@ -1,15 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMusic } from '@/contexts/MusicContext';
-import { Loader2, Music, ChevronRight, Download, RefreshCw, EyeOff } from 'lucide-react';
+import { Loader2, Music, ChevronRight, Download, RefreshCw, EyeOff, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+interface HiddenCreation {
+  creationId: string;
+  hiddenAt: number;
+}
+
+const HIDDEN_CREATIONS_KEY = 'musevibe_hidden_creations';
+
+const getHiddenCreations = (): HiddenCreation[] => {
+  try {
+    const stored = localStorage.getItem(HIDDEN_CREATIONS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+const hideCreation = (creationId: string) => {
+  const hidden = getHiddenCreations();
+  hidden.push({ creationId, hiddenAt: Date.now() });
+  localStorage.setItem(HIDDEN_CREATIONS_KEY, JSON.stringify(hidden));
+};
+
+const isCreationHidden = (creationId: string): boolean => {
+  const hidden = getHiddenCreations();
+  return hidden.some(h => h.creationId === creationId);
+};
 
 export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, params?: Record<string, string>) => void }> = ({ onNavigate }) => {
   const { creations, retryTrack } = useMusic();
   const [isVisible, setIsVisible] = useState(true);
+  
+  const [recentPendingIds, setRecentPendingIds] = useState<Set<string>>(new Set());
+  
+  useEffect(() => {
+    const pending = creations.filter(c => c.status === 'pending' || c.tracks.some(t => t.status === 'pending'));
+    const newPendingIds = new Set(pending.map(c => c.id));
+    setRecentPendingIds(prev => {
+      const filtered = new Set([...prev].filter(id => newPendingIds.has(id)));
+      newPendingIds.forEach(id => {
+        if (!prev.has(id)) filtered.add(id);
+      });
+      return filtered;
+    });
+  }, [creations]);
 
-  const displayCreations = creations
-    .filter(c => c.status !== 'completed')
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const displayCreations = creations.filter(c => {
+    const isHidden = isCreationHidden(c.id);
+    const isNewPending = recentPendingIds.has(c.id);
+    return !isHidden && (c.status === 'pending' || isNewPending);
+  }).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
   if (displayCreations.length === 0) return null;
 
@@ -19,8 +62,9 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
     'uploading_video', 'finalizing',
   ]);
 
-  const handleHide = (e: React.MouseEvent) => {
+  const handleHide = (e: React.MouseEvent, creationId: string) => {
     e.stopPropagation();
+    hideCreation(creationId);
     setIsVisible(false);
   };
 
@@ -137,12 +181,31 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
                 ) : (
                   <>
                     <button
-                      onClick={handleHide}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        hideCreation(creation.id);
+                        setIsVisible(false);
+                      }}
                       className="w-8 h-8 rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
                       title="Hide ticker"
                     >
                       <EyeOff className="w-4 h-4" />
                     </button>
+                    
+                    {activeTrack && inPipeline.has(activeTrack.status) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Mark as hidden to effectively "cancel" display
+                          hideCreation(creation.id);
+                          setIsVisible(false);
+                        }}
+                        className="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/40 flex items-center justify-center transition-all"
+                        title="Cancel generation"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                     
                     {(activeTrack?.audioUrl || activeTrack?.videoUrl) && (
                       <button
