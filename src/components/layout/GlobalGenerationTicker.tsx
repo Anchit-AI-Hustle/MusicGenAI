@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useMusic } from '@/contexts/MusicContext';
 import { Loader2, Music, ChevronRight, Download, RefreshCw, EyeOff, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -32,26 +32,12 @@ const isCreationHidden = (creationId: string): boolean => {
 
 export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, params?: Record<string, string>) => void }> = ({ onNavigate }) => {
   const { creations, retryTrack } = useMusic();
-  const [isVisible, setIsVisible] = useState(true);
   
-  const [recentPendingIds, setRecentPendingIds] = useState<Set<string>>(new Set());
-  
-  useEffect(() => {
-    const pending = creations.filter(c => c.status === 'pending' || c.tracks.some(t => t.status === 'pending'));
-    const newPendingIds = new Set(pending.map(c => c.id));
-    setRecentPendingIds(prev => {
-      const filtered = new Set([...prev].filter(id => newPendingIds.has(id)));
-      newPendingIds.forEach(id => {
-        if (!prev.has(id)) filtered.add(id);
-      });
-      return filtered;
-    });
-  }, [creations]);
-
+  // Only show for brand new pending creations (created in last 5 seconds)
   const displayCreations = creations.filter(c => {
     const isHidden = isCreationHidden(c.id);
-    const isNewPending = recentPendingIds.has(c.id);
-    return !isHidden && (c.status === 'pending' || isNewPending);
+    const isNewPending = c.status === 'pending' && (Date.now() - c.createdAt.getTime()) < 5000;
+    return !isHidden && isNewPending;
   }).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
   if (displayCreations.length === 0) return null;
@@ -64,8 +50,10 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
 
   const handleHide = (e: React.MouseEvent, creationId: string) => {
     e.stopPropagation();
+    e.preventDefault();
     hideCreation(creationId);
-    setIsVisible(false);
+    // Force re-render by using a timestamp
+    window.location.reload();
   };
 
   const handleDownload = async (track: any, e: React.MouseEvent) => {
@@ -181,12 +169,8 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
                 ) : (
                   <>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        hideCreation(creation.id);
-                        setIsVisible(false);
-                      }}
-                      className="w-8 h-8 rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                      onClick={(e) => handleHide(e, creation.id)}
+                      className="w-8 h-8 rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white flex items-center justify-center transition-all"
                       title="Hide ticker"
                     >
                       <EyeOff className="w-4 h-4" />
@@ -194,12 +178,7 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
                     
                     {activeTrack && inPipeline.has(activeTrack.status) && (
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // Mark as hidden to effectively "cancel" display
-                          hideCreation(creation.id);
-                          setIsVisible(false);
-                        }}
+                        onClick={(e) => handleHide(e, creation.id)}
                         className="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/40 flex items-center justify-center transition-all"
                         title="Cancel generation"
                       >

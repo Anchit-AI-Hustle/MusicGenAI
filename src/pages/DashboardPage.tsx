@@ -604,18 +604,55 @@ const DashboardTrackProgress: React.FC<{
   const currentStepIdx = DASH_PIPELINE_STEPS.findIndex(s => s.match.test(currentStage));
   const activeIdx = currentStepIdx >= 0 ? currentStepIdx : 0;
 
+  const formatEta = (secs: number) => {
+    if (secs <= 0) return '';
+    if (secs >= 60) return `~${Math.floor(secs / 60)}m ${secs % 60}s`;
+    return `~${secs}s`;
+  };
+
   return (
-    <div className="mt-2 flex items-center gap-2">
-      <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
-        <motion.div 
-          className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
-          initial={{ width: 0 }}
-          animate={{ width: `${progress * 100}%` }}
-        />
+    <div className="mt-3 space-y-3">
+      <div className="space-y-1">
+        {DASH_PIPELINE_STEPS.map((step, idx) => {
+          const isComplete = idx < activeIdx;
+          const isActive = idx === activeIdx;
+          const isPending = idx > activeIdx;
+          return (
+            <div 
+              key={step.key} 
+              className={`flex items-center gap-2 text-xs py-1.5 px-2 rounded-md transition-all ${
+                isActive ? 'bg-primary/10 border border-primary/20' : ''
+              } ${isPending ? 'opacity-30' : ''}`}
+            >
+              {isComplete ? (
+                <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+              ) : isActive ? (
+                <Loader2 className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" />
+              ) : (
+                <Circle className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" />
+              )}
+              <span className={`font-medium ${
+                isActive ? 'text-primary' : isComplete ? 'text-green-400' : 'text-muted-foreground'
+              }`}>
+                {step.label}
+              </span>
+            </div>
+          );
+        })}
       </div>
-      <span className="text-xs font-mono text-muted-foreground min-w-[40px]">
-        {Math.round(progress * 100)}%
-      </span>
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span className="font-medium">Step {activeIdx + 1} of {DASH_PIPELINE_STEPS.length}</span>
+        <div className="flex items-center gap-3">
+          {estimatedTimeLeft > 0 && (
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {formatEta(estimatedTimeLeft)} remaining
+            </span>
+          )}
+          <span className="font-mono">{Math.round(progress * 100)}%</span>
+        </div>
+      </div>
+      <Progress value={progress * 100} className="h-2" />
     </div>
   );
 };
