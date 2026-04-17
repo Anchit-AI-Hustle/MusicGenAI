@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { PortalDropdown } from '@/components/ui/portal-dropdown';
 import {
   ArrowLeft, Music, Play, Pause, Download, Clock, Calendar, Disc,
-  ChevronDown, ChevronUp, MonitorPlay
+  ChevronDown, ChevronUp, MonitorPlay, Activity, Sparkles, ListMusic
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -172,16 +172,20 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card rounded-2xl overflow-hidden mb-6"
+          className="glass-card rounded-2xl overflow-hidden mb-6 relative"
         >
-          <div className="p-6 sm:p-8 flex flex-col sm:flex-row gap-6">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
+          <div className="relative p-6 sm:p-8 flex flex-col sm:flex-row gap-6">
             {/* Cover art */}
-            <div className="w-40 h-40 sm:w-48 sm:h-48 rounded-2xl bg-gradient-to-br from-primary/20 via-accent/10 to-secondary flex items-center justify-center flex-shrink-0 mx-auto sm:mx-0 shadow-xl">
-              {creation.type === 'album' ? (
-                <Disc className="w-20 h-20 text-accent/60" />
-              ) : (
-                <Music className="w-20 h-20 text-primary/60" />
-              )}
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary to-accent rounded-2xl blur-xl opacity-30" />
+              <div className="relative w-40 h-40 sm:w-48 sm:h-48 rounded-2xl bg-gradient-to-br from-primary/30 via-accent/20 to-secondary flex items-center justify-center flex-shrink-0 mx-auto sm:mx-0 shadow-2xl">
+                {creation.type === 'album' ? (
+                  <Disc className="w-20 h-20 text-accent/80" />
+                ) : (
+                  <Music className="w-20 h-20 text-primary/80" />
+                )}
+              </div>
             </div>
 
             {/* Info */}
@@ -229,10 +233,26 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
           </div>
         </motion.div>
 
-        {/* Video player */}
+        {/* Video player section */}
         {track?.videoUrl && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-6">
-            <VideoPlayer videoUrl={track.videoUrl} title={track.title} duration={track.duration} />
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            transition={{ delay: 0.1 }}
+            className="mb-6"
+          >
+            <div className="glass-card rounded-2xl p-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center">
+                  <MonitorPlay className="w-5 h-5 text-accent" />
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-semibold text-foreground">Music Video</h3>
+                  <p className="text-xs text-muted-foreground">AI-generated visual</p>
+                </div>
+              </div>
+              <VideoPlayer videoUrl={track.videoUrl} title={track.title} duration={track.duration} />
+            </div>
           </motion.div>
         )}
 
@@ -243,7 +263,12 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
               onClick={() => setShowLyrics(!showLyrics)}
               className="w-full flex items-center justify-between p-5 hover:bg-secondary/30 transition-colors"
             >
-              <h2 className="font-display text-lg font-semibold text-foreground">Lyrics</h2>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
+                  <Activity className="w-5 h-5 text-primary" />
+                </div>
+                <h2 className="font-display text-lg font-semibold text-foreground">Lyrics</h2>
+              </div>
               {showLyrics ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
             </button>
             <AnimatePresence>
@@ -267,20 +292,25 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
 
         {/* Prompt info */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card rounded-2xl p-5 mb-6">
-          <h2 className="font-display text-lg font-semibold text-foreground mb-3">Creation Details</h2>
-          <div className="space-y-3 text-sm">
-            <div>
-              <span className="text-muted-foreground">Prompt:</span>
-              <p className="text-foreground mt-1">{creation.songDescription}</p>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent/10 flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-primary" />
+            </div>
+            <h2 className="font-display text-lg font-semibold text-foreground">Creation Details</h2>
+          </div>
+          <div className="space-y-4 text-sm">
+            <div className="p-4 rounded-xl bg-white/5 border border-white/5">
+              <span className="text-muted-foreground text-xs uppercase tracking-wider font-medium">Prompt</span>
+              <p className="text-foreground mt-2 leading-relaxed">{creation.songDescription}</p>
             </div>
             {creation.artistInspiration && (
-              <div>
-                <span className="text-muted-foreground">Artist Inspiration:</span>
-                <p className="text-foreground mt-1">{creation.artistInspiration}</p>
+              <div className="p-4 rounded-xl bg-white/5 border border-white/5">
+                <span className="text-muted-foreground text-xs uppercase tracking-wider font-medium">Artist Inspiration</span>
+                <p className="text-foreground mt-2">{creation.artistInspiration}</p>
               </div>
             )}
-            <div>
-              <span className="text-muted-foreground">Vocal Language:</span>
+            <div className="p-4 rounded-xl bg-white/5 border border-white/5">
+              <span className="text-muted-foreground text-xs uppercase tracking-wider font-medium">Vocal Language</span>
               <p className="text-foreground mt-1">{creation.vocalLanguage}</p>
             </div>
           </div>
@@ -289,10 +319,15 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
         {/* Album track list (if album) */}
         {creation.type === 'album' && creation.tracks.length > 1 && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="glass-card rounded-2xl overflow-hidden">
-            <div className="p-5 border-b border-border">
-              <h2 className="font-display text-lg font-semibold text-foreground">All Tracks</h2>
+            <div className="p-5 border-b border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center">
+                  <ListMusic className="w-5 h-5 text-accent" />
+                </div>
+                <h2 className="font-display text-lg font-semibold text-foreground">All Tracks</h2>
+              </div>
             </div>
-            <div className="divide-y divide-border">
+            <div className="divide-y divide-white/5">
               {creation.tracks.map((t, i) => {
                 const isCurrent = player.currentTrack?.id === t.id;
                 const tPlaying = isCurrent && player.isPlaying;
@@ -306,7 +341,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({ creationId, trac
                     }}
                     className={`w-full flex items-center gap-4 p-4 text-left hover:bg-secondary/30 transition-colors ${isCurrent ? 'bg-primary/5' : ''}`}
                   >
-                    <span className="w-6 text-center text-sm text-muted-foreground">{i + 1}</span>
+                    <span className="w-6 text-center text-sm text-muted-foreground font-mono">{i + 1}</span>
                     <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary/10 flex-shrink-0">
                       {tPlaying ? <Pause className="w-4 h-4 text-primary" /> : <Play className="w-4 h-4 text-primary ml-0.5" />}
                     </div>

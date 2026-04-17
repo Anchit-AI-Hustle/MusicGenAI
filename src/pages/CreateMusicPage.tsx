@@ -52,7 +52,7 @@ import { PortalDropdown } from '@/components/ui/portal-dropdown';
 import { 
   Music, Disc, Wand2, Clock, Languages, Mic2, Users, 
   Video, Palette, Sparkles, Loader2, Play, Pause, Download, ChevronDown, X,
-  RefreshCw, Zap, Trash2, Activity, AudioWaveform, Share2, Check, Circle
+  RefreshCw, Zap, Trash2, Activity, AudioWaveform, Share2, Check, Circle, MonitorPlay
 } from 'lucide-react';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { Button } from '@/components/ui/button';
@@ -1445,8 +1445,19 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                             </div>
                           )}
                           {track.videoUrl && videoStatus !== "succeeded" && (
-                            <div className="mt-3">
-                              <VideoPlayer videoUrl={track.videoUrl} title={track.title} duration={track.duration} />
+                            <div className="mt-4">
+                              <div className="glass-card rounded-xl p-4">
+                                <div className="flex items-center gap-3 mb-3">
+                                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center">
+                                    <MonitorPlay className="w-5 h-5 text-accent" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-display text-sm font-semibold text-foreground">Music Video</h4>
+                                    <p className="text-xs text-muted-foreground">AI-generated visual</p>
+                                  </div>
+                                </div>
+                                <VideoPlayer videoUrl={track.videoUrl} title={track.title} duration={track.duration} />
+                              </div>
                             </div>
                           )}
                           {track.status === 'failed' && track.errorMessage && (

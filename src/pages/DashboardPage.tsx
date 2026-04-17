@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Music, Disc, Play, Pause, Download, Calendar, Clock, Filter, Loader2, RefreshCw, Check, Circle, RotateCcw, ListMusic, Sparkles, TrendingUp, AudioWaveform, Heart, Zap } from 'lucide-react';
+import { Music, Disc, Play, Pause, Download, Calendar, Clock, Filter, Loader2, RefreshCw, Check, Circle, RotateCcw, ListMusic, Sparkles, TrendingUp, AudioWaveform, Heart, Zap, MonitorPlay } from 'lucide-react';
 import JSZip from 'jszip';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { Button } from '@/components/ui/button';
@@ -727,7 +727,15 @@ const TrackRow: React.FC<{ track: Track; index: number; formatDuration: (s: numb
       
       {track.videoUrl && (
         <div className="mt-3 ml-9 sm:ml-10">
-          <VideoPlayer videoUrl={track.videoUrl} title={track.title} duration={track.duration} />
+          <div className="glass-card rounded-xl p-3">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center">
+                <MonitorPlay className="w-4 h-4 text-accent" />
+              </div>
+              <span className="text-xs font-medium text-accent/80">Music Video</span>
+            </div>
+            <VideoPlayer videoUrl={track.videoUrl} title={track.title} duration={track.duration} />
+          </div>
         </div>
       )}
     </motion.div>
