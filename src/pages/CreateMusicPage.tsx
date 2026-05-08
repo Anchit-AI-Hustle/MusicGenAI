@@ -49,12 +49,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PortalDropdown } from '@/components/ui/portal-dropdown';
-import { 
-  Music, Disc, Wand2, Clock, Languages, Mic2, Users, 
+import {
+  Music, Disc, Clock, Languages, Mic2, Users,
   Video, Palette, Sparkles, Loader2, Play, Pause, Download, ChevronDown, X,
-  RefreshCw, Zap, Trash2, Activity, AudioWaveform, Share2, Check, Circle, MonitorPlay
+  Zap, Activity, AudioWaveform, Share2, Check, Circle, MonitorPlay
 } from 'lucide-react';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
+import { AiToolbar as SharedAiToolbar } from '@/components/AiToolbar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -755,48 +756,23 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     }
   };
 
-  const AiToolbar: React.FC<{ field: string }> = ({ field }) => {
-    const isSuggesting = !!suggestionState.loading[`${field}-suggest`];
-    const isEnhancing = !!suggestionState.loading[`${field}-enhance`];
-    const isNew = !!suggestionState.loading[`${field}-new`];
-    const isLoading = isSuggesting || isEnhancing || isNew;
-    return (
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <button 
-          onClick={() => handleAiSuggest(field)} 
-          disabled={isLoading} 
-          title="AI Suggest"
-          className="p-1.5 rounded-lg border border-primary/20 bg-primary/5 text-primary hover:bg-primary hover:text-black transition-all disabled:opacity-50"
-        >
-          {isSuggesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
-        </button>
-        <button 
-          onClick={() => handleEnhance(field)} 
-          disabled={isLoading} 
-          title="Enhance"
-          className="p-1.5 rounded-lg border border-accent/20 bg-accent/5 text-accent hover:bg-accent hover:text-black transition-all disabled:opacity-50"
-        >
-          {isEnhancing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-        </button>
-        <button 
-          onClick={() => handleNewSuggestion(field)} 
-          disabled={isLoading} 
-          title="New Alternative"
-          className="p-1.5 rounded-lg border border-white/10 bg-white/5 text-white/60 hover:text-white hover:bg-white/20 transition-all disabled:opacity-50"
-        >
-          {isNew ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-        </button>
-        <button 
-          onClick={() => handleClear(field)} 
-          disabled={isLoading} 
-          title="Clear"
-          className="p-1.5 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-50"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    );
-  };
+  // AiToolbar lives in src/components/AiToolbar.tsx — single source of truth
+  // for icons, tooltips, colors, and accessibility. The local wrapper below
+  // keeps the existing <AiToolbar field="X" /> call-site syntax intact while
+  // delegating rendering and behavior to the shared component.
+  const AiToolbar: React.FC<{ field: string }> = ({ field }) => (
+    <SharedAiToolbar
+      field={field}
+      onSuggest={handleAiSuggest}
+      onEnhance={handleEnhance}
+      onRetry={handleNewSuggestion}
+      onClear={handleClear}
+      isSuggesting={!!suggestionState.loading[`${field}-suggest`]}
+      isEnhancing={!!suggestionState.loading[`${field}-enhance`]}
+      isRetrying={!!suggestionState.loading[`${field}-new`]}
+      variant="compact"
+    />
+  );
 
   // Pipeline Progress
   const PIPELINE_STEPS = [

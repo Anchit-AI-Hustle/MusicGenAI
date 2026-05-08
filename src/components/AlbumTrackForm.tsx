@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ChevronDown, ChevronUp, Wand2, Zap, RefreshCw, Trash2, Loader2,
+  ChevronDown, ChevronUp,
   Activity, Clock, Languages, Mic2, Users, Video, Palette, Sparkles, AudioWaveform,
 } from 'lucide-react';
+import { AiToolbar as SharedAiToolbar } from '@/components/AiToolbar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -205,28 +206,23 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
     if (result?.suggestion) applyToField(field, result.suggestion);
   };
 
-  const AiToolbar: React.FC<{ field: string }> = ({ field }) => {
-    const isSuggesting = !!suggestionState.loading[`${field}-suggest`];
-    const isEnhancing = !!suggestionState.loading[`${field}-enhance`];
-    const isNew = !!suggestionState.loading[`${field}-new`];
-    const isLoading = isSuggesting || isEnhancing || isNew;
-    return (
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <Button variant="outline" size="sm" onClick={() => handleAiAction(field, 'suggest')} disabled={isLoading} className="text-xs h-7 px-2 border-primary/30 text-primary hover:bg-primary/10">
-          {isSuggesting ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Wand2 className="w-3 h-3 mr-1" />} AI
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => handleAiAction(field, 'enhance')} disabled={isLoading} className="text-xs h-7 px-2 border-accent/30 text-accent hover:bg-accent/10">
-          {isEnhancing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Zap className="w-3 h-3 mr-1" />} Enhance
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => handleAiAction(field, 'new')} disabled={isLoading} className="text-xs h-7 px-2 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50">
-          {isNew ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />} New
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => handleClearField(field)} disabled={isLoading} className="text-xs h-7 px-2 text-muted-foreground hover:text-destructive">
-          <Trash2 className="w-3 h-3 mr-1" /> Clear
-        </Button>
-      </div>
-    );
-  };
+  // AiToolbar lives in src/components/AiToolbar.tsx — single source of
+  // truth for icons, tooltips, colors, and accessibility. The local
+  // wrapper preserves the existing <AiToolbar field="X" /> call-site
+  // syntax and binds the shared component to this form's handlers.
+  const AiToolbar: React.FC<{ field: string }> = ({ field }) => (
+    <SharedAiToolbar
+      field={field}
+      onSuggest={(f) => handleAiAction(f, 'suggest')}
+      onEnhance={(f) => handleAiAction(f, 'enhance')}
+      onRetry={(f) => handleAiAction(f, 'new')}
+      onClear={handleClearField}
+      isSuggesting={!!suggestionState.loading[`${field}-suggest`]}
+      isEnhancing={!!suggestionState.loading[`${field}-enhance`]}
+      isRetrying={!!suggestionState.loading[`${field}-new`]}
+      variant="labeled"
+    />
+  );
 
   const applyAlbumVibe = () => {
     if (albumVibe) update({ songDescription: albumVibe });
