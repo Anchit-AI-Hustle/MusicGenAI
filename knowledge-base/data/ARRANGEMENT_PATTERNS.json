@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "description": "Section-by-section arrangement templates by archetype. Each template specifies sections with proportional durations, energy values 0-1, density values, and instrument layering plan.",
+  "_field_doc": {
+    "energy": "0-1, where 0 = ambient/silence and 1 = peak / drop / climax",
+    "density": "0-1, count of simultaneous active layers / max layers (8-12)",
+    "duration_pct": "fraction of total song duration (sums to ~1.0)",
+    "harmonic_rhythm": "chords-per-bar; 0.5 = chord every 2 bars; 1 = chord every bar; 2 = two chords per bar",
+    "transition_in": "type of transition into this section (riser, snare-roll, drop-cut, fill, silence, vocal-bridge, none)",
+    "vocal_density": "0-1; 0 = instrumental, 1 = vocal-saturated"
+  },
+  "archetypes": {
+    "pop-verse-chorus": {
+      "label": "Pop Verse-Chorus (4-min radio)",
+      "fits_genres": ["pop-mainstream", "k-pop", "country", "indie pop", "rnb-modern"],
+      "total_duration_seconds": [180, 240],
+      "sections": [
+        {"name": "intro", "duration_pct": 0.06, "energy": 0.3, "density": 0.3, "harmonic_rhythm": 1, "transition_in": "none", "vocal_density": 0.0, "purpose": "set tone, hint at hook"},
+        {"name": "verse-1", "duration_pct": 0.16, "energy": 0.45, "density": 0.5, "harmonic_rhythm": 1, "transition_in": "fill", "vocal_density": 0.85, "purpose": "establish narrative + melody"},
+        {"name": "pre-chorus", "duration_pct": 0.08, "energy": 0.65, "density": 0.65, "harmonic_rhythm": 2, "transition_in": "snare-roll", "vocal_density": 0.85, "purpose": "lift, ascending melody, build expectation"},
+        {"name": "chorus-1", "duration_pct": 0.16, "energy": 0.9, "density": 0.85, "harmonic_rhythm": 1, "transition_in": "drop-cut", "vocal_density": 1.0, "purpose": "the hook — full payoff"},
+        {"name": "verse-2", "duration_pct": 0.14, "energy": 0.55, "density": 0.6, "harmonic_rhythm": 1, "transition_in": "fill", "vocal_density": 0.85, "purpose": "develop story, slightly bigger than verse-1 (add 1 layer)"},
+        {"name": "pre-chorus-2", "duration_pct": 0.07, "energy": 0.7, "density": 0.7, "harmonic_rhythm": 2, "transition_in": "snare-roll", "vocal_density": 0.85, "purpose": "lift, ascending melody — slightly higher register"},
+        {"name": "chorus-2", "duration_pct": 0.14, "energy": 0.92, "density": 0.9, "harmonic_rhythm": 1, "transition_in": "drop-cut", "vocal_density": 1.0, "purpose": "full hook + harmony stack"},
+        {"name": "bridge", "duration_pct": 0.08, "energy": 0.55, "density": 0.5, "harmonic_rhythm": 0.5, "transition_in": "silence", "vocal_density": 0.6, "purpose": "contrast, modulate or modal-flip, breath"},
+        {"name": "final-chorus", "duration_pct": 0.16, "energy": 1.0, "density": 1.0, "harmonic_rhythm": 1, "transition_in": "vocal-bridge", "vocal_density": 1.0, "purpose": "biggest moment — add ad-libs, key-up, harmony walls"},
+        {"name": "outro", "duration_pct": 0.05, "energy": 0.4, "density": 0.4, "harmonic_rhythm": 1, "transition_in": "fade-or-tag", "vocal_density": 0.3, "purpose": "release, fade or final hit"}
+      ],
+      "rules": [
+        "chorus-2 must be at least as energetic as chorus-1, ideally +0.05",
+        "final-chorus must add at least one new element (high harmony, ad-libs, modulation up half-step, layered guitar)",
+        "bridge must drop density by ≥30% and end on V or half-cadence",
+        "intro should hint at chorus melody (motivic foreshadow) for memorability"
+      ]
+    },
+    "edm-drop": {
+      "label": "EDM Build-Drop",
+      "fits_genres": ["edm-festival", "trance", "dubstep", "house-deep", "k-pop"],
+      "total_duration_seconds": [180, 300],
+      "sections": [
+        {"name": "intro", "duration_pct": 0.08, "energy": 0.2, "density": 0.25, "harmonic_rhythm": 0.5, "transition_in": "none", "vocal_density": 0.0, "purpose": "DJ-friendly intro, beatless or kick-only"},
+        {"name": "build-1", "duration_pct": 0.12, "energy": 0.55, "density": 0.55, "harmonic_rhythm": 1, "transition_in": "kick-in", "vocal_density": 0.4, "purpose": "introduce melody and pre-drop layers"},
+        {"name": "breakdown-1", "duration_pct": 0.14, "energy": 0.5, "density": 0.5, "harmonic_rhythm": 1, "transition_in": "filter-sweep", "vocal_density": 0.9, "purpose": "vocal-led, drums drop out, emotional centerpiece"},
+        {"name": "riser-1", "duration_pct": 0.04, "energy": 0.85, "density": 0.4, "harmonic_rhythm": 1, "transition_in": "snare-roll-and-riser", "vocal_density": 0.5, "purpose": "8-bar build to drop with drum roll, white-noise riser, downlifter, tom build"},
+        {"name": "drop-1", "duration_pct": 0.16, "energy": 1.0, "density": 1.0, "harmonic_rhythm": 1, "transition_in": "drop-impact", "vocal_density": 0.3, "purpose": "the payoff — main lead synth, sidechain, kick-bass interplay"},
+        {"name": "break-2", "duration_pct": 0.10, "energy": 0.45, "density": 0.4, "harmonic_rhythm": 1, "transition_in": "kick-out", "vocal_density": 0.85, "purpose": "second breakdown, vocal hook variation"},
+        {"name": "riser-2", "duration_pct": 0.04, "energy": 0.9, "density": 0.5, "harmonic_rhythm": 1, "transition_in": "snare-roll-and-riser", "vocal_density": 0.4, "purpose": "build to second drop, slightly different content (variation)"},
+        {"name": "drop-2", "duration_pct": 0.20, "energy": 1.0, "density": 1.0, "harmonic_rhythm": 1, "transition_in": "drop-impact", "vocal_density": 0.4, "purpose": "biggest drop — add layer, vocal chop adlib, longer"},
+        {"name": "outro", "duration_pct": 0.12, "energy": 0.3, "density": 0.3, "harmonic_rhythm": 0.5, "transition_in": "filter-sweep-out", "vocal_density": 0.0, "purpose": "DJ-friendly outro, beat fade"}
+      ],
+      "rules": [
+        "drops must be exact powers of 2 in bars (8, 16, 32) — never 12 or 18",
+        "the kick must hit on beat 1 of the drop with maximum punch",
+        "riser must contain: white-noise sweep up, snare roll accelerating, downlifter at the end, optional impact hit at drop",
+        "breakdown must have 4-8 bars of zero kick (only pad + vocal) before riser starts"
+      ]
+    },
+    "hip-hop-trap": {
+      "label": "Hip Hop / Trap Single",
+      "fits_genres": ["trap", "hip-hop-boom-bap", "uk-drill", "phonk", "punjabi-drill", "desi hip hop"],
+      "total_duration_seconds": [120, 210],
+      "sections": [
+        {"name": "intro", "duration_pct": 0.08, "energy": 0.4, "density": 0.4, "harmonic_rhythm": 0.5, "transition_in": "none", "vocal_density": 0.0, "purpose": "instrumental loop, set the vibe"},
+        {"name": "verse-1", "duration_pct": 0.27, "energy": 0.7, "density": 0.7, "harmonic_rhythm": 0.5, "transition_in": "vocal-tag", "vocal_density": 0.95, "purpose": "16-bar verse, narrative, intricate flow"},
+        {"name": "hook", "duration_pct": 0.18, "energy": 0.85, "density": 0.85, "harmonic_rhythm": 0.5, "transition_in": "drum-fill", "vocal_density": 0.9, "purpose": "8-bar catchy melodic hook with stack"},
+        {"name": "verse-2", "duration_pct": 0.27, "energy": 0.75, "density": 0.75, "harmonic_rhythm": 0.5, "transition_in": "vocal-tag", "vocal_density": 0.95, "purpose": "16-bar verse — different cadence/flow"},
+        {"name": "hook-2", "duration_pct": 0.15, "energy": 0.9, "density": 0.9, "harmonic_rhythm": 0.5, "transition_in": "drum-fill", "vocal_density": 0.95, "purpose": "biggest hook with adlibs"},
+        {"name": "outro", "duration_pct": 0.05, "energy": 0.35, "density": 0.4, "harmonic_rhythm": 0.5, "transition_in": "fade", "vocal_density": 0.3, "purpose": "instrumental fade or vocal tag"}
+      ],
+      "rules": [
+        "verse always 16 bars (not 12, not 20)",
+        "hook always 8 bars",
+        "808 must slide between root and minor third / fourth in dark progressions"
+      ]
+    },
+    "ballad-emotional": {
+      "label": "Emotional Ballad",
+      "fits_genres": ["pop-mainstream", "rnb-modern", "neo-soul", "country", "folk-acoustic", "bollywood-romantic"],
+      "total_duration_seconds": [210, 270],
+      "sections": [
+        {"name": "intro", "duration_pct": 0.08, "energy": 0.2, "density": 0.2, "harmonic_rhythm": 0.5, "transition_in": "none", "vocal_density": 0.0, "purpose": "piano or acoustic guitar alone, setting the room"},
+        {"name": "verse-1", "duration_pct": 0.18, "energy": 0.35, "density": 0.4, "harmonic_rhythm": 0.5, "transition_in": "vocal-cue", "vocal_density": 0.9, "purpose": "intimate vocal — solo with piano/guitar"},
+        {"name": "pre-chorus", "duration_pct": 0.10, "energy": 0.55, "density": 0.55, "harmonic_rhythm": 1, "transition_in": "drum-roll-soft", "vocal_density": 0.9, "purpose": "drums enter, ascending melody, expand"},
+        {"name": "chorus-1", "duration_pct": 0.16, "energy": 0.8, "density": 0.8, "harmonic_rhythm": 1, "transition_in": "kick-in", "vocal_density": 1.0, "purpose": "full band, harmony stack, the message"},
+        {"name": "verse-2", "duration_pct": 0.14, "energy": 0.5, "density": 0.55, "harmonic_rhythm": 0.5, "transition_in": "fill", "vocal_density": 0.9, "purpose": "fuller verse with band, develops story"},
+        {"name": "chorus-2", "duration_pct": 0.16, "energy": 0.85, "density": 0.85, "harmonic_rhythm": 1, "transition_in": "drum-fill", "vocal_density": 1.0, "purpose": "fuller chorus with backing vocals"},
+        {"name": "bridge", "duration_pct": 0.10, "energy": 0.65, "density": 0.55, "harmonic_rhythm": 0.5, "transition_in": "silence-into-vocal", "vocal_density": 0.85, "purpose": "key-change setup OR modal flip, lyrical climax"},
+        {"name": "final-chorus", "duration_pct": 0.13, "energy": 1.0, "density": 1.0, "harmonic_rhythm": 1, "transition_in": "vocal-bridge", "vocal_density": 1.0, "purpose": "key-up half step, biggest harmony stack, vocal runs"},
+        {"name": "outro", "duration_pct": 0.05, "energy": 0.3, "density": 0.3, "harmonic_rhythm": 0.5, "transition_in": "fade-or-tag", "vocal_density": 0.4, "purpose": "soft return to intro feel"}
+      ],
+      "rules": [
+        "verse-1 should be near-solo (vocal + 1 instrument) for intimacy",
+        "the build is the entire structure — each section adds one layer",
+        "final-chorus should up-mod by half step or whole step OR add a counter-melody / harmony"
+      ]
+    },
+    "lofi-loop": {
+      "label": "Lo-fi Loop (no traditional structure)",
+      "fits_genres": ["lo-fi-hip-hop", "ambient", "meditation-healing"],
+      "total_duration_seconds": [120, 240],
+      "sections": [
+        {"name": "intro", "duration_pct": 0.10, "energy": 0.3, "density": 0.3, "harmonic_rhythm": 0.5, "transition_in": "none", "vocal_density": 0.0, "purpose": "vinyl crackle, piano motif"},
+        {"name": "loop-A", "duration_pct": 0.30, "energy": 0.5, "density": 0.6, "harmonic_rhythm": 0.5, "transition_in": "drums-in", "vocal_density": 0.0, "purpose": "main loop with drums"},
+        {"name": "variation-A", "duration_pct": 0.20, "energy": 0.55, "density": 0.65, "harmonic_rhythm": 0.5, "transition_in": "drum-fill", "vocal_density": 0.0, "purpose": "add element (sax, vocal chop, guitar)"},
+        {"name": "break", "duration_pct": 0.10, "energy": 0.35, "density": 0.4, "harmonic_rhythm": 0.5, "transition_in": "drums-drop-out", "vocal_density": 0.0, "purpose": "drum-less, atmospheric"},
+        {"name": "loop-B", "duration_pct": 0.20, "energy": 0.55, "density": 0.7, "harmonic_rhythm": 0.5, "transition_in": "drums-back", "vocal_density": 0.0, "purpose": "full loop with new element"},
+        {"name": "outro", "duration_pct": 0.10, "energy": 0.25, "density": 0.3, "harmonic_rhythm": 0.5, "transition_in": "elements-out", "vocal_density": 0.0, "purpose": "fade to vinyl"}
+      ],
+      "rules": [
+        "no buildups or drops — gradual layering",
+        "swing must be ≥0.55 — straight 16ths feel sterile",
+        "vinyl crackle and tape hiss should be present throughout"
+      ]
+    },
+    "cinematic-trailer": {
+      "label": "Cinematic Trailer / Film Score",
+      "fits_genres": ["film-score-trailer", "post-rock", "classical-orchestral"],
+      "total_duration_seconds": [120, 180],
+      "sections": [
+        {"name": "establishing-pad", "duration_pct": 0.10, "energy": 0.15, "density": 0.2, "harmonic_rhythm": 0.25, "transition_in": "none", "vocal_density": 0.0, "purpose": "atmosphere, distant pad, hint of motif"},
+        {"name": "motif-introduction", "duration_pct": 0.15, "energy": 0.35, "density": 0.4, "harmonic_rhythm": 0.5, "transition_in": "soft-piano", "vocal_density": 0.0, "purpose": "piano/solo violin states main motif"},
+        {"name": "build-1", "duration_pct": 0.18, "energy": 0.6, "density": 0.6, "harmonic_rhythm": 1, "transition_in": "drum-pulse-enters", "vocal_density": 0.0, "purpose": "ostinato strings begin, low brass enters, pulse starts"},
+        {"name": "first-impact", "duration_pct": 0.07, "energy": 0.85, "density": 0.85, "harmonic_rhythm": 1, "transition_in": "taiko-impact", "vocal_density": 0.3, "purpose": "first hit — taiko, choir entrance, full orchestra accent"},
+        {"name": "false-quiet", "duration_pct": 0.08, "energy": 0.4, "density": 0.4, "harmonic_rhythm": 0.5, "transition_in": "silence-after-impact", "vocal_density": 0.4, "purpose": "drop to soft texture — choir or string", "trope": "the calm before the climax"},
+        {"name": "build-2", "duration_pct": 0.12, "energy": 0.8, "density": 0.85, "harmonic_rhythm": 1, "transition_in": "string-tremolo-build", "vocal_density": 0.3, "purpose": "accelerating ostinato, brass swell"},
+        {"name": "climax", "duration_pct": 0.18, "energy": 1.0, "density": 1.0, "harmonic_rhythm": 1, "transition_in": "full-impact-hit", "vocal_density": 0.5, "purpose": "everything in — choir, full orchestra, taiko hits, brass, strings, optional sub-drop"},
+        {"name": "outro-tag", "duration_pct": 0.12, "energy": 0.4, "density": 0.4, "harmonic_rhythm": 0.5, "transition_in": "release", "vocal_density": 0.0, "purpose": "single piano motif return OR final boom on tonic"}
+      ],
+      "rules": [
+        "always state main motif within first 30s",
+        "include at least one 'false quiet' moment before the climax",
+        "climax should feature taiko/sub-drop on at least one downbeat",
+        "modulate from minor home up to relative major in climax for triumph (or stay in minor for tragic)"
+      ]
+    },
+    "rock-anthem": {
+      "label": "Rock Anthem (3-4 min)",
+      "fits_genres": ["rock-classic", "metal", "post-rock", "punk"],
+      "total_duration_seconds": [180, 300],
+      "sections": [
+        {"name": "intro-riff", "duration_pct": 0.10, "energy": 0.6, "density": 0.5, "harmonic_rhythm": 1, "transition_in": "none", "vocal_density": 0.0, "purpose": "main riff stated by guitar"},
+        {"name": "verse-1", "duration_pct": 0.15, "energy": 0.6, "density": 0.6, "harmonic_rhythm": 1, "transition_in": "drum-fill", "vocal_density": 0.85, "purpose": "narrative verse with full band"},
+        {"name": "pre-chorus", "duration_pct": 0.08, "energy": 0.75, "density": 0.7, "harmonic_rhythm": 1, "transition_in": "snare-roll", "vocal_density": 0.85, "purpose": "ascending melody, build"},
+        {"name": "chorus-1", "duration_pct": 0.16, "energy": 0.95, "density": 0.95, "harmonic_rhythm": 1, "transition_in": "power-chord-stab", "vocal_density": 1.0, "purpose": "anthemic chorus with stacked vocals"},
+        {"name": "verse-2", "duration_pct": 0.13, "energy": 0.65, "density": 0.65, "harmonic_rhythm": 1, "transition_in": "fill", "vocal_density": 0.85, "purpose": "develops story"},
+        {"name": "pre-chorus-2", "duration_pct": 0.07, "energy": 0.8, "density": 0.75, "harmonic_rhythm": 1, "transition_in": "snare-roll", "vocal_density": 0.85, "purpose": "build"},
+        {"name": "chorus-2", "duration_pct": 0.16, "energy": 0.97, "density": 0.97, "harmonic_rhythm": 1, "transition_in": "power-chord-stab", "vocal_density": 1.0, "purpose": "bigger chorus"},
+        {"name": "guitar-solo", "duration_pct": 0.08, "energy": 0.95, "density": 0.85, "harmonic_rhythm": 1, "transition_in": "vocal-out", "vocal_density": 0.0, "purpose": "guitar solo over chorus chords"},
+        {"name": "final-chorus", "duration_pct": 0.07, "energy": 1.0, "density": 1.0, "harmonic_rhythm": 1, "transition_in": "drum-fill", "vocal_density": 1.0, "purpose": "biggest chorus + ad-libs"}
+      ],
+      "rules": [
+        "guitar solo should outline melody (not just scale runs)",
+        "final chorus must add at least: harmony vocal + tambourine OR new lead line"
+      ]
+    },
+    "indian-classical-form": {
+      "label": "Indian Classical (Hindustani Khayal Form)",
+      "fits_genres": ["indian-classical"],
+      "total_duration_seconds": [600, 1800],
+      "sections": [
+        {"name": "alap", "duration_pct": 0.40, "energy": 0.2, "density": 0.3, "harmonic_rhythm": 0.0, "transition_in": "none", "vocal_density": 0.5, "purpose": "free-rhythm exposition of raga, no tabla"},
+        {"name": "jor", "duration_pct": 0.20, "energy": 0.4, "density": 0.4, "harmonic_rhythm": 0.0, "transition_in": "pulse-emerges", "vocal_density": 0.6, "purpose": "rhythmic pulse without taal — jhalmal"},
+        {"name": "vilambit-bandish", "duration_pct": 0.20, "energy": 0.55, "density": 0.6, "harmonic_rhythm": 0.0, "transition_in": "tabla-enters-slowly", "vocal_density": 0.85, "purpose": "fixed composition in slow taal"},
+        {"name": "drut-bandish", "duration_pct": 0.15, "energy": 0.85, "density": 0.85, "harmonic_rhythm": 0.0, "transition_in": "tempo-double", "vocal_density": 0.85, "purpose": "fast composition with sawal-jawab"},
+        {"name": "jhala", "duration_pct": 0.05, "energy": 1.0, "density": 1.0, "harmonic_rhythm": 0.0, "transition_in": "tempo-double-again", "vocal_density": 0.7, "purpose": "fast climactic conclusion"}
+      ],
+      "rules": [
+        "tanpura drone present throughout entire performance",
+        "raga rules must be respected: aroh (ascent) and avaroh (descent)",
+        "tabla enters only at vilambit-bandish, never during alap or jor"
+      ],
+      "limitations": "Most generative models cannot render this form authentically. Use as a planning template that the model approximates."
+    }
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "description": "Provider-specific prompt scaffolds. Each template is consumed by promptBuilder.ts. Variables in {{}} are interpolated.",
+  "templates": {
+    "stable-audio": {
+      "max_chars": 512,
+      "format": "comma-separated tags + descriptors",
+      "scaffold": "{{genre.label}}, {{subgenre}}, {{bpm}} BPM, {{key}} {{mode}}, {{groove_signature}}, {{instrumentation_layers_csv}}, {{production_traits_csv_top3}}, {{reference_style_descriptor}}, {{stereo_descriptor}}, {{lufs_descriptor}}, high quality, 24-bit lossless feel",
+      "instrumental_only": true,
+      "anti_keywords_pattern": "{{anti_keywords_csv}}",
+      "examples": {
+        "deep-house-melancholic": "deep house, 122 BPM, A minor, four-on-the-floor kick, warm analog bass, Rhodes piano stabs, soulful vocal chop, melancholic mood, 2020s Innervisions label sound, wide stereo with mono lows, dynamic -10 LUFS feel, high quality"
+      }
+    },
+    "ace-step": {
+      "max_chars": 2000,
+      "format": "paragraph + bracketed structure with optional lyrics",
+      "scaffold": "{{paragraph_description}}.\n{{bpm}} BPM in {{key}} {{mode}}, {{time_signature}} time signature.\n{{vocal_direction}}.\n{{lyrics_with_brackets_or_instrumental_directive}}",
+      "instrumental_only": false,
+      "examples": {
+        "punjabi-drill": "Dark Punjabi drill song with hard-edge street narrative. UK drill production with Indian melodic motifs — sliding distorted 808 bass, dark piano motif. 142 BPM in F harmonic minor, 4/4. Male Punjabi rap vocal, mid-low register, hard-edged street accent.\n[verse 1]\n{lyrics}\n[hook]\n{lyrics}\n[verse 2]\n{lyrics}\n[hook]\n{lyrics}\n[outro]\nVocal tag fades."
+      }
+    },
+    "elevenlabs-music": {
+      "max_chars": 1000,
+      "format": "natural-language single paragraph",
+      "scaffold": "{{1_sentence_genre_summary}} in the style of {{reference_style}}, {{bpm}} BPM, {{mood_with_arc}}. {{vocal_direction}}. {{top_3_production_traits}}. {{stereo_and_mix_descriptor}}.",
+      "examples": {
+        "lofi-rainy": "Lo-fi hip hop study beat in the style of Lofi Girl streams, 82 BPM, melancholic-yet-warm with a contemplative arc. No vocals — pure instrumental. Dusty Rhodes piano loop, swung 8th-note drums slightly behind beat, vinyl crackle and tape saturation throughout. Natural width, soft -14 LUFS feel, no compression, warm rolled-off highs."
+      }
+    },
+    "minimax": {
+      "max_chars": 4000,
+      "format": "long structured master prompt",
+      "scaffold": "[MASTER MUSIC GEN BLUEPRINT]\nIDENTITY: {{1_sentence_identity}}.\nSPECS: BPM {{bpm}}; Key {{key}} {{mode}}; Time {{time_signature}}; Duration {{duration_seconds}}s.\nSTRUCTURE: {{structure_with_bars}}.\nINSTRUMENTATION: {{instrumentation_with_roles}}.\nGROOVE: {{groove_signature}}, swing {{swing}}, sidechain {{sidechain}}.\nVOCALS: {{vocal_direction}}.\nLYRICS: {{lyrics_or_instrumental}}.\nINSPIRATION: in the style of {{references}}.\nPRODUCTION: {{production_traits_top5}}.\nMIX TARGET: {{lufs}} LUFS, {{stereo_width}} stereo width, {{tonal_balance}}.\nEMOTIONAL ARC: {{section_by_section_feel}}.\nCONSTRAINTS: do NOT {{anti_keywords_csv}}.",
+      "examples": {
+        "epic-cinematic": "[MASTER MUSIC GEN BLUEPRINT]\nIDENTITY: Epic cinematic trailer in the style of Hans Zimmer's Inception score.\nSPECS: BPM 110; Key D minor; 4/4; Duration 150s.\nSTRUCTURE: 0:00-0:15 establishing pad, 0:15-0:30 piano motif, 0:30-1:00 string ostinato builds, 1:00-1:10 first taiko impact, 1:10-1:20 false quiet, 1:20-1:50 final climax with full orchestra and choir.\nINSTRUMENTATION: low strings ostinato, taiko drums, choir (Latin), low brass, piano motif, sub-drop on impacts.\nGROOVE: 4-beat ostinato pulse driving through the piece.\nVOCALS: Latin-text choir, no rapping, no language vocals.\nLYRICS: instrumental + choir vocalisation.\nINSPIRATION: in the style of Hans Zimmer Inception 'Time' and Two Steps From Hell 'Heart of Courage'.\nPRODUCTION: hyper-wide stereo strings, sub-drop layered with taiko, no compression, dramatic dynamic range.\nMIX TARGET: -14 LUFS, hyper-wide stereo, full-range balanced.\nEMOTIONAL ARC: contemplative → tension building → triumphant climax → release.\nCONSTRAINTS: do NOT use kick drums in pop pattern, do NOT use auto-tune, do NOT compress dynamics."
+      }
+    },
+    "image-prompt-for-video-stills": {
+      "max_chars": 1000,
+      "format": "natural-language with cinematic descriptors",
+      "scaffold": "{{aesthetic.ai_image_keywords}}, {{section_specific_modifier}}, {{palette_descriptor}}, {{lighting}}, {{camera_archetype}} camera angle, {{lens_feel}} lens, {{grain_intensity_descriptor}}, {{texture_overlay}} texture, cinematic, high detail, professional",
+      "examples": {
+        "edm-drop-frame": "EDM festival main stage, laser lights, fog machine, massive crowd silhouette, neon visuals, stadium-scale lighting design, drop moment with maximum lasers, magenta and cyan palette, strobe lighting, crane camera angle, wide lens, no grain, clean texture, cinematic, high detail, professional"
+      }
+    },
+    "lyrics-prompt": {
+      "max_chars": 2000,
+      "format": "structured prompt to LLM for lyric generation",
+      "scaffold": "Write lyrics for a {{genre}} song.\nTheme: {{theme}}.\nLanguage: {{language}}.\nMood arc: {{mood_arc}}.\nStructure: {{structure}}.\nBPM: {{bpm}} — keep syllable count near {{syllables_per_bar}} per bar.\nRhyme scheme: {{rhyme_scheme}} (e.g., ABAB for verse, AABB for chorus, free for bridge).\nReference vocal style: {{reference_artists}}.\nLyric grammar rules:\n- Place stressed syllables on beats 1 and 3 (or 1 and 2-and).\n- Avoid more than 2 consecutive unstressed beats.\n- Rhyme on the last STRESSED beat of each line.\n- Hook (chorus) must be memorable, repeated identically across choruses.\n- Verse should narrate; chorus should crystallize emotion.\n- Avoid forced rhymes and cliché filler ('yeah', 'oh baby') unless idiomatic to genre.\n\nDo NOT use any banned phrases: {{banned_phrases_csv}}\n\nReturn lyrics in this exact format with section tags:\n[intro]\n[verse 1]\n4 lines\n[pre-chorus]\n2 lines\n[chorus]\n4 lines (the hook)\n[verse 2]\n4 lines\n[chorus]\n4 lines\n[bridge]\n2-4 lines\n[final chorus]\n4 lines + ad-libs\n[outro]"
+    }
+  },
+  "syllable_count_per_bar_by_bpm": {
+    "doc": "Approximate singable syllable count per 4-beat bar, based on tempo. Use as upper bound for lyric writing.",
+    "60_bpm": 8,
+    "75_bpm": 9,
+    "90_bpm": 10,
+    "100_bpm": 12,
+    "110_bpm": 13,
+    "120_bpm": 14,
+    "135_bpm": 16,
+    "150_bpm": 18,
+    "175_bpm": 22
+  },
+  "banned_phrases_default": {
+    "doc": "Phrases banned across all genres because they're cliched or feel AI-generated.",
+    "list": [
+      "let's make it last",
+      "let's go higher",
+      "you and me forever",
+      "feel the beat drop",
+      "we're unstoppable",
+      "burning desire",
+      "wildest dreams",
+      "broken pieces",
+      "my one and only",
+      "love is in the air",
+      "shooting stars",
+      "rollercoaster of emotions",
+      "feel the rhythm in my soul",
+      "dance til the morning",
+      "neon dreams"
+    ]
+  },
+  "anti_keywords_global": {
+    "doc": "Global anti-keywords. Genre-specific anti-keywords are in GENRE_KNOWLEDGE_BASE.json.",
+    "list": [
+      "amateur",
+      "cheap synthesizer",
+      "midi general",
+      "untrained vocal",
+      "out of key",
+      "off-tempo",
+      "garbled lyrics",
+      "muddy mix",
+      "ear-fatiguing"
+    ]
+  }
+}

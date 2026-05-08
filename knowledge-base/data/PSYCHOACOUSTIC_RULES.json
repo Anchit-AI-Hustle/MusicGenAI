@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "description": "Operational psychoacoustic rules used by the mixing/mastering engine and the prompt builder. Each rule is grounded in the citations listed; speculative rules are flagged.",
+  "critical_bands_bark": {
+    "doc": "Bark scale critical bands. Two sounds in the same band mask each other; two in different bands coexist cleanly. Use this to schedule frequency content across a mix.",
+    "bands": [
+      {"bark": 1, "f_lo": 20, "f_hi": 100, "label": "sub", "use": "kick fundamental, 808, sub-bass"},
+      {"bark": 2, "f_lo": 100, "f_hi": 200, "label": "bass-low", "use": "bass guitar fundamentals, kick body"},
+      {"bark": 3, "f_lo": 200, "f_hi": 300, "label": "bass-high", "use": "low male vocal, bass overtones, guitar lows"},
+      {"bark": 4, "f_lo": 300, "f_hi": 400, "label": "low-mid", "use": "warmth — vocal body, snare body"},
+      {"bark": 5, "f_lo": 400, "f_hi": 510, "label": "mid", "use": "mud zone — cut here on guitars/keys"},
+      {"bark": 6, "f_lo": 510, "f_hi": 630, "label": "mid", "use": "vocal honk if present — usually cut"},
+      {"bark": 7, "f_lo": 630, "f_hi": 770, "label": "mid", "use": "guitar body"},
+      {"bark": 8, "f_lo": 770, "f_hi": 920, "label": "mid", "use": "snare crack lower"},
+      {"bark": 9, "f_lo": 920, "f_hi": 1080, "label": "high-mid", "use": "vocal presence start"},
+      {"bark": 10, "f_lo": 1080, "f_hi": 1270, "label": "high-mid", "use": "vocal forwardness"},
+      {"bark": 11, "f_lo": 1270, "f_hi": 1480, "label": "high-mid", "use": "guitar pick attack"},
+      {"bark": 12, "f_lo": 1480, "f_hi": 1720, "label": "presence", "use": "vocal intelligibility (consonants)"},
+      {"bark": 13, "f_lo": 1720, "f_hi": 2000, "label": "presence", "use": "snare crack peak"},
+      {"bark": 14, "f_lo": 2000, "f_hi": 2320, "label": "presence", "use": "ear-most-sensitive zone (3 kHz)"},
+      {"bark": 15, "f_lo": 2320, "f_hi": 2700, "label": "presence", "use": "vocal bite"},
+      {"bark": 16, "f_lo": 2700, "f_hi": 3150, "label": "presence", "use": "vocal sibilance start"},
+      {"bark": 17, "f_lo": 3150, "f_hi": 3700, "label": "high", "use": "vocal sibilance peak — de-ess here"},
+      {"bark": 18, "f_lo": 3700, "f_hi": 4400, "label": "high", "use": "cymbal sizzle"},
+      {"bark": 19, "f_lo": 4400, "f_hi": 5300, "label": "high", "use": "hi-hat attack"},
+      {"bark": 20, "f_lo": 5300, "f_hi": 6400, "label": "high", "use": "air start"},
+      {"bark": 21, "f_lo": 6400, "f_hi": 7700, "label": "high", "use": "cymbal shimmer"},
+      {"bark": 22, "f_lo": 7700, "f_hi": 9500, "label": "very high", "use": "open hat sizzle"},
+      {"bark": 23, "f_lo": 9500, "f_hi": 12000, "label": "air", "use": "shimmer / 'air band'"},
+      {"bark": 24, "f_lo": 12000, "f_hi": 20000, "label": "ultra-high", "use": "subtle sparkle / shelf boost"}
+    ]
+  },
+  "fletcher_munson": {
+    "doc": "Equal-loudness contour. Ear is most sensitive at 2-5 kHz. Below 60 Hz and above 10 kHz, sensitivity drops sharply, especially at low listening levels. Mixes for streaming should account for low-volume listening (phone speakers, AirPods, car).",
+    "ear_most_sensitive_hz": [2000, 5000],
+    "ear_least_sensitive_low_hz": 60,
+    "ear_least_sensitive_high_hz": 10000,
+    "implication": "Mix at multiple volumes. A bass-heavy mix that sounds great at high volume can feel weak at low volume because the ear's bass sensitivity drops. Master should be tested at -30 dB SPL (phone speaker simulation) AND at -65 dB SPL (car) AND at -85 dB SPL (loud studio)."
+  },
+  "masking_rules": {
+    "doc": "Operational rules for avoiding frequency masking when arranging and mixing.",
+    "rules": [
+      {
+        "id": "kick-bass-separation",
+        "rule": "Kick fundamental and bass fundamental cannot be at the same frequency. Either: (a) kick lives at 60 Hz and bass at 80-100 Hz, or (b) sidechain bass to kick so they alternate in time.",
+        "default": "Kick at 60 Hz, bass guitar at 100 Hz with subtle high-pass at 50 Hz on bass."
+      },
+      {
+        "id": "vocal-guitar-separation",
+        "rule": "Lead vocal lives in 1-3 kHz. Distorted electric guitar lives in 200-800 Hz with overtones up to 5 kHz. Cut guitar in 1-3 kHz to free vocal presence (the 'guitar scoop').",
+        "default": "Cut guitar 2-3 dB at 2.5 kHz when vocal is present."
+      },
+      {
+        "id": "snare-vocal-separation",
+        "rule": "Snare crack at 2-3 kHz competes with vocal sibilance. Solution: tame snare 3 kHz on solo, brighten 5 kHz on snare to give it identity above the vocal.",
+        "default": "Snare: cut 1 dB at 2.5 kHz, boost 1 dB at 5 kHz."
+      },
+      {
+        "id": "hihat-cymbal-separation",
+        "rule": "Hi-hats and crash cymbals both live above 5 kHz. Solution: hi-hats narrow band (6-9 kHz), cymbals broader (4-12 kHz) but level kept under hats.",
+        "default": "Hi-hat solo presence 7-9 kHz; cymbals tail 10-15 kHz."
+      },
+      {
+        "id": "low-end-mono",
+        "rule": "Frequencies below ~120 Hz should be mono. Stereo bass causes phase cancellation on club systems and mono playback (phone speakers, restaurants).",
+        "default": "Mono-summed below 120 Hz on master bus."
+      }
+    ]
+  },
+  "perceptual_loudness": {
+    "doc": "LUFS (Loudness Units Full Scale) — modern loudness standard. -23 LUFS is broadcast (EBU R128). -14 LUFS is Spotify integrated. -16 LUFS is Apple Music. Mastering above the platform's normalization threshold gets turned down — there's no benefit and you sacrifice dynamic range.",
+    "platform_targets": [
+      {"platform": "Spotify", "integrated_lufs": -14, "true_peak_db": -1.0, "dynamic_range_lu": 8},
+      {"platform": "Apple Music", "integrated_lufs": -16, "true_peak_db": -1.0, "dynamic_range_lu": 8},
+      {"platform": "YouTube", "integrated_lufs": -14, "true_peak_db": -1.0, "dynamic_range_lu": 8},
+      {"platform": "Tidal", "integrated_lufs": -14, "true_peak_db": -1.0, "dynamic_range_lu": 8},
+      {"platform": "Amazon Music", "integrated_lufs": -14, "true_peak_db": -2.0, "dynamic_range_lu": 8},
+      {"platform": "TV broadcast (EBU R128)", "integrated_lufs": -23, "true_peak_db": -1.0, "dynamic_range_lu": 14},
+      {"platform": "Cinema (Dolby)", "integrated_lufs": -27, "true_peak_db": -3.0, "dynamic_range_lu": 20}
+    ]
+  },
+  "roughness_and_dissonance": {
+    "doc": "Plomp & Levelt (1965) showed that roughness — the unpleasant beating sensation between two close-frequency tones — peaks when interval is ~1/4 of the critical bandwidth. Used to predict perceived dissonance.",
+    "guidelines": [
+      "Avoid two strong tonal sources within 1/4 critical band of each other (e.g., two unison synths slightly detuned by 5-15 cents = lush; detuned by 50-80 cents = roughness).",
+      "Sevenths and ninths get their flavor from controlled roughness; minor seconds (b9) maximize it.",
+      "For meditation/healing music, avoid intervals smaller than a major third in low registers — they create unpleasant roughness."
+    ]
+  },
+  "transient_perception": {
+    "doc": "The first ~50 ms of a sound contains most of the perceptual identity. Transient design and attack envelopes matter more than spectral content.",
+    "implications": [
+      "Punchy kick = sharp attack envelope (5-15 ms attack, fast decay)",
+      "808 = slow attack (50-80 ms) for sub feel, fast attack for percussive feel",
+      "Snare = transient at 0-10 ms with bright 2-5 kHz content",
+      "Pad = slow attack (200ms+) for ambient feel"
+    ]
+  },
+  "haas_effect_doppler": {
+    "doc": "The Haas (precedence) effect: identical sounds within ~30 ms of each other are perceived as one source coming from the location of the FIRST sound. Used for stereo widening without phase issues.",
+    "implementation": "Duplicate a sound, pan it ~70% to one side, delay 5-30 ms, lower its level by 2-3 dB. The brain perceives a wider source without phase cancellation."
+  },
+  "stereo_field_rules": {
+    "doc": "Where to pan things and how wide.",
+    "rules": [
+      {"element": "kick / sub-bass", "pan": "center", "width": "mono"},
+      {"element": "snare", "pan": "center", "width": "mono or narrow"},
+      {"element": "lead vocal", "pan": "center", "width": "narrow (M/S middle)"},
+      {"element": "bass guitar", "pan": "center", "width": "mono below 120 Hz"},
+      {"element": "hi-hats", "pan": "slightly off center (10-25%)", "width": "narrow"},
+      {"element": "rhythm guitars", "pan": "double-tracked, hard L and hard R", "width": "wide"},
+      {"element": "lead guitar / lead synth", "pan": "center or slightly off", "width": "natural"},
+      {"element": "synth pads / strings", "pan": "wide stereo", "width": "wide / hyper-wide"},
+      {"element": "backing vocals", "pan": "spread L+R", "width": "wide"},
+      {"element": "reverb tail", "pan": "wide stereo", "width": "wide"}
+    ]
+  },
+  "dynamic_range_perception": {
+    "doc": "Compression beyond a certain point reduces emotional impact. Loud-everywhere music feels relentless and the brain disengages.",
+    "guidelines": [
+      "Genre-typical dynamic range LU (loudness range): pop 4-6, rock 6-8, jazz 12-16, classical 18-24, ambient 12-20",
+      "Crest factor (peak/RMS): pop 6-8 dB, rock 8-12 dB, classical 18-24 dB",
+      "If dynamic range < 4 LU: track sounds 'crushed' — loudness war territory",
+      "The chorus should be measurably louder than the verse (1-3 LU minimum) for the brain to register as a chorus"
+    ]
+  },
+  "speculative_flagged": {
+    "doc": "Rules we use because they work in practice but aren't peer-reviewed. Treat as heuristics.",
+    "rules": [
+      {
+        "id": "color-emotion-mapping",
+        "claim": "Warm colors (red/orange/gold) → high arousal/aggression; cool colors (blue/purple) → low arousal/calm; green → balanced.",
+        "evidence": "Cultural convention, partially supported by cross-cultural emotion-color studies.",
+        "use": "Default video color palette by mood — overridable."
+      },
+      {
+        "id": "lower-pitch-darker",
+        "claim": "Lower-pitched sounds feel heavier/darker; higher feel lighter/brighter.",
+        "evidence": "Robust cross-modal correspondence in literature, but the magnitude varies.",
+        "use": "Mix decisions about which element should sit higher in pitch for emotional weight."
+      },
+      {
+        "id": "tempo-color",
+        "claim": "Fast tempo → red/orange visualizers; slow tempo → blue/purple/green.",
+        "evidence": "Convention from VJ culture, not science.",
+        "use": "Default video pacing color choices."
+      }
+    ]
+  }
+}
