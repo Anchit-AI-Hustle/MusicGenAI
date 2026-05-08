@@ -31,6 +31,7 @@ import {
   riserAt, impactAt,
   type Vowel,
 } from "./voices";
+import type { LyricBundle } from "../lyric-engine";
 
 export interface RenderOptions {
   /** Sample rate. Defaults to 44100. */
@@ -39,6 +40,8 @@ export interface RenderOptions {
   channels?: 2;
   /** Layer the vocoder/formant chant on chorus/drop sections. */
   vocoderVoice?: boolean;
+  /** Lyrics for the vocoder to sing (one syllable per chant event). */
+  lyrics?: LyricBundle;
   /** Optional onProgress callback called once per section for UI updates. */
   onProgress?: (progress: number, message: string) => void;
 }
@@ -64,7 +67,10 @@ export async function renderCompositionPlan(
   const sampleRate = opts.sampleRate ?? 44100;
   const seed = plan.meta?.seed ?? "default";
 
-  const seq = sequence(plan, seed, { vocoderVoice: opts.vocoderVoice });
+  const seq = sequence(plan, seed, {
+    vocoderVoice: opts.vocoderVoice,
+    lyrics: opts.lyrics,
+  });
   const length = Math.ceil((seq.totalSeconds + 1.5) * sampleRate); // pad 1.5s tail
   const ctx = new OfflineAudioContext(2, length, sampleRate);
 
@@ -85,16 +91,32 @@ export async function renderCompositionPlan(
   // Per-bus stereo positioning
   const drumBus     = ctx.createGain(); drumBus.gain.value     = 0.95;
   const bassBus     = ctx.createGain(); bassBus.gain.value     = 0.85;
-  const padBus      = ctx.createGain(); padBus.gain.value      = 0.55;
+  const padBus      = ctx.createGain(); padBus.gain.value      = 0.50;
   const leadBus     = ctx.createGain(); leadBus.gain.value     = 0.70;
   const vocoderBus  = ctx.createGain(); vocoderBus.gain.value  = 0.65;
   const fxBus       = ctx.createGain(); fxBus.gain.value       = 0.60;
 
+  // High-pass the pad bus at 200 Hz so chord stacks don't compete with
+  // bass+kick for the sub region. Cleans up perceived "mud".
+  const padHpf = ctx.createBiquadFilter();
+  padHpf.type = "highpass";
+  padHpf.frequency.value = 200;
+  padHpf.Q.value = 0.7;
+  padBus.connect(padHpf);
+  padHpf.connect(mixBus);
+
+  // High-pass the vocoder slightly to keep it in the vocal range
+  const vocHpf = ctx.createBiquadFilter();
+  vocHpf.type = "highpass";
+  vocHpf.frequency.value = 130;
+  vocHpf.Q.value = 0.7;
+  vocoderBus.connect(vocHpf);
+  vocHpf.connect(mixBus);
+
   drumBus.connect(mixBus);
   bassBus.connect(mixBus);
-  padBus.connect(mixBus);
+  // padBus and vocoderBus already routed through their HPFs above
   leadBus.connect(mixBus);
-  vocoderBus.connect(mixBus);
   fxBus.connect(mixBus);
 
   // Light reverb send from pad + lead. Vocoder gets a heavier send because

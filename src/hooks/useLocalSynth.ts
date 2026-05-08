@@ -28,6 +28,7 @@ import {
   type LoudnessReport,
 } from "@/lib/intelligence";
 import { exportMidi } from "@/lib/intelligence/midi-export";
+import { generateLyrics, type LyricBundle } from "@/lib/intelligence/lyric-engine";
 
 export interface LocalSynthBrief {
   mood: string;
@@ -60,6 +61,10 @@ export interface LocalSynthResult {
   quality: { score: number; rewrites: string[]; issues: string[] };
   /** LUFS report — before and after mastering. */
   loudness: { before: LoudnessReport; after: LoudnessReport; appliedGainDb: number };
+  /** Generated lyrics — the vocoder sings these when enabled. */
+  lyrics: LyricBundle | null;
+  /** Seed used for this generation — surfaced for the UI to display. */
+  seed: string;
   /** Wall-clock generation time (ms). */
   elapsedMs: number;
 }
@@ -81,6 +86,13 @@ export function useLocalSynth() {
     setState({ ...initial, loading: true, progress: 0.01, message: "Planning composition" });
     const start = performance.now();
 
+    // Always assign a fresh seed each call — uniqueness guarantee. Caller-
+    // supplied seed wins (lets users reproduce a track they liked).
+    const effectiveSeed =
+      brief.seed && brief.seed.trim().length > 0
+        ? brief.seed
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
     try {
       // 1. Plan
       const rawPlan = buildCompositionPlan({
@@ -91,7 +103,7 @@ export function useLocalSynth() {
         references: brief.references,
         durationSeconds: brief.durationSeconds ?? 180,
         instrumentalOnly: brief.instrumentalOnly ?? true, // local synth has no vocals
-        seed: brief.seed,
+        seed: effectiveSeed,
       });
 
       // 2. Quality gate
@@ -99,11 +111,20 @@ export function useLocalSynth() {
       const gate = applyEngagementGate(rawPlan);
       const plan = gate.plan;
 
+      // 2b. Lyrics — generate on-device when the vocoder layer is enabled.
+      const lyrics = brief.vocoderVoice
+        ? generateLyrics(
+            { prompt: brief.occasion, mood: brief.mood, genre: brief.genre, language: brief.language, seed: effectiveSeed },
+            plan,
+          )
+        : null;
+
       // 3. Offline render
       setState(s => ({ ...s, progress: 0.15, message: "Rendering audio" }));
       const rendered = await renderCompositionPlan(plan, {
         sampleRate: 44100,
         vocoderVoice: brief.vocoderVoice ?? true,
+        lyrics: lyrics ?? undefined,
         onProgress: (p, msg) => setState(s => ({ ...s, progress: 0.15 + p * 0.65, message: msg })),
       });
 
@@ -140,6 +161,8 @@ export function useLocalSynth() {
           after: mastered.after,
           appliedGainDb: mastered.appliedGainDb,
         },
+        lyrics,
+        seed: effectiveSeed,
         elapsedMs: performance.now() - start,
       };
 

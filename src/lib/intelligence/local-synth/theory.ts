@@ -73,11 +73,12 @@ export function parseChord(symbol: string): ParsedChord {
 }
 
 /**
- * Build a MIDI-note voicing for a chord, centered around the given root octave
- * and respecting close-voiced common-tone retention. Returns 3-6 MIDI numbers
- * sorted ascending.
+ * Build a MIDI-note voicing for a chord. Returns 3-5 MIDI notes sorted
+ * ascending — capped intentionally short. Saw-stack pads turn into mush
+ * past 4 voices, so the default pad voicing here is a triad + 7th max,
+ * with the 9th dropped unless explicitly requested via `includeNinth`.
  */
-export function chordToMidi(symbol: string, rootOctave = 3): number[] {
+export function chordToMidi(symbol: string, rootOctave = 3, opts: { includeNinth?: boolean } = {}): number[] {
   const c = parseChord(symbol);
   const root = c.rootPc + (rootOctave + 1) * 12;
   const notes: number[] = [root];
@@ -102,8 +103,9 @@ export function chordToMidi(symbol: string, rootOctave = 3): number[] {
   else if (c.extensions.seventh === "min7") notes.push(root + 10);
   else if (c.extensions.seventh === "dom7") notes.push(root + 10);
 
-  // Ninth (root + 14, prefer dropping octave to keep tight voicing)
-  if (c.extensions.ninth) notes.push(root + 14);
+  // Ninth — opt-in only. Default pad voicing skips the 9th to keep the
+  // chord stack tight and avoid mid-mud on saw stacks.
+  if (c.extensions.ninth && opts.includeNinth) notes.push(root + 14);
 
   return notes.sort((a, b) => a - b);
 }
@@ -155,4 +157,47 @@ export function pickFrom<T>(list: T[], seed: string, salt = 0): T {
   let h = salt;
   for (let i = 0; i < seed.length; i++) h = (Math.imul(h, 31) + seed.charCodeAt(i)) | 0;
   return list[Math.abs(h) % list.length];
+}
+
+/**
+ * Transpose a chord symbol by a number of semitones, preserving quality
+ * suffix (m / maj7 / 9 / sus4 / etc).
+ *
+ *   transposeChord("Am", 2)       -> "Bm"
+ *   transposeChord("Cmaj7", -3)   -> "Amaj7"
+ *   transposeChord("Eb", 5)       -> "Ab"
+ *
+ * Used to align the canonical voicing examples in CHORD_EMOTION_DATABASE
+ * (which are written in fixed reference keys) with the plan's actual key.
+ * Without this, the lead scale is in F harmonic minor but the pad chords
+ * are in A natural minor — the song reads as out of tune.
+ */
+const PC_TO_NOTE_FLAT  = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+const PC_TO_NOTE_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+export function transposeChord(symbol: string, semitones: number, preferSharps = false): string {
+  const s = symbol.trim();
+  if (!s) return s;
+  // Find length of root letter+accidental
+  let i = 1;
+  if (s.length > 1 && (s[1] === "#" || s[1] === "b")) i = 2;
+  const rootName = s.slice(0, i);
+  const tail = s.slice(i);
+  const rootPc = NOTE_TO_PC[rootName];
+  if (rootPc === undefined) return symbol;
+  const newPc = ((rootPc + semitones) % 12 + 12) % 12;
+  const newRoot = (preferSharps ? PC_TO_NOTE_SHARP : PC_TO_NOTE_FLAT)[newPc];
+  return newRoot + tail;
+}
+
+/**
+ * Compute semitones from a "voicing reference root" (e.g. the C in
+ * voicing_example_C, or the Am in voicing_example_Am) to the plan's actual
+ * tonic. Returns the number of semitones to add to every chord in the
+ * voicing list to align with the plan.
+ */
+export function transposeOffsetForKey(referenceRoot: string, planKey: string, planIsMinor: boolean): number {
+  const refPc = NOTE_TO_PC[referenceRoot] ?? 0;
+  const planPc = NOTE_TO_PC[planKey.replace(/m$/i, "")] ?? 0;
+  return ((planPc - refPc) % 12 + 12) % 12;
 }

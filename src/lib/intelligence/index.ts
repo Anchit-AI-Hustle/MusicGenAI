@@ -24,3 +24,4 @@ export * from "./wav-encoder";
 export * from "./video-sync-bridge";
 export * from "./local-synth";
 export * from "./midi-export";
+export * from "./lyric-engine";

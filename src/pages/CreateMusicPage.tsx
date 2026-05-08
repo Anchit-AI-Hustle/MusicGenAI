@@ -1485,6 +1485,48 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                     {localSynth.result.quality.rewrites.join(' · ')}
                   </div>
                 )}
+
+                <div className="text-[11px] text-muted-foreground font-mono break-all">
+                  Seed: {localSynth.result.seed}
+                </div>
+
+                {localSynth.result.lyrics && (
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium text-foreground">
+                      Lyrics &mdash; sung by the vocoder
+                    </div>
+                    <div className="glass-card rounded-lg p-3 text-xs space-y-2 max-h-64 overflow-y-auto">
+                      <div className="text-accent font-medium">{localSynth.result.lyrics.title}</div>
+                      <div>
+                        <div className="text-muted-foreground uppercase text-[10px] tracking-wider mb-1">Verse 1</div>
+                        {localSynth.result.lyrics.verse1.map((line, i) => (
+                          <div key={`v1-${i}`} className="text-foreground/90">{line}</div>
+                        ))}
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground uppercase text-[10px] tracking-wider mb-1">Chorus</div>
+                        {localSynth.result.lyrics.chorus.map((line, i) => (
+                          <div key={`c-${i}`} className="text-foreground/90">{line}</div>
+                        ))}
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground uppercase text-[10px] tracking-wider mb-1">Verse 2</div>
+                        {localSynth.result.lyrics.verse2.map((line, i) => (
+                          <div key={`v2-${i}`} className="text-foreground/90">{line}</div>
+                        ))}
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground uppercase text-[10px] tracking-wider mb-1">Bridge</div>
+                        {localSynth.result.lyrics.bridge.map((line, i) => (
+                          <div key={`b-${i}`} className="text-foreground/90">{line}</div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground italic">
+                      The vocoder sings the vowel of each syllable at the lyric&apos;s rhythm. Consonants are not synthesized &mdash; you&apos;ll hear vowel sounds tracking the words.
+                    </div>
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

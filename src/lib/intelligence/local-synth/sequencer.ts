@@ -11,6 +11,8 @@
 
 import type { CompositionPlan } from "../types";
 import { chordToMidi, chordBassMidi, midiToFreq, scaleMidi, parseChord } from "./theory";
+import { syllabifyLine, type Syllable } from "./syllabify";
+import type { LyricBundle } from "../lyric-engine";
 
 export type EventKind =
   | "kick" | "sub" | "snare" | "clap" | "hat-closed" | "hat-open"
@@ -59,6 +61,13 @@ export interface SequenceResult {
 export interface SequenceOptions {
   /** Layer a vocoder/formant chant on chorus/drop sections. */
   vocoderVoice?: boolean;
+  /**
+   * When provided alongside `vocoderVoice`, the vocoder sings the actual
+   * lyric syllables (one chant event per syllable, vowel selected from
+   * the syllable, pitch from the chord-tone closest to a stable melody).
+   * Without lyrics we fall back to the held-vowel "AH-OO-AH-EE" cycle.
+   */
+  lyrics?: LyricBundle;
 }
 
 export function sequence(plan: CompositionPlan, seed = "default", opts: SequenceOptions = {}): SequenceResult {
@@ -128,52 +137,73 @@ export function sequence(plan: CompositionPlan, seed = "default", opts: Sequence
         });
       }
 
-      // ── Chant / vocoder voice on chord onsets in chorus/drop sections ───
-      // Held vowel-tone over the chord's third or fifth, cycling vowels
-      // per chord change for a Daft-Punk-esque vocoder layer. Uses NO
-      // model and NO recording — pure formant synthesis.
-      if (
+      // ── Chant / vocoder voice ───────────────────────────────────────────
+      // Two modes:
+      //   1. Lyric mode  — when opts.lyrics is provided, sing the actual
+      //      syllables of the section's lyric line. Vowel of each chant
+      //      event comes from the syllable; pitch tracks chord tones.
+      //   2. Vowel mode  — when no lyrics, fall back to the AH-OO-AH-EE
+      //      vocoder pad on chorus/drop sections.
+      const voiceShouldFire =
         opts.vocoderVoice &&
-        isChordOnset &&
-        vocoderFitsGenre(plan.resolved.genreId) &&
-        /chorus|drop|hook|climax|final/i.test(section.name) &&
-        section.energy >= 0.7
-      ) {
-        const chordNotes = chordToMidi(chord, 4);
-        // Sing the chord's 3rd and 5th — root is held by bass, leaves
-        // mids open for the vocoder to fill in
-        const sungMidi = chordNotes.length >= 3
-          ? [chordNotes[1], chordNotes[2]]
-          : chordNotes.slice(0, 1);
-        const vowel = VOWEL_CYCLE[chordIdx % VOWEL_CYCLE.length];
-        const chantDuration = Math.max(0.3, chordHoldBars * deps.secondsPerBar - 0.05);
-        for (const m of sungMidi) {
-          events.push({
-            t: barStart + 0.04, // tiny lag so it doesn't slam with the impact
-            duration: chantDuration,
-            freq: midiToFreq(m),
-            velocity: 0.55 * Math.min(1, section.energy * 1.1),
-            kind: "chant",
-            vowel,
-            sectionName,
-          });
+        section.vocalDensity >= 0.4 &&
+        (opts.lyrics ? sectionShouldSing(section.name) : (
+          vocoderFitsGenre(plan.resolved.genreId) &&
+          /chorus|drop|hook|climax|final/i.test(section.name) &&
+          section.energy >= 0.7
+        ));
+
+      if (voiceShouldFire) {
+        if (opts.lyrics) {
+          const line = pickLineForSection(opts.lyrics, section.name, bar);
+          if (line) {
+            const sungEvents = syllableEventsForBar(
+              line, barStart, deps.secondsPerBar, chord, deps.rng,
+              section.energy, sectionName,
+            );
+            events.push(...sungEvents);
+          }
+        } else if (isChordOnset) {
+          // Held-vowel fallback when no lyrics provided
+          const chordNotes = chordToMidi(chord, 4);
+          const sungMidi = chordNotes.length >= 3
+            ? [chordNotes[1], chordNotes[2]]
+            : chordNotes.slice(0, 1);
+          const vowel = VOWEL_CYCLE[chordIdx % VOWEL_CYCLE.length];
+          const chantDuration = Math.max(0.3, chordHoldBars * deps.secondsPerBar - 0.05);
+          for (const m of sungMidi) {
+            events.push({
+              t: barStart + 0.04,
+              duration: chantDuration,
+              freq: midiToFreq(m),
+              velocity: 0.55 * Math.min(1, section.energy * 1.1),
+              kind: "chant",
+              vowel,
+              sectionName,
+            });
+          }
         }
       }
 
       // ── Bass ────────────────────────────────────────────────────────────
+      // Walking pattern: root on 1, fifth on 3 (genre-typical for most
+      // pop/edm/funk). On low-energy / lo-fi sections, sustain root only.
       if (section.density >= 0.4) {
-        const bassMidi = chordBassMidi(chord, 2);
-        const bassFreq = midiToFreq(bassMidi);
-        // Pattern: root on beats 1 and 3
+        const rootMidi = chordBassMidi(chord, 2);
+        const fifthMidi = rootMidi + 7;
+        const sustainOnly = section.energy < 0.45;
         for (let beat = 0; beat < beatsPerBar; beat++) {
-          const isStrongBeat = beat % 2 === 0;
-          if (!isStrongBeat) continue;
+          const isBeat1 = beat === 0;
+          const isBeat3 = beat === 2;
+          if (sustainOnly && !isBeat1) continue;
+          if (!sustainOnly && !isBeat1 && !isBeat3) continue;
           const t = barStart + beat * deps.secondsPerBeat;
+          const midi = isBeat3 && !sustainOnly ? fifthMidi : rootMidi;
           events.push({
             t,
-            duration: deps.secondsPerBeat * 0.9,
-            freq: bassFreq,
-            velocity: 0.85 * section.density,
+            duration: deps.secondsPerBeat * (sustainOnly ? 3.8 : 1.8),
+            freq: midiToFreq(midi),
+            velocity: (isBeat1 ? 0.92 : 0.75) * section.density,
             kind: "bass",
             flavor: bassFlavorFor(plan.resolved.genreId),
             sectionName,
@@ -238,16 +268,30 @@ function drumPatternFor(genreId: string, section: { energy: number; vocalDensity
   if (isAmbient) return hits; // ambient uses no drums
 
   if (isFour) {
+    // Humanized velocities — kick on every beat with subtle dynamic curve
     for (let i = 0; i < 16; i += 4) {
-      hits.push({ step: i, velocity: 0.95, kind: "kick" });
+      const isStrong = i === 0 || i === 8;
+      hits.push({
+        step: i,
+        velocity: (isStrong ? 0.95 : 0.88) + (deps.rng() - 0.5) * 0.06,
+        kind: "kick",
+      });
     }
     if (e >= 0.4) {
-      hits.push({ step: 4, velocity: 0.7, kind: "clap" });
-      hits.push({ step: 12, velocity: 0.7, kind: "clap" });
+      hits.push({ step: 4, velocity: 0.7 + (deps.rng() - 0.5) * 0.1, kind: "clap" });
+      hits.push({ step: 12, velocity: 0.72 + (deps.rng() - 0.5) * 0.1, kind: "clap" });
     }
+    // Hi-hats with humanized velocity AND microtiming
     for (let i = 0; i < 16; i += 2) {
       const open = (i % 8) === 4 && deps.rng() < e * 0.3;
-      hits.push({ step: i, velocity: 0.4 + (i % 4 === 0 ? 0 : 0.1), kind: open ? "hat-open" : "hat-closed" });
+      const baseV = i % 4 === 0 ? 0.42 : 0.32;
+      const microShift = (deps.rng() - 0.5) * 0.012; // ±6 ms humanization
+      hits.push({
+        step: i,
+        microShiftSec: microShift,
+        velocity: baseV + (deps.rng() - 0.5) * 0.08,
+        kind: open ? "hat-open" : "hat-closed",
+      });
     }
   } else if (isHipHop) {
     // Trap/drill pattern: kick on 1 and 7 (or 8), snare on beat 3 (step 8)
@@ -325,6 +369,92 @@ function drumPatternFor(genreId: string, section: { energy: number; vocalDensity
 const VOWEL_CYCLE: Vowel[] = ["ah", "oo", "ah", "ee"];
 
 /**
+ * Choose a lyric line for a given section. We rotate through the bundle
+ * arrays so verse-1 and verse-2 use different content; chorus phrases
+ * cycle within each chorus instance.
+ */
+function pickLineForSection(bundle: LyricBundle, sectionName: string, barIndex: number): string | null {
+  const n = sectionName.toLowerCase();
+  let pool: string[] = [];
+  if (/intro/.test(n)) return null;
+  if (/verse-1|verse_1/.test(n) || (/verse/.test(n) && !/verse-2|verse_2/.test(n))) pool = bundle.verse1;
+  else if (/verse-2|verse_2|verse 2/.test(n)) pool = bundle.verse2;
+  else if (/pre-chorus|prechorus|build|riser/.test(n)) pool = bundle.verse1.slice(-2);
+  else if (/chorus|drop|hook|final|climax/.test(n)) pool = bundle.chorus;
+  else if (/bridge|break|breakdown/.test(n)) pool = bundle.bridge;
+  else if (/outro|tag/.test(n)) pool = bundle.outro;
+  if (pool.length === 0) return null;
+  return pool[barIndex % pool.length];
+}
+
+/**
+ * Sections where a sung line makes sense (anything that has lyrical
+ * intent — not pure intros/outros/breakdowns).
+ */
+function sectionShouldSing(sectionName: string): boolean {
+  return /verse|pre-chorus|chorus|drop|hook|bridge|final|climax|outro/i.test(sectionName);
+}
+
+/**
+ * Distribute a lyric line across one bar by syllabifying it and assigning
+ * each syllable to a chord-tone pitch with even rhythmic spacing. Stressed
+ * syllables get a small velocity bump.
+ */
+function syllableEventsForBar(
+  line: string,
+  barStart: number,
+  secondsPerBar: number,
+  chord: string,
+  rng: () => number,
+  energy: number,
+  sectionName: string,
+): SynthEvent[] {
+  const syllables: Syllable[] = syllabifyLine(line).syllables;
+  if (syllables.length === 0) return [];
+
+  // Cap: pop melodies rarely exceed ~12 syllables per bar at moderate tempo
+  const sliceCount = Math.min(syllables.length, 12);
+  const pickedSylls = syllables.slice(0, sliceCount);
+
+  // Pitch: alternate between chord tones (3rd, 5th, 1-octave-up root)
+  // for a singable contour. Slight melodic interest per stressed syllable.
+  const chordNotes = chordToMidi(chord, 4);
+  // Sing in upper-middle range — bass holds the root below.
+  const sungPool = chordNotes.length >= 3
+    ? [chordNotes[1], chordNotes[2], chordNotes[0] + 12, chordNotes[1] + 12]
+    : [chordNotes[0] + 12];
+
+  // Each syllable gets equal rhythmic share, with the last one held longer
+  const rawStep = (secondsPerBar * 0.92) / pickedSylls.length;
+  const events: SynthEvent[] = [];
+  let lastIdx = 0;
+  for (let i = 0; i < pickedSylls.length; i++) {
+    const syll = pickedSylls[i];
+    // Move by step on stressed syllables; small wander on unstressed
+    if (syll.stressed) {
+      lastIdx = (lastIdx + (rng() < 0.5 ? 1 : -1) + sungPool.length) % sungPool.length;
+    } else if (rng() < 0.35) {
+      lastIdx = (lastIdx + (rng() < 0.5 ? 1 : -1) + sungPool.length) % sungPool.length;
+    }
+    const midi = sungPool[Math.abs(lastIdx) % sungPool.length];
+    const t = barStart + i * rawStep + 0.02;
+    const isLast = i === pickedSylls.length - 1;
+    const dur = isLast ? Math.max(rawStep * 1.4, 0.25) : rawStep * 0.92;
+    const vel = (syll.stressed ? 0.62 : 0.48) * Math.min(1, energy * 1.05);
+    events.push({
+      t,
+      duration: dur,
+      freq: midiToFreq(midi),
+      velocity: vel,
+      kind: "chant",
+      vowel: syll.vowel,
+      sectionName,
+    });
+  }
+  return events;
+}
+
+/**
  * Genres where a vocoder-style vowel layer is musically idiomatic. For
  * trap / drill / lo-fi / hip-hop / phonk it would clash; for ambient /
  * meditation / classical / jazz / folk / country it's wrong-fit.
@@ -353,28 +483,69 @@ function generateLeadMotif(
   sectionName: string,
 ): SynthEvent[] {
   const out: SynthEvent[] = [];
-  // 8-note motif over 1 bar, biased toward chord tones of current chord.
   const chord = voicings[chordIdx];
   const c = parseChord(chord);
-  // Scale degrees that are "in chord" (close to chord tones)
-  const chordPc = new Set([c.rootPc, (c.rootPc + (c.quality === "min" || c.quality === "dim" ? 3 : 4)) % 12, (c.rootPc + 7) % 12]);
-  const candidates = scale.filter(m => chordPc.has(m % 12));
-  const pool = candidates.length >= 2 ? candidates : scale;
 
-  // Motif rhythm: 8th notes — 8 hits per bar
+  // Build a "safe" pool: scale notes that are also in-chord. This is the
+  // single biggest tuning fix — a melody in F harmonic minor over an Am
+  // chord must use scale notes that align with the actual current chord,
+  // not just any scale note.
+  const thirdInterval = (c.quality === "min" || c.quality === "dim") ? 3 : 4;
+  const fifthInterval = c.quality === "dim" ? 6 : c.quality === "aug" ? 8 : 7;
+  const chordPcs = new Set([c.rootPc, (c.rootPc + thirdInterval) % 12, (c.rootPc + fifthInterval) % 12]);
+  const inChord = scale.filter(m => chordPcs.has(m % 12));
+  const pool = inChord.length >= 2 ? inChord : scale;
+
+  // Anchor: bar 1 always lands on a chord tone (the third or root) — this
+  // is what makes the melody "land" musically over the chord.
   const motifLength = 8;
-  let lastIdx = Math.floor(deps.rng() * pool.length);
+  const anchorIdx = pool.findIndex(m => m % 12 === (c.rootPc + thirdInterval) % 12);
+  let lastIdx = anchorIdx >= 0 ? anchorIdx : Math.floor(deps.rng() * pool.length);
+
+  // Range cap: the melody must stay within ~9 semitones (a major 6th) for
+  // singability and cohesion. Track the highest/lowest used so we clamp.
+  const startMidi = pool[lastIdx];
+  const RANGE_SEMITONES = 9;
+
   for (let i = 0; i < motifLength; i++) {
     const t = barStart + i * deps.secondsPerStep * 2;
-    if (deps.rng() < 0.18) continue; // sometimes rest = breath
-    // Move by step from the previous note, occasionally leap
-    const move = deps.rng() < 0.7 ? (deps.rng() < 0.5 ? -1 : 1) : (deps.rng() < 0.5 ? -2 : 2);
-    lastIdx = clamp(lastIdx + move, 0, pool.length - 1);
-    const midi = pool[lastIdx];
+
+    // Beat-1 anchor: on the very first 8th of the bar, force chord-tone
+    if (i === 0) {
+      const midi = pool[lastIdx];
+      out.push({
+        t, kind: "lead", freq: midiToFreq(midi),
+        duration: deps.secondsPerStep * 1.8,
+        velocity: 0.6 + deps.rng() * 0.1,
+        flavor: "fm", sectionName,
+      });
+      continue;
+    }
+
+    // Rest probability — breath spacing
+    if (deps.rng() < 0.22) continue;
+
+    // Step or small leap (bias toward steps — voice-leading)
+    const stepProb = 0.78;
+    let move: number;
+    if (deps.rng() < stepProb) {
+      move = deps.rng() < 0.5 ? -1 : 1;
+    } else {
+      move = deps.rng() < 0.5 ? -2 : 2;
+    }
+    let nextIdx = clamp(lastIdx + move, 0, pool.length - 1);
+    let nextMidi = pool[nextIdx];
+
+    // Range guard: snap back if we've drifted past the major-6th window
+    if (Math.abs(nextMidi - startMidi) > RANGE_SEMITONES) {
+      nextIdx = anchorIdx >= 0 ? anchorIdx : Math.max(0, lastIdx - 1);
+      nextMidi = pool[nextIdx];
+    }
+    lastIdx = nextIdx;
+
     out.push({
-      t,
-      kind: "lead",
-      freq: midiToFreq(midi),
+      t, kind: "lead",
+      freq: midiToFreq(nextMidi),
       duration: deps.secondsPerStep * 1.8,
       velocity: 0.5 + deps.rng() * 0.15,
       flavor: "fm",
