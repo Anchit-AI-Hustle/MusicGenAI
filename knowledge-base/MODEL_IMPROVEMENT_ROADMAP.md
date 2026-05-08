@@ -19,31 +19,27 @@
 
 ---
 
-## Tier 1 — Highest impact, low risk
+## Tier 1 — Highest impact, low risk — ALL SHIPPED
 
-### T1.1 Post-render LUFS measurement + corrective gain
-**Lift** Removes loudness inconsistency (one of the most-noted "AI-generated" tells).
-**Cost** ~1 day. Use `ffmpeg -af loudnorm=I=...` server-side, or a small WebAudio-based meter for browser preview.
-**Risk** Low. Pure post-process.
-**File** New `src/lib/intelligence/master-pass.ts` consuming `MASTERING_ENGINE.md`.
+### T1.1 ✅ Post-render LUFS measurement + corrective gain
+- `src/lib/intelligence/master-pass.ts` — ITU-R BS.1770 K-weighted gated LUFS, 4× true-peak estimate, corrective gain capped at ±12 dB, optional brick-wall limiter at -1.0 dBTP. Pure WebAudio.
+- `src/lib/intelligence/wav-encoder.ts` — encode mastered Float32 channels to a 16-bit PCM WAV.
+- `src/hooks/usePostProduction.ts` — client hook that decodes audio (URL or `data:` MP3), runs the master pass against the plan's LUFS target, returns a mastered WAV blob URL plus loudness measurements.
+- ffmpeg recipes (`ffmpegLoudnormPass1`/`ffmpegLoudnormPass2`) included for the future server-side worker (T2.1).
 
-### T1.2 Auto-reroll on engagement score < threshold
-**Lift** Catches structurally-broken plans before reaching the user. Doubles average quality.
-**Cost** ~2 days. Wire `engagement-scorer.ts` into `/api/generate`. On score < 65, inject the listed `issues` as anti-prompts and re-roll once. Cap at one re-roll for cost.
-**Risk** Medium — model failure modes that don't surface in the score will still slip through.
-**File** Update `src/app/api/generate/route.ts` orchestration.
+### T1.2 ✅ Auto-reroll / engagement gate
+- `src/lib/intelligence/engagement-gate.ts` — when a plan scores below 65, applies issue-driven plan rewrites (shorten intro, sharpen energy contrast, push peak to final third, retune surprise ratio, ensure motifs, assign progression to all sections, boost final-third peak) and re-scores. One rewrite per request — cost-capped.
+- Wired into `src/app/api/generate/route.ts`. Response now exposes `quality.score`, `quality.rewrites`, and `quality.issues`.
 
-### T1.3 Beat-grid detection + frame-perfect video sync
-**Lift** Transforms video quality. Cuts on beats feel professional; cuts on amplitude feel amateur.
-**Cost** ~3–5 days. Implement `audio-analyzer.ts` (browser WebAudio + autocorrelation) and rewire `video-generator.ts` to read from `audio-visual-sync.ts` SyncPlan instead of running its own redraw loop.
-**Risk** Medium. WebAudio analysis is CPU-heavy on mobile.
-**Files** New `src/lib/intelligence/audio-analyzer.ts`; refactor `src/lib/video-generator.ts`.
+### T1.3 ✅ Beat-grid detection + video sync
+- `src/lib/intelligence/audio-analyzer.ts` — radix-2 FFT, spectral-flux onset detector with adaptive threshold, autocorrelation tempo estimator (60–200 BPM, perceptual halving/doubling), DP-light beat tracker, downbeat picker. Outputs `BeatGrid { bpm, beats[], downbeats[], onsets[], energyEnvelope }`.
+- `src/lib/intelligence/video-sync-bridge.ts` — converts `BeatGrid` + optional `SyncPlan` into a per-frame beat-strength `Float32Array` aligned to the existing canvas renderer.
+- `src/lib/video-generator.ts` extended with `precomputedBeatStrengths?: Float32Array` parameter. When present, overrides the local heuristic detector.
+- `usePostProduction` returns `beatStrengthsPerFrame` ready to pass straight into `generateVideoFromAudio`.
 
-### T1.4 Telemetry — per-stage latency, cost, success
-**Lift** Foundational for every later optimization. We can't tune what we don't measure.
-**Cost** ~1 day for the simplest path (Supabase table + small client logger).
-**Risk** None.
-**File** New `src/lib/intelligence/telemetry.ts`.
+### T1.4 ✅ Telemetry
+- `src/lib/intelligence/telemetry.ts` — per-stage `withStage()` and `record()` helpers. Logs to console always; optional `TELEMETRY_SINK_URL` env for fire-and-forget HTTP shipping. Each request gets a `runId`. Stages: `request-received → rate-limit-check → plan-build → plan-score → plan-rewrite → model-call → respond` (or `error`).
+- `summarizeRun(ctx)` returns a serializable object that's now included in `/api/generate` responses for client-side debugging.
 
 ---
 
