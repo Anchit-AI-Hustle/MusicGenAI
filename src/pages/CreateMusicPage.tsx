@@ -57,6 +57,7 @@ import {
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { AiToolbar as SharedAiToolbar } from '@/components/AiToolbar';
 import { Button } from '@/components/ui/button';
+import { useLocalSynth, downloadArrayBuffer } from '@/hooks/useLocalSynth';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -174,6 +175,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const [tempo, setTempo] = useState(120);
   const [mood, setMood] = useState('Energetic');
   
+  // Generation backend: 'ai' = remote Replicate path, 'local' = browser-only synth
+  const [generationBackend, setGenerationBackend] = useState<'ai' | 'local'>('ai');
+  // Layer a vocoder/formant chant on chorus/drop in the local synth path
+  const [vocoderVoiceEnabled, setVocoderVoiceEnabled] = useState(true);
+  const localSynth = useLocalSynth();
+
   const [vocalsEnabled, setVocalsEnabled] = useState(true);
   const [vocalArrangement, setVocalArrangement] = useState('solo');
   const [vocalStyle, setVocalStyle] = useState('Pop Singing');
@@ -578,6 +585,28 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
     const ctx = contextRef.current;
 
+    // ── LOCAL SYNTH path: browser-only render, no API calls ────────────────
+    if (generationBackend === 'local' && mode === 'song') {
+      try {
+        await localSynth.generate({
+          mood: ctx.mood ?? 'Energetic',
+          genre: selectedGenres.length > 0 ? selectedGenres[0].label : (ctx.genre ?? 'Pop'),
+          language: ctx.vocalLanguage,
+          occasion: ctx.songDescription,
+          references: ctx.artistInspiration ? [ctx.artistInspiration] : undefined,
+          durationSeconds: ctx.duration ?? 180,
+          // Local synth has no real vocals; the optional vocoder voice
+          // adds a formant-synth chant layer to chorus/drop sections.
+          instrumentalOnly: !vocoderVoiceEnabled,
+          vocoderVoice: vocoderVoiceEnabled,
+          seed: `${Date.now()}`,
+        });
+      } catch (err: any) {
+        toast.error(`Local generation failed: ${err?.message ?? err}`);
+      }
+      return;
+    }
+
     // Duplicate prompt detection
     if (mode === 'song' && creations && Array.isArray(creations)) {
       const isDuplicate = creations.some(c => c.type === 'song' && c.songDescription === ctx.songDescription);
@@ -770,7 +799,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       isSuggesting={!!suggestionState.loading[`${field}-suggest`]}
       isEnhancing={!!suggestionState.loading[`${field}-enhance`]}
       isRetrying={!!suggestionState.loading[`${field}-new`]}
-      variant="compact"
+      variant="labeled"
     />
   );
 
@@ -1305,16 +1334,160 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
               </>
             )}
 
+          {/* Generation Backend Toggle */}
+          {mode === 'song' && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="space-y-2">
+              <div className="glass-card rounded-xl p-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setGenerationBackend('ai')}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    generationBackend === 'ai'
+                      ? 'bg-primary/20 border border-primary text-primary'
+                      : 'text-muted-foreground hover:text-foreground border border-transparent'
+                  }`}
+                >
+                  AI model (Replicate)
+                  <div className="text-[10px] opacity-70 mt-0.5">Vocals supported · slower · uses API quota</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGenerationBackend('local')}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    generationBackend === 'local'
+                      ? 'bg-accent/20 border border-accent text-accent'
+                      : 'text-muted-foreground hover:text-foreground border border-transparent'
+                  }`}
+                >
+                  Local synth (browser)
+                  <div className="text-[10px] opacity-70 mt-0.5">Instrumental · ~3s render · 100% offline</div>
+                </button>
+              </div>
+
+              {generationBackend === 'local' && (
+                <div className="glass-card rounded-xl p-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-foreground">Vocoder voice layer</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      Formant-synthesized vowel chant on chorus/drop sections — Daft-Punk-style robot vocals.
+                      Auto-skipped on trap, drill, lo-fi, ambient, classical (genre fit).
+                    </div>
+                  </div>
+                  <Switch
+                    checked={vocoderVoiceEnabled}
+                    onCheckedChange={setVocoderVoiceEnabled}
+                    aria-label="Toggle vocoder voice layer"
+                  />
+                </div>
+              )}
+            </motion.div>
+          )}
+
           {/* Generate Button */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}>
-            <Button onClick={handleGenerate} disabled={isCreating} variant="glow" size="xl" className="w-full">
-              {isCreating ? (
-                <><Loader2 className="w-5 h-5 animate-spin" /> Creating...</>
+            <Button
+              onClick={handleGenerate}
+              disabled={isCreating || localSynth.loading}
+              variant="glow"
+              size="xl"
+              className="w-full"
+            >
+              {(isCreating || localSynth.loading) ? (
+                <><Loader2 className="w-5 h-5 animate-spin" /> {localSynth.loading ? localSynth.message || 'Rendering…' : 'Creating…'}</>
               ) : (
                 <><Sparkles className="w-5 h-5" /> Generate {mode === 'song' ? 'Song' : `Album (${numberOfSongs} tracks)`}</>
               )}
             </Button>
+            {localSynth.loading && (
+              <div className="mt-2 h-1 w-full bg-white/10 rounded overflow-hidden">
+                <div
+                  className="h-full bg-accent transition-all duration-300"
+                  style={{ width: `${Math.round(localSynth.progress * 100)}%` }}
+                />
+              </div>
+            )}
           </motion.div>
+
+          {/* Local Synth Results Panel */}
+          <AnimatePresence>
+            {localSynth.result && generationBackend === 'local' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="glass-card rounded-xl p-4 sm:p-6 border-accent/30 space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display text-xl font-semibold text-foreground">
+                    Local synth render
+                  </h3>
+                  <Badge variant="secondary" className="bg-accent/20 text-accent">
+                    {localSynth.result.plan.resolved.bpm} BPM · {localSynth.result.plan.resolved.key} {localSynth.result.plan.resolved.mode} · {(localSynth.result.elapsedMs / 1000).toFixed(1)}s
+                  </Badge>
+                </div>
+
+                <audio src={localSynth.result.wavUrl} controls className="w-full" />
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="glass-card rounded-lg p-2">
+                    <div className="text-muted-foreground">Quality</div>
+                    <div className="font-mono text-foreground">{localSynth.result.quality.score}/100</div>
+                  </div>
+                  <div className="glass-card rounded-lg p-2">
+                    <div className="text-muted-foreground">LUFS</div>
+                    <div className="font-mono text-foreground">{localSynth.result.loudness.after.integratedLufs.toFixed(1)}</div>
+                  </div>
+                  <div className="glass-card rounded-lg p-2">
+                    <div className="text-muted-foreground">Peak</div>
+                    <div className="font-mono text-foreground">{localSynth.result.loudness.after.truePeakDb.toFixed(1)} dBTP</div>
+                  </div>
+                  <div className="glass-card rounded-lg p-2">
+                    <div className="text-muted-foreground">Sections</div>
+                    <div className="font-mono text-foreground">{localSynth.result.plan.resolved.sections.length}</div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      downloadArrayBuffer(
+                        localSynth.result!.wavArrayBuffer,
+                        `${localSynth.result!.plan.resolved.genreId}-${Date.now()}.wav`,
+                        'audio/wav'
+                      )
+                    }
+                  >
+                    <Download className="w-4 h-4 mr-1" /> WAV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      downloadArrayBuffer(
+                        localSynth.result!.midiArrayBuffer,
+                        `${localSynth.result!.plan.resolved.genreId}-${Date.now()}.mid`,
+                        'audio/midi'
+                      )
+                    }
+                  >
+                    <Download className="w-4 h-4 mr-1" /> MIDI
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={localSynth.reset}>
+                    <X className="w-4 h-4 mr-1" /> Discard
+                  </Button>
+                </div>
+
+                {localSynth.result.quality.rewrites.length > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    <span className="text-accent font-medium">Plan rewrites:</span>{' '}
+                    {localSynth.result.quality.rewrites.join(' · ')}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Output Section with Pipeline Progress + Audio Player */}
           <AnimatePresence>
