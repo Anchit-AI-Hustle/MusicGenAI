@@ -531,6 +531,13 @@ export async function generateVideoFromAudio(
   onProgress?: (p: VideoGenerationProgress) => void,
   generationDNA?: VideoGenerationDNA,
   lyricCues: LyricVideoCue[] = [],
+  /**
+   * Optional per-frame beat strengths from the music intelligence analyzer
+   * (src/lib/intelligence/audio-analyzer.ts → video-sync-bridge). When
+   * provided, replaces the local heuristic detection so cuts and pulses
+   * land on the actual detected beats. Length must equal totalFrames.
+   */
+  precomputedBeatStrengths?: Float32Array | number[],
 ): Promise<Blob> {
   if (typeof MediaRecorder === 'undefined') {
     throw new Error('This browser does not support video recording.');
@@ -559,6 +566,14 @@ export async function generateVideoFromAudio(
   const fps = 30;
   const totalFrames = Math.ceil(durationSeconds * fps);
   const analysis = analyzeAudioForVisuals(audioBuffer, durationSeconds, onProgress);
+
+  // Override the heuristic beat detector with analyzer-computed beat strengths
+  // when the caller provides them. See src/lib/intelligence/video-sync-bridge.ts.
+  if (precomputedBeatStrengths && precomputedBeatStrengths.length === totalFrames) {
+    for (let i = 0; i < totalFrames; i++) {
+      analysis.beatStrengths[i] = precomputedBeatStrengths[i];
+    }
+  }
 
   onProgress?.({ stage: 'rendering_video', progress: 0.24 });
 
