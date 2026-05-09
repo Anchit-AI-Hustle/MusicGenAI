@@ -357,6 +357,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   ): string | null => {
     const labels: Record<string, string> = {
       genre: 'Genre',
+      subgenre: 'Subgenre',
       mood: 'Mood',
       tempo: 'Tempo',
       vocalLanguage: 'Language',
@@ -364,6 +365,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       lyricsTheme: 'Lyric theme',
       videoStyle: 'Video style',
       vocalStyle: 'Vocal style',
+      structureType: 'Structure',
+      energyLevel: 'Energy',
+      vocalIntensity: 'Vocal intensity',
+      instruments: 'Instruments',
+      vocalArrangement: 'Vocal arrangement',
     };
     const lines: string[] = [];
     for (const key of Object.keys(labels)) {
@@ -381,10 +387,18 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   };
 
   /**
+   * Parse a comma-separated instrumentation string into a clean array,
+   * dropping empties and trimming whitespace.
+   */
+  const parseInstrumentation = (raw?: string): string[] =>
+    (raw ?? '').split(',').map(s => s.trim()).filter(Boolean);
+
+  /**
    * Auto-fill: take a single freeform prompt and populate every applicable
-   * song-mode field (genre, mood, tempo, language, artist, lyrics theme,
-   * video style, etc.) using the local context-inference engine. Synchronous
-   * — no network — so the UI updates immediately.
+   * song-mode field (genre, subgenre, mood, tempo, language, artist, lyric
+   * theme, video style, instruments, energy, vocal intensity, structure,
+   * vocal effects, vocal arrangement, vocals on/off) using the local
+   * context-inference engine. Synchronous — no network.
    */
   const fillSongFromPrompt = (text: string) => {
     const trimmed = (text || '').trim();
@@ -394,14 +408,20 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     }
     const inferred = inferContextFromDescription(trimmed, nextGenerationNonce('fill'));
     const before = {
-      genre, mood, tempo, vocalLanguage, artistInspiration,
-      lyricsTheme, videoStyle, vocalStyle,
+      genre, subgenre, mood, tempo, vocalLanguage, artistInspiration,
+      lyricsTheme, videoStyle, vocalStyle, structureType,
+      energyLevel: String(energyLevel),
+      vocalIntensity: String(vocalIntensity),
+      instruments: instruments.join(', '),
+      vocalArrangement,
     };
     const tempoNext = inferred.tempo
       ? Math.max(60, Math.min(200, inferred.tempo))
       : tempo;
+    const inferredInstruments = parseInstrumentation(inferred.instrumentation);
     const after = {
       genre: inferred.genre || genre,
+      subgenre: inferred.subgenre || subgenre,
       mood: inferred.mood || mood,
       tempo: tempoNext,
       vocalLanguage: inferred.vocalLanguage || vocalLanguage,
@@ -409,13 +429,26 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       lyricsTheme: inferred.lyricTheme || lyricsTheme,
       videoStyle: inferred.videoStyle || videoStyle,
       vocalStyle: inferred.vocalStyle || vocalStyle,
+      structureType: inferred.structureType || structureType,
+      energyLevel: inferred.energyLevel ?? energyLevel,
+      vocalIntensity: inferred.vocalIntensity ?? vocalIntensity,
+      instruments: inferredInstruments.length > 0 ? inferredInstruments : instruments,
+      vocalArrangement: inferred.vocalArrangement || vocalArrangement,
+      vocalEffects: inferred.vocalEffects?.length ? inferred.vocalEffects : selectedVocalEffects,
+      // "instrumental" keyword in prompt → flip vocals off; otherwise leave.
+      vocalsEnabled: inferred.instrumental ? false : vocalsEnabled,
     };
     updateSongPrompt(prev => ({
       ...prev,
       songDescription: prev.songDescription || trimmed,
       ...after,
     }));
-    const summary = summarizeFillChanges(before, after);
+    const summary = summarizeFillChanges(before, {
+      ...after,
+      energyLevel: String(after.energyLevel),
+      vocalIntensity: String(after.vocalIntensity),
+      instruments: after.instruments.join(', '),
+    });
     toast.success(
       summary ? `Filled from prompt — ${summary}` : 'Already aligned with this prompt.',
     );
@@ -444,10 +477,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         trimmed,
         nextGenerationNonce(`album-${i}`),
       );
+      const inferredInstruments = parseInstrumentation(inferred.instrumentation);
       const next: TrackConfig = {
         ...t,
         songDescription: t.songDescription || trimmed,
         genre: inferred.genre || t.genre,
+        subgenre: inferred.subgenre || t.subgenre,
         mood: inferred.mood || t.mood,
         tempo: inferred.tempo
           ? Math.max(60, Math.min(200, inferred.tempo))
@@ -457,6 +492,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         lyricsTheme: inferred.lyricTheme || t.lyricsTheme,
         videoStyle: inferred.videoStyle || t.videoStyle,
         vocalStyle: inferred.vocalStyle || t.vocalStyle,
+        structureType: inferred.structureType || t.structureType,
+        energyLevel: inferred.energyLevel ?? t.energyLevel,
+        vocalIntensity: inferred.vocalIntensity ?? t.vocalIntensity,
+        instruments: inferredInstruments.length > 0 ? inferredInstruments : t.instruments,
+        vocalEffects: inferred.vocalEffects?.length ? inferred.vocalEffects : t.vocalEffects,
+        vocalsEnabled: inferred.instrumental ? false : t.vocalsEnabled,
       };
       genreCounts.set(next.genre, (genreCounts.get(next.genre) ?? 0) + 1);
       moodCounts.set(next.mood, (moodCounts.get(next.mood) ?? 0) + 1);
@@ -486,18 +527,43 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     const structured = result.structured;
     if (!structured) return false;
 
+    // The structured AI payload covers genre/mood/tempo/artist/lyrics/etc.
+    // For the fields it doesn't supply (instruments, structure, video style,
+    // vocal style/effects/intensity, energy default), run the same local
+    // inference engine the "Fill all fields" button uses so a single
+    // Suggest action populates the entire form, not just the headline.
+    const seedDesc =
+      structured.description || structured.prompt || result.suggestion || songDescription;
+    const inferred = inferContextFromDescription(seedDesc, nextGenerationNonce('suggest'));
+    const inferredInstruments = parseInstrumentation(inferred.instrumentation);
+
     updateSongPrompt(prev => {
       const next: SongPromptState = {
         ...prev,
-        genre: (structured.genre && structured.genre.length > 0) ? structured.genre[0] : prev.genre,
-        mood: structured.mood || prev.mood,
-        tempo: structured.tempo ? Math.max(60, Math.min(200, parseInt(structured.tempo) || prev.tempo)) : prev.tempo,
-        artistInspiration: structured.artist_inspiration || prev.artistInspiration,
+        genre: (structured.genre && structured.genre.length > 0) ? structured.genre[0] : (inferred.genre || prev.genre),
+        mood: structured.mood || inferred.mood || prev.mood,
+        tempo: structured.tempo
+          ? Math.max(60, Math.min(200, parseInt(structured.tempo) || prev.tempo))
+          : (inferred.tempo ? Math.max(60, Math.min(200, inferred.tempo)) : prev.tempo),
+        artistInspiration: structured.artist_inspiration || inferred.artistInspiration || prev.artistInspiration,
         lyricsText: structured.lyrics || prev.lyricsText,
         songDescription: structured.description || structured.prompt || result.suggestion || prev.songDescription,
-        subgenre: Array.isArray(structured.subgenre) ? structured.subgenre.join(', ') : (structured.subgenre || prev.subgenre),
-        lyricsTheme: structured.lyricTheme || prev.lyricsTheme,
-        energyLevel: structured.energy ? Math.max(1, Math.min(10, parseInt(structured.energy) || prev.energyLevel)) : prev.energyLevel,
+        subgenre: Array.isArray(structured.subgenre)
+          ? structured.subgenre.join(', ')
+          : (structured.subgenre || inferred.subgenre || prev.subgenre),
+        lyricsTheme: structured.lyricTheme || inferred.lyricTheme || prev.lyricsTheme,
+        energyLevel: structured.energy
+          ? Math.max(1, Math.min(10, parseInt(structured.energy) || prev.energyLevel))
+          : (inferred.energyLevel ?? prev.energyLevel),
+        // Derived-only fields — supplied entirely by local inference.
+        vocalLanguage: inferred.vocalLanguage || prev.vocalLanguage,
+        videoStyle: inferred.videoStyle || prev.videoStyle,
+        vocalStyle: inferred.vocalStyle || prev.vocalStyle,
+        structureType: inferred.structureType || prev.structureType,
+        vocalIntensity: inferred.vocalIntensity ?? prev.vocalIntensity,
+        instruments: inferredInstruments.length > 0 ? inferredInstruments : prev.instruments,
+        vocalEffects: inferred.vocalEffects?.length ? inferred.vocalEffects : prev.vocalEffects,
+        vocalsEnabled: inferred.instrumental ? false : prev.vocalsEnabled,
       };
       return next;
     });

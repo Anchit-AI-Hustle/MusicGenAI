@@ -136,7 +136,7 @@ function inferContextLocally(description: string, seed: string) {
   else if (artistLower.includes('beyonce')) artistInspiration = 'Beyoncé';
   else if (artistLower.includes('dua lipa')) artistInspiration = 'Dua Lipa';
 
-  // VOCAL STYLE - Based on genre
+  // VOCAL STYLE - Based on genre. Covers every entry in `genreKeywords`.
   const vocalStyleMap: Record<string, string> = {
     'Hip Hop': 'Rapped',
     'Rock': 'Gritty',
@@ -147,6 +147,13 @@ function inferContextLocally(description: string, seed: string) {
     'Metal': 'Screamed',
     'Lo-fi': 'Whispers',
     'Electronic': 'Auto-tuned',
+    'Punjabi Drill': 'Aggressive male rap',
+    'Reggaeton': 'Latin Pop',
+    'Bhangra': 'Folk Punjabi vocals',
+    'Bollywood': 'Filmi playback',
+    'K-Pop': 'Polished group harmony',
+    'J-Pop': 'Bright lead vocal',
+    'Country': 'Storytelling drawl',
   };
   const vocalStyle = vocalStyleMap[genre] || 'Contemporary';
 
@@ -161,6 +168,13 @@ function inferContextLocally(description: string, seed: string) {
     'R&B': 'Piano, Synth, 808, Guitar',
     'Metal': 'Electric Guitar, Drums, Bass, Orchestral',
     'Lo-fi': 'Piano, Vinyl, Dusty Keys',
+    'Punjabi Drill': 'Sliding 808, Drill Drums, Tabla, Dhol, Sitar',
+    'Reggaeton': 'Dembow Drums, 808 Bass, Synth, Latin Percussion',
+    'Bhangra': 'Dhol, Tumbi, Sitar, Bass, Drums',
+    'Bollywood': 'Tabla, Sitar, Strings, Synth, Drums',
+    'K-Pop': 'Synths, 808, Drums, Piano, Strings',
+    'J-Pop': 'Synths, Drums, Bass, Guitar, Strings',
+    'Country': 'Acoustic Guitar, Banjo, Fiddle, Drums, Bass',
   };
   const instrumentation = instMap[genre] || 'Drums, Bass, Keys, Synth';
 
@@ -175,6 +189,7 @@ function inferContextLocally(description: string, seed: string) {
     'Nostalgic': 'Remember When',
     'Epic': 'Hero Journey',
     'Dark': 'Shadows',
+    'Tense': 'Edge of Dawn',
   };
   const lyricTheme = themeMap[mood] || 'Story of Us';
 
@@ -189,12 +204,121 @@ function inferContextLocally(description: string, seed: string) {
     'R&B': 'Neon City Night',
     'Metal': 'Concert Performance',
     'Lo-fi': 'Vintage Film',
+    'Punjabi Drill': 'Cinematic Night City',
+    'Reggaeton': 'Beach Party',
+    'Bhangra': 'Punjabi Wedding Festival',
+    'Bollywood': 'Bollywood Cinematic',
+    'K-Pop': 'Choreographed Stage',
+    'J-Pop': 'Anime Aesthetic',
+    'Country': 'Open Road',
   };
   const videoStyle = videoStyleMap[genre] || 'Abstract Geometric';
 
+  // SUBGENRE - Based on genre. Fallback to a sensible flagship style.
+  const subgenreMap: Record<string, string> = {
+    'Punjabi Drill': 'UK Punjabi drill',
+    'Reggaeton': 'Latin trap',
+    'Bhangra': 'Modern Bhangra',
+    'Bollywood': 'Filmi pop',
+    'Hip Hop': 'Trap',
+    'Rock': 'Indie rock',
+    'Pop': 'Synth-pop',
+    'Electronic': 'Future bass',
+    'R&B': 'Alt-R&B',
+    'Lo-fi': 'Lo-fi hip hop',
+    'Metal': 'Metalcore',
+    'K-Pop': 'Dance-pop K-Pop',
+    'J-Pop': 'City pop',
+    'Country': 'Country pop',
+    'Jazz': 'Smooth jazz',
+    'Classical': 'Cinematic classical',
+  };
+  const subgenre = subgenreMap[genre] || '';
+
+  // ENERGY (1-10) - mood-driven so the slider reflects intent.
+  const energyMap: Record<string, number> = {
+    Aggressive: 9,
+    Energetic: 8,
+    Epic: 8,
+    Uplifting: 7,
+    Tense: 7,
+    Dark: 6,
+    Romantic: 5,
+    Nostalgic: 4,
+    Melancholic: 3,
+    Calm: 2,
+  };
+  const energyLevel = energyMap[mood] ?? 5;
+
+  // VOCAL INTENSITY (1-10) - mood-driven, slightly higher than energy.
+  const vocalIntensityMap: Record<string, number> = {
+    Aggressive: 9,
+    Energetic: 8,
+    Epic: 8,
+    Uplifting: 7,
+    Romantic: 6,
+    Tense: 6,
+    Dark: 6,
+    Nostalgic: 4,
+    Melancholic: 3,
+    Calm: 2,
+  };
+  const vocalIntensity = vocalIntensityMap[mood] ?? 5;
+
+  // STRUCTURE - genre-aware template defaults.
+  const structureMap: Record<string, string> = {
+    'Hip Hop': 'Verse-Chorus-Verse',
+    'Punjabi Drill': 'Verse-Chorus-Verse',
+    'Pop': 'Verse-Chorus-Bridge',
+    'K-Pop': 'Verse-Chorus-Bridge',
+    'J-Pop': 'Verse-Chorus-Bridge',
+    'Rock': 'Verse-Chorus-Solo',
+    'Metal': 'Verse-Chorus-Breakdown',
+    'Electronic': 'Build-Drop-Break',
+    'Reggaeton': 'Verse-Chorus-Drop',
+    'R&B': 'Verse-Chorus-Bridge',
+    'Classical': 'Movement',
+    'Jazz': 'Head-Solo-Head',
+    'Lo-fi': 'Loop-Variation',
+    'Country': 'Verse-Chorus-Bridge',
+    'Bhangra': 'Verse-Hook-Verse',
+    'Bollywood': 'Antara-Mukhda-Antara',
+  };
+  const structureType = structureMap[genre] || 'Verse-Chorus-Bridge';
+
+  // VOCAL EFFECTS - genre-typical processing.
+  const effectsMap: Record<string, string[]> = {
+    'Hip Hop': ['delay', 'plate reverb', 'light autotune'],
+    'Punjabi Drill': ['autotune', 'short slap delay', 'tight reverb'],
+    'Pop': ['bright reverb', 'stereo doubler', 'gentle compression'],
+    'R&B': ['lush reverb', 'slap delay', 'subtle autotune'],
+    'Reggaeton': ['autotune', 'dub delay', 'plate reverb'],
+    'Rock': ['short room reverb', 'saturation'],
+    'Metal': ['saturation', 'tight gate'],
+    'Electronic': ['sidechain ducking', 'delay throws', 'reverb tails'],
+    'K-Pop': ['stereo doubler', 'bright reverb', 'soft autotune'],
+    'J-Pop': ['stereo doubler', 'plate reverb'],
+    'Bollywood': ['plate reverb', 'tape delay'],
+    'Bhangra': ['plate reverb', 'tape delay'],
+    'Country': ['room reverb', 'tape slap'],
+    'Jazz': ['plate reverb', 'tape delay'],
+    'Classical': ['concert hall reverb', 'early reflections'],
+    'Lo-fi': ['vinyl crackle', 'tape saturation'],
+  };
+  const vocalEffects = effectsMap[genre] || [];
+
+  // VOCAL ARRANGEMENT - solo vs group.
+  const arrangementMap: Record<string, string> = {
+    'K-Pop': 'group',
+    'Bollywood': 'duet',
+    'Bhangra': 'group',
+    'Classical': 'choir',
+  };
+  const vocalArrangement = arrangementMap[genre] || 'solo';
+
   return {
     genre,
-    subgenre: genre === 'Punjabi Drill' ? 'UK Punjabi drill' : '',
+    subgenre,
     mood,
     tempo,
     artistInspiration,
@@ -206,6 +330,11 @@ function inferContextLocally(description: string, seed: string) {
     vocalStyle,
     instrumentation,
     videoStyle,
+    energyLevel,
+    vocalIntensity,
+    structureType,
+    vocalEffects,
+    vocalArrangement,
   };
 }
 
