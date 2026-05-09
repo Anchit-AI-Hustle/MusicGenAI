@@ -30,7 +30,12 @@ const isCreationHidden = (creationId: string): boolean => {
   return hidden.some(h => h.creationId === creationId);
 };
 
-export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, params?: Record<string, string>) => void }> = ({ onNavigate }) => {
+export const GlobalGenerationTicker: React.FC<{
+  onNavigate: (page: string, params?: Record<string, string>) => void;
+  /** Tailwind class used to offset the fixed ticker so it doesn't sit
+   * on top of the sidebar. Defaults preserve the legacy `sm:left-64` look. */
+  sidebarOffsetClass?: string;
+}> = ({ onNavigate, sidebarOffsetClass = 'lg:left-64' }) => {
   const { creations, retryTrack } = useMusic();
   
   // Only show for brand new pending creations (created in last 5 seconds)
@@ -93,7 +98,7 @@ export const GlobalGenerationTicker: React.FC<{ onNavigate: (page: string, param
   };
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 flex flex-col items-center pt-3 px-4 pointer-events-none sm:left-64">
+    <div className={`fixed top-0 left-0 right-0 z-50 flex flex-col items-center pt-3 px-4 pointer-events-none transition-[left] duration-300 ${sidebarOffsetClass}`}>
       <AnimatePresence>
         {displayCreations.slice(0, 1).map((creation) => {
           const activeTrack = creation.tracks.find(t => inPipeline.has(t.status)) || creation.tracks[0];

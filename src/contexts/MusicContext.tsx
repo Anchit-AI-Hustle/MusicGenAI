@@ -1279,95 +1279,104 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         rnb: ['romantic', 'melancholic', 'dark', 'chill'],
       };
 
+      // Every field below routes through pickNovelCandidate so repeat
+      // "Suggest" clicks rotate through fresh alternatives instead of
+      // returning the same deterministic inference. The action verb
+      // changes the pool composition / weighting:
+      //   - 'suggest' : full pool, novelty preferred
+      //   - 'enhance' : rewrite of current value (or fall back to pool)
+      //   - 'new'     : pool with current-similar entries weighted low
       switch (normalizedField) {
         case 'prompt':
-        case 'albumVibe':
+        case 'albumVibe': {
+          const promptPool = [
+            inferredPrompt,
+            newAlternativeField('music_prompt', currentValue || inferredPrompt, suggestionContext),
+            `${inferredPrompt} Prioritize dynamic contrast, cleaner hooks, and a distinctive sonic identity.`,
+            `${inferredPrompt} Emphasize cinematic transitions, stronger motif recall, and polished arrangement pacing.`,
+            `${inferredPrompt} Foreground a memorable melodic motif and use restraint in the verses to make the chorus hit harder.`,
+            `${inferredPrompt} Lean into texture: layered pads, organic percussion, and tasteful automation across sections.`,
+          ];
           suggestionValue = action === 'enhance'
             ? enhanceField('music_prompt', currentValue || inferredPrompt, suggestionContext)
-            : action === 'new'
-              ? pickNovelCandidate(
-                [
-                  newAlternativeField('music_prompt', currentValue || inferredPrompt, suggestionContext),
-                  `${inferredPrompt} Prioritize dynamic contrast, cleaner hooks, and a distinctive sonic identity.`,
-                  `${inferredPrompt} Emphasize cinematic transitions, stronger motif recall, and polished arrangement pacing.`,
-                ],
-                currentValue,
-                history,
-                globalHistory,
-              )
-              : inferredPrompt;
+            : pickNovelCandidate(promptPool, currentValue, history, globalHistory);
           break;
-        case 'mood':
-          suggestionValue = action === 'new'
-            ? pickNovelCandidate(
-              [
-                newAlternativeField('mood', currentValue || inferredMood, suggestionContext),
-                ...(moodOptionsByGenre[baseGenre] ?? ['euphoric', 'melancholic', 'dark', 'chill']),
-                'euphoric',
-                'melancholic',
-                'dark',
-                'chill',
-                'tense',
-                'romantic',
-              ],
-              currentValue || inferredMood,
-              history,
-              globalHistory,
-            )
-            : inferredMood;
+        }
+        case 'mood': {
+          const moodPool = [
+            inferredMood,
+            newAlternativeField('mood', currentValue || inferredMood, suggestionContext),
+            ...(moodOptionsByGenre[baseGenre] ?? []),
+            'euphoric', 'melancholic', 'dark', 'chill', 'tense', 'romantic', 'aggressive',
+            'epic', 'nostalgic', 'uplifting', 'dreamy', 'menacing', 'hopeful', 'haunting',
+          ];
+          suggestionValue = pickNovelCandidate(moodPool, currentValue || inferredMood, history, globalHistory);
           break;
-        case 'tempo':
-          suggestionValue = action === 'new'
-            ? String(Math.max(60, Math.min(200, inferredTempo + (inferredTempo >= 125 ? -8 : 8))))
-            : String(inferredTempo);
+        }
+        case 'tempo': {
+          // Generate distinct tempo candidates around the inferred BPM so the
+          // user sees real variation rather than the same value on each click.
+          const tempoCandidates = new Set<string>();
+          const base = inferredTempo;
+          for (const delta of [0, -6, +6, -12, +12, -18, +18, -24, +24]) {
+            const t = Math.max(60, Math.min(200, base + delta));
+            tempoCandidates.add(String(t));
+          }
+          suggestionValue = pickNovelCandidate(
+            Array.from(tempoCandidates),
+            currentValue,
+            history,
+            globalHistory,
+          );
           break;
-        case 'structureType':
-          suggestionValue = action === 'new'
-            ? pickNovelCandidate(
-              [
-                newAlternativeField('song_structure', currentValue || suggestSongStructure(suggestionContext), suggestionContext),
-                'Intro-Verse-Pre-Chorus-Chorus-Verse-Chorus-Bridge-Chorus-Outro',
-                'Intro-Build-Drop-Verse-Build-Drop-Break-Outro',
-                'Intro-Theme-Variation-Climax-Coda',
-              ],
-              currentValue,
-              history,
-              globalHistory,
-            )
-            : suggestSongStructure(suggestionContext);
+        }
+        case 'structureType': {
+          const structurePool = [
+            suggestSongStructure(suggestionContext),
+            newAlternativeField('song_structure', currentValue || suggestSongStructure(suggestionContext), suggestionContext),
+            'Intro-Verse-Pre-Chorus-Chorus-Verse-Chorus-Bridge-Chorus-Outro',
+            'Intro-Build-Drop-Verse-Build-Drop-Break-Outro',
+            'Intro-Theme-Variation-Climax-Coda',
+            'Verse-Chorus-Verse-Chorus-Bridge-Chorus-Outro',
+            'Intro-Hook-Verse-Hook-Verse-Hook-Outro',
+            'Intro-Drop-Verse-Drop-Break-Drop-Outro',
+            'AABA Form (32-bar)',
+          ];
+          suggestionValue = pickNovelCandidate(structurePool, currentValue, history, globalHistory);
           break;
-        case 'vocalStyle':
+        }
+        case 'vocalStyle': {
+          const vocalStylePool = [
+            suggestVocalStyle(suggestionContext),
+            newAlternativeField('vocal_style', currentValue || suggestVocalStyle(suggestionContext), suggestionContext),
+            'intimate, close-mic phrasing with emotional restraint',
+            'dynamic mixed-voice delivery with rhythmic accents',
+            'airy falsetto layers with clean lead articulation',
+            'gritty chest-voice power with controlled belting in the chorus',
+            'whispered verses opening into anthemic, layered choruses',
+            'rap-sung hybrid with melodic ad-libs woven between bars',
+            'vintage warm tone with subtle vibrato and gentle compression',
+          ];
           suggestionValue = action === 'enhance'
             ? enhanceField('vocal_style', currentValue || suggestVocalStyle(suggestionContext), suggestionContext)
-            : action === 'new'
-              ? pickNovelCandidate(
-                [
-                  newAlternativeField('vocal_style', currentValue || suggestVocalStyle(suggestionContext), suggestionContext),
-                  'intimate, close-mic phrasing with emotional restraint',
-                  'dynamic mixed-voice delivery with rhythmic accents',
-                  'airy falsetto layers with clean lead articulation',
-                ],
-                currentValue,
-                history,
-                globalHistory,
-              )
-              : suggestVocalStyle(suggestionContext);
+            : pickNovelCandidate(vocalStylePool, currentValue, history, globalHistory);
           break;
-        case 'videoStyle':
-          suggestionValue = action === 'new'
-            ? pickNovelCandidate(
-              [
-                suggestVideoStyle(suggestionContext),
-                'cinematic wide-angle storytelling with atmospheric color wash',
-                'stylized handheld realism with grain texture and punchy cuts',
-                'abstract geometric motion synced to rhythmic accents',
-              ],
-              currentValue,
-              history,
-              globalHistory,
-            )
-            : suggestVideoStyle(suggestionContext);
+        }
+        case 'videoStyle': {
+          const videoStylePool = [
+            suggestVideoStyle(suggestionContext),
+            'cinematic wide-angle storytelling with atmospheric color wash',
+            'stylized handheld realism with grain texture and punchy cuts',
+            'abstract geometric motion synced to rhythmic accents',
+            'neon-noir cityscape with reflective surfaces and lens flares',
+            'minimal performance shoot with controlled lighting and slow push-ins',
+            'surreal dreamscape with morphing textures and floating subjects',
+            'documentary-style footage with natural light and intimate framing',
+            'vibrant editorial fashion aesthetic with bold color blocking',
+          ];
+          suggestionValue = pickNovelCandidate(videoStylePool, currentValue, history, globalHistory);
           break;
+        }
         case 'genre':
           suggestionValue = pickNovelCandidate(
             [

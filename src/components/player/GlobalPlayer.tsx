@@ -225,7 +225,13 @@ const SyncedLyricsPanel: React.FC<{ track: PlayerTrack }> = ({ track }) => {
   );
 };
 
-export const GlobalPlayer: React.FC = () => {
+interface GlobalPlayerProps {
+  /** Tailwind class used to offset the fixed player so it doesn't extend
+   * under the desktop sidebar. Defaults preserve the legacy full-width look. */
+  sidebarOffsetClass?: string;
+}
+
+export const GlobalPlayer: React.FC<GlobalPlayerProps> = ({ sidebarOffsetClass = 'lg:left-64' }) => {
   const {
     currentTrack, isPlaying, volume, playbackMode, playbackSpeed,
     isMuted, isExpanded, isImmersive, queue, queueIndex,
@@ -300,7 +306,7 @@ export const GlobalPlayer: React.FC = () => {
   return (
     <>
       <div
-        className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl"
+        className={`fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl transition-[left] duration-300 ${sidebarOffsetClass}`}
         onClick={() => setIsExpanded(true)}
       >
         <MiniProgress />

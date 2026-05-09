@@ -9,6 +9,12 @@ interface SidebarProps {
   currentPage: string;
   onNavigate: (page: string) => void;
   onAuthClick: () => void;
+  /**
+   * Notifies the parent layout when the desktop sidebar is
+   * collapsed/expanded so the main content margin can resize
+   * (256px → 80px) instead of leaving a 176px dead gap.
+   */
+  onCollapsedChange?: (collapsed: boolean) => void;
 }
 
 const navItems = [
@@ -18,11 +24,17 @@ const navItems = [
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAuthClick }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAuthClick, onCollapsedChange }) => {
   const { user, isAuthenticated, logout } = useAuth();
   const isMobile = useIsMobile();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  // Effective collapsed = the collapse toggle on desktop. Mobile is
+  // never "collapsed" in this sense — it's an off-canvas drawer.
+  React.useEffect(() => {
+    onCollapsedChange?.(!isMobile && isCollapsed);
+  }, [isCollapsed, isMobile, onCollapsedChange]);
 
   const handleNavigate = useCallback((page: string) => {
     onNavigate(page);

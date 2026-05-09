@@ -22,6 +22,7 @@ const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [songDetailParams, setSongDetailParams] = useState<{ creationId: string; trackId?: string } | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { isLoading } = useAuth();
   const isMobile = useIsMobile();
   const { currentTrack } = usePlayer();
@@ -64,13 +65,21 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen bg-transparent relative overflow-x-hidden text-white selection:bg-primary/30">
       <AnimatedBackground />
-      <GlobalGenerationTicker onNavigate={handleNavigate} />
-      <Sidebar currentPage={currentPage === 'song-detail' ? 'dashboard' : currentPage} onNavigate={handleNavigate} onAuthClick={() => setShowAuthModal(true)} />
-      <main className={`${isMobile ? "pt-20" : "ml-64 pt-14 transition-all duration-300"} ${currentTrack ? 'pb-24' : ''}`}>
+      <GlobalGenerationTicker
+        onNavigate={handleNavigate}
+        sidebarOffsetClass={sidebarCollapsed ? 'lg:left-20' : 'lg:left-64'}
+      />
+      <Sidebar
+        currentPage={currentPage === 'song-detail' ? 'dashboard' : currentPage}
+        onNavigate={handleNavigate}
+        onAuthClick={() => setShowAuthModal(true)}
+        onCollapsedChange={setSidebarCollapsed}
+      />
+      <main className={`${isMobile ? "pt-20" : `${sidebarCollapsed ? "ml-20" : "ml-64"} pt-14 transition-all duration-300`} ${currentTrack ? 'pb-24' : ''}`}>
         {renderPage()}
       </main>
       <SystemDemoDiagnostics />
-      <GlobalPlayer />
+      <GlobalPlayer sidebarOffsetClass={sidebarCollapsed ? 'lg:left-20' : 'lg:left-64'} />
       <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </div>
   );

@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, ChevronUp,
-  Activity, Clock, Languages, Mic2, Users, Video, Palette, Sparkles, AudioWaveform,
+  Activity, Clock, Languages, Mic2, Users, Video, Palette, Sparkles, AudioWaveform, Wand2,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { inferContextFromDescription } from '@/lib/contextInference';
+import { nextGenerationNonce } from '@/lib/intelligence';
 import { AiToolbar as SharedAiToolbar } from '@/components/AiToolbar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -169,21 +172,43 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
     }
   };
 
-  const handleMagicFill = async () => {
-    const result = await aiSuggest('prompt', config.songDescription, getContext(), 'enhance');
-    if (result?.structured) {
-      const s = result.structured;
-      update({
-        genre: s.genre[0] || config.genre,
-        mood: s.mood || config.mood,
-        tempo: parseInt(s.tempo) || config.tempo,
-        duration: config.duration,
-        lyricsText: s.lyrics || config.lyricsText,
-        vocalLanguage: s.genre[0]?.toLowerCase() === 'indian' ? 'Hindi' : 'English',
-        structureType: s.genre[0]?.toLowerCase() === 'classical' ? 'Movement' : 'Verse-Chorus-Bridge',
-        lyricsTheme: s.lyricTheme || config.lyricsTheme
-      });
+  /**
+   * Per-track auto-fill from this track's own Music Prompt. Runs the same
+   * comprehensive local inference engine the page-level "Fill all fields"
+   * button uses, so the user gets genre, subgenre, mood, tempo, language,
+   * artist, lyric theme, video style, vocal style/effects/intensity,
+   * structure, instruments, energy, and vocals on/off all populated from
+   * a single prompt — no network call.
+   */
+  const handleMagicFill = () => {
+    const trimmed = (config.songDescription || '').trim();
+    if (!trimmed) {
+      toast.error('Add a music prompt for this track first.');
+      return;
     }
+    const inferred = inferContextFromDescription(trimmed, nextGenerationNonce(`track-${index}`));
+    const inferredInstruments = (inferred.instrumentation ?? '')
+      .split(',').map(s => s.trim()).filter(Boolean);
+    update({
+      genre: inferred.genre || config.genre,
+      subgenre: inferred.subgenre || config.subgenre,
+      mood: inferred.mood || config.mood,
+      tempo: inferred.tempo
+        ? Math.max(60, Math.min(200, inferred.tempo))
+        : config.tempo,
+      vocalLanguage: inferred.vocalLanguage || config.vocalLanguage,
+      artistInspiration: inferred.artistInspiration || config.artistInspiration,
+      lyricsTheme: inferred.lyricTheme || config.lyricsTheme,
+      videoStyle: inferred.videoStyle || config.videoStyle,
+      vocalStyle: inferred.vocalStyle || config.vocalStyle,
+      structureType: inferred.structureType || config.structureType,
+      energyLevel: inferred.energyLevel ?? config.energyLevel,
+      vocalIntensity: inferred.vocalIntensity ?? config.vocalIntensity,
+      instruments: inferredInstruments.length > 0 ? inferredInstruments : config.instruments,
+      vocalEffects: inferred.vocalEffects?.length ? inferred.vocalEffects : config.vocalEffects,
+      vocalsEnabled: inferred.instrumental ? false : config.vocalsEnabled,
+    });
+    toast.success(`Filled track ${index + 1} from prompt`);
   };
 
   const handleAiAction = async (field: string, action: 'suggest' | 'enhance' | 'new') => {
@@ -261,6 +286,31 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                 </Button>
               )}
 
+              {/* Music Prompt — first, so the track name can derive from
+                  the prompt's context via "Suggest". */}
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <Label className="text-foreground font-medium text-sm">Music Prompt</Label>
+                  <AiToolbar field="prompt" />
+                </div>
+                <Textarea value={config.songDescription} onChange={e => update({ songDescription: e.target.value })} className="bg-input border-border min-h-24 resize-none" placeholder="Describe this track's mood and atmosphere..." />
+                <div className="mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <p className="text-[11px] text-muted-foreground">
+                    Auto-fill this track's fields from the prompt above.
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleMagicFill}
+                    disabled={!config.songDescription.trim()}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-1.5 text-xs h-8 px-3"
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    Fill all fields from this
+                  </Button>
+                </div>
+              </div>
+
               {/* Track Name */}
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
@@ -268,15 +318,6 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
                   <AiToolbar field="trackName" />
                 </div>
                 <Input value={config.trackName} onChange={e => update({ trackName: e.target.value })} className="bg-input border-border" placeholder="Track name" />
-              </div>
-
-              {/* Music Prompt */}
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <Label className="text-foreground font-medium text-sm">Music Prompt</Label>
-                  <AiToolbar field="prompt" />
-                </div>
-                <Textarea value={config.songDescription} onChange={e => update({ songDescription: e.target.value })} className="bg-input border-border min-h-24 resize-none" placeholder="Describe this track's mood and atmosphere..." />
               </div>
 
               {/* Genres */}

@@ -1,6 +1,9 @@
 import * as React from "react";
 
-const MOBILE_BREAKPOINT = 768;
+// Match the layout's `lg:hidden` semantic. Below this width the sidebar
+// becomes an off-canvas drawer and the floating ticker / player switch to
+// mobile-friendly variants. Tailwind `lg` = 1024px.
+const MOBILE_BREAKPOINT = 1024;
 
 export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined);
