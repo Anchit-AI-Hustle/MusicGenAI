@@ -4,6 +4,45 @@
  * Uses GenerationDNA when provided for reproducible, unique visuals per track.
  */
 
+/**
+ * Spawn a tiny Worker that posts back at the requested interval. Used to
+ * drive the render loop because `setTimeout` is throttled to ~1Hz in
+ * backgrounded tabs, which previously caused 3-minute renders to hang for
+ * 90+ minutes when the user switched tabs.
+ *
+ * Returns { tick, stop }. Each `tick()` registers a one-shot callback that
+ * fires after the next worker message.
+ */
+function createUnthrottledTicker(intervalMs: number): { onTick: (cb: () => void) => void; stop: () => void } {
+  const workerCode = `
+    let timer = null;
+    self.onmessage = (e) => {
+      if (e.data === 'stop') { if (timer) clearInterval(timer); timer = null; return; }
+      if (e.data && typeof e.data.interval === 'number') {
+        if (timer) clearInterval(timer);
+        timer = setInterval(() => self.postMessage(0), Math.max(1, e.data.interval));
+      }
+    };
+  `;
+  const blobUrl = URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' }));
+  const worker = new Worker(blobUrl);
+  worker.postMessage({ interval: intervalMs });
+  let queued: (() => void) | null = null;
+  worker.onmessage = () => {
+    const cb = queued;
+    queued = null;
+    if (cb) cb();
+  };
+  return {
+    onTick: (cb) => { queued = cb; },
+    stop: () => {
+      worker.postMessage('stop');
+      worker.terminate();
+      URL.revokeObjectURL(blobUrl);
+    },
+  };
+}
+
 export interface VideoGenerationDNA {
   seed: string;
   numericSeed?: number;
@@ -553,6 +592,35 @@ export async function generateVideoFromAudio(
   const style = getStyleFromMetadata(genres, mood, videoStyleName, generationDNA);
   const rng = createSeededRng(getVideoSeedNumber(generationDNA) ^ 0x9e3779b9);
 
+  // ===== DNA-driven style mutations across the track =====
+  // Pre-compute alternate palettes + waveform variants so the visualizer
+  // can rotate between them on section transitions instead of being locked
+  // to one look for the entire video.
+  const waveformVariants: VideoStyle['waveformStyle'][] = ['bars', 'circle', 'line', 'spiral'];
+  const altPalettes: string[][] = [
+    style.colors,
+    // DNA color signature gives us a fully alternative palette
+    (generationDNA?.colorSignature?.length ?? 0) >= 3
+      ? generationDNA!.colorSignature.slice(0, 3)
+      : style.colors,
+    // A complementary palette: shift hue by ~120deg via channel rotation
+    style.colors.map((c) => {
+      const m = c.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+      if (!m) return c;
+      const r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
+      return `#${[g, b, r].map(v => v.toString(16).padStart(2, '0')).join('')}`;
+    }),
+    // Inverse-luminance palette for contrast sections
+    style.colors.map((c) => {
+      const m = c.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+      if (!m) return c;
+      return `#${[1,2,3].map(i => (255 - parseInt(m[i], 16)).toString(16).padStart(2, '0')).join('')}`;
+    }),
+  ];
+  let activeStyle: VideoStyle = { ...style };
+  let nextMutationFrame = 0;
+  const mutationStride = Math.max(60, Math.floor(durationSeconds * 30 / 6)); // ~6 mutations per track
+
   onProgress?.({ stage: 'analyzing_beat_structure', progress: 0.02 });
 
   // Create offscreen canvas
@@ -643,6 +711,13 @@ export async function generateVideoFromAudio(
   onProgress?.({ stage: 'rendering_video', progress: 0.25 });
 
   return new Promise<Blob>((resolve, reject) => {
+    let tickerRef: { stop: () => void } | null = null;
+    const cleanupStreams = () => {
+      try { tickerRef?.stop(); } catch { /* worker already stopped */ }
+      stream.getTracks().forEach((track) => track.stop());
+      dest.stream.getTracks().forEach((track) => track.stop());
+      audioContext.close().catch(() => undefined);
+    };
     mediaRecorder.onstop = async () => {
       try {
         const recordedMime = mediaRecorder.mimeType || selectedMime;
@@ -656,28 +731,37 @@ export async function generateVideoFromAudio(
       } catch (error) {
         reject(error);
       } finally {
-        stream.getTracks().forEach((track) => track.stop());
-        dest.stream.getTracks().forEach((track) => track.stop());
-        audioContext.close().catch(() => undefined);
+        cleanupStreams();
       }
     };
-    mediaRecorder.onerror = (e) => reject(e);
+    mediaRecorder.onerror = (e) => { cleanupStreams(); reject(e); };
 
     mediaRecorder.start();
     audioSource.start(0);
 
+    // Web Worker timer to sidestep tab-backgrounding throttling on the main
+    // thread. setTimeout in a hidden tab drops to ~1Hz, which would stretch
+    // a 3-min render to 90+ minutes. Worker timers are not throttled.
+    const ticker = createUnthrottledTicker(Math.max(8, Math.floor(1000 / fps)));
+    tickerRef = ticker;
+
     let frame = 0;
+    const finishRender = () => {
+      try { ticker.stop(); } catch { /* worker already stopped */ }
+      if (mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      try {
+        audioSource.stop();
+      } catch {
+        // BufferSource can only be stopped once.
+      }
+      onProgress?.({ stage: 'rendering_video', progress: 0.98 });
+    };
+
     const renderFrame = () => {
       if (frame >= totalFrames) {
-        if (mediaRecorder.state !== 'inactive') {
-          mediaRecorder.stop();
-        }
-        try {
-          audioSource.stop();
-        } catch {
-          // BufferSource can only be stopped once.
-        }
-        onProgress?.({ stage: 'rendering_video', progress: 0.98 });
+        finishRender();
         return;
       }
 
@@ -692,10 +776,28 @@ export async function generateVideoFromAudio(
       const activeLyricCue = lyricCues.find((cue) => currentTime >= cue.startTime && currentTime <= cue.endTime);
       const lyricFlash = lyricCues.some((cue) => Math.abs(cue.startTime - currentTime) < 0.12) ? 1 : 0;
 
-      // Draw visualization based on style
+      // Mutate the visual style on section transitions OR every mutationStride
+      // frames as a fallback. Each mutation rotates palette + waveform so the
+      // video doesn't look like one screensaver glued to the track.
+      if (sectionTransition || frame >= nextMutationFrame) {
+        const paletteIdx = Math.floor(rng() * altPalettes.length);
+        const waveIdx = Math.floor(rng() * waveformVariants.length);
+        activeStyle = {
+          ...style,
+          colors: altPalettes[paletteIdx],
+          waveformStyle: waveformVariants[waveIdx],
+          // particleCount also drifts with energy + DNA visualEnergy
+          particleCount: Math.max(20, Math.min(200, Math.round(
+            style.particleCount * (0.7 + (generationDNA?.visualEnergy ?? 0.5) * 0.6)
+          ))),
+        };
+        nextMutationFrame = frame + mutationStride;
+      }
+
+      // Draw visualization based on the (possibly just-mutated) style
       drawVisualization(
         ctx,
-        style,
+        activeStyle,
         width,
         height,
         t,
@@ -719,15 +821,17 @@ export async function generateVideoFromAudio(
       }
 
       frame++;
-      // Use requestAnimationFrame for smooth rendering, but throttle to target fps
       if (frame < totalFrames) {
-        setTimeout(renderFrame, 1000 / fps);
+        // Worker-driven tick — not throttled when tab is hidden.
+        ticker.onTick(renderFrame);
       } else {
-        renderFrame(); // final call
+        finishRender();
       }
     };
 
-    renderFrame();
+    // Kick off the first frame immediately, subsequent frames flow from the
+    // worker ticker.
+    ticker.onTick(renderFrame);
   });
 }
 

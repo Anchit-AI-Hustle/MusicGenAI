@@ -142,7 +142,11 @@ const AUDIO_UPLOAD_TIMEOUT_MS = 4 * 60 * 1000;
 const VIDEO_UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 
 function videoRenderTimeoutMs(durationSeconds: number) {
-  return Math.min(45 * 60 * 1000, Math.max(5 * 60 * 1000, durationSeconds * 90 * 1000));
+  // Real-time recording floor is `durationSeconds`; transcode adds ~15-25%.
+  // Cap at 12 minutes for any track. Was previously durationSeconds * 90s
+  // (= 4.5h max) which let stalls run for hours instead of failing fast.
+  const realtimeFloor = durationSeconds * 1.4 * 1000; // 40% headroom over wall-clock
+  return Math.min(12 * 60 * 1000, Math.max(2 * 60 * 1000, realtimeFloor));
 }
 
 const TERMINAL_TRACK_STATUSES = ['completed', 'audio_complete_video_failed', 'failed'];
@@ -1161,6 +1165,150 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const inferredTempo = suggestTempo(suggestionContext);
       const inferredPrompt = suggestMusicPrompt(suggestionContext);
 
+      // ============================================================
+      // PRIMARY PATH — call the LLM-backed edge function so every
+      // Suggest / Polish / Try-another returns a genuinely novel,
+      // context-aware response. The local template pool below is only
+      // used as a fallback when the edge function fails.
+      // ============================================================
+      const edgeFieldMap: Record<string, string> = {
+        prompt: 'prompt',
+        albumVibe: 'albumVibe',
+        trackName: 'trackName',
+        albumName: 'albumName',
+        genre: 'genres',
+        lyrics: 'lyrics',
+        lyricsTheme: 'lyrics',
+        artistInspiration: 'artistInspiration',
+        vocalLanguage: 'vocalLanguage',
+        videoStyle: 'videoStyle',
+        tempo: 'tempoBpm',
+        duration: 'duration',
+        vocalArrangement: 'vocalStructure',
+        vocalStyle: 'vocalStyle',
+        vocalIntensity: 'vocalIntensity',
+        vocalEffects: 'vocalEffects',
+        mood: 'mood',
+        structureType: 'songStructure',
+        subgenre: 'genres',
+        instruments: 'genres',
+        energyLevel: 'vocalIntensity',
+      };
+      const edgeField = edgeFieldMap[normalizedField] || normalizedField;
+      const requestNonce = nextGenerationNonce(`ai-${normalizedField}-${action}`);
+      const randomSeedNum = Array.from(requestNonce).reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 0);
+
+      const previousGenreFamiliesRef = suggestionHistoryRef.current.__genreFamilies__ || [];
+      const edgeContext = {
+        title: effectiveContext.title,
+        musicPrompt: effectiveContext.songDescription || effectiveContext.prompt,
+        genres: parseList(effectiveContext.genre),
+        durationSeconds: Number(effectiveContext.duration ?? 180),
+        vocalLanguages: parseList(effectiveContext.vocalLanguage),
+        lyrics: effectiveContext.lyricsText || effectiveContext.lyricsTheme,
+        artistInspiration: effectiveContext.artistInspiration,
+        tempoBpm: Number(effectiveContext.tempo ?? 120),
+        mood: effectiveContext.mood,
+        musicalKey: effectiveContext.musicalKey,
+        vocalStructure: effectiveContext.vocalArrangement,
+        vocalStyle: effectiveContext.vocalStyle,
+        vocalIntensity: effectiveContext.vocalIntensity,
+        vocalEffects: Array.isArray(effectiveContext.vocalEffects)
+          ? effectiveContext.vocalEffects
+          : parseList(effectiveContext.vocalEffects),
+        songStructure: effectiveContext.structureType,
+        energy: String(effectiveContext.energyLevel ?? ''),
+      };
+
+      let edgeResult: AiSuggestionResult | null = null;
+      try {
+        const { data, error } = await supabase.functions.invoke('ai-suggest', {
+          body: {
+            field: edgeField,
+            value: currentValue,
+            context: edgeContext,
+            action,
+            previousSuggestions: history.slice(-8),
+            previousGenreFamilies: previousGenreFamiliesRef.slice(-3),
+            randomSeed: randomSeedNum,
+            requestNonce,
+          },
+        });
+        if (!error && data && !data.error && typeof data.suggestion === 'string' && data.suggestion.trim()) {
+          // Track the genre family the LLM picked so we can rotate away
+          // from it on the next call (server-side enforced via prompt).
+          if (data.genreFamily) {
+            suggestionHistoryRef.current.__genreFamilies__ = [
+              ...previousGenreFamiliesRef.slice(-5),
+              String(data.genreFamily),
+            ];
+          }
+          edgeResult = {
+            field: normalizedField,
+            action,
+            suggestion: data.suggestion,
+            structured: data.structured ?? null,
+          };
+        } else if (error) {
+          console.warn('[aiSuggest] edge function error, using local fallback', error.message);
+        }
+      } catch (e) {
+        console.warn('[aiSuggest] edge function unreachable, using local fallback', e);
+      }
+
+      if (edgeResult) {
+        // Persist into history + state — same shape the local path uses.
+        const cleaned = sanitizeSuggestion(edgeResult.suggestion);
+        if (cleaned) {
+          const formatted = formatSuggestionForField(normalizedField, cleaned);
+          suggestionHistoryRef.current[normalizedField] = [
+            ...(suggestionHistoryRef.current[normalizedField] || []).slice(-7),
+            formatted,
+          ];
+          suggestionHistoryRef.current.__global__ = [
+            ...(suggestionHistoryRef.current.__global__ || []).slice(-30),
+            `${normalizedField}:${formatted}`,
+          ];
+          setSuggestionState(prev => {
+            if (prev.lastRequestId[field] !== requestId) return prev;
+            const loadingKey = `${field}-${action}`;
+            const newLoading = { ...prev.loading };
+            delete newLoading[loadingKey];
+            return {
+              ...prev,
+              loading: newLoading,
+              results: {
+                ...prev.results,
+                [field]: {
+                  field: normalizedField,
+                  action,
+                  suggestion: formatted,
+                  structured: edgeResult.structured ?? (
+                    normalizedField === 'prompt'
+                      ? buildStructuredSuggestion(formatted, suggestionContext, effectiveContext)
+                      : null
+                  ),
+                },
+              },
+            };
+          });
+          return {
+            field: normalizedField,
+            action,
+            suggestion: formatted,
+            structured: edgeResult.structured ?? (
+              normalizedField === 'prompt'
+                ? buildStructuredSuggestion(formatted, suggestionContext, effectiveContext)
+                : null
+            ),
+          };
+        }
+      }
+
+      // ============================================================
+      // FALLBACK PATH — local template pool. Only reached when the
+      // edge function fails (no API key, network error, rate limit).
+      // ============================================================
       let suggestionValue: string | null = null;
       const titleCase = (token: string) => token ? `${token[0].toUpperCase()}${token.slice(1)}` : token;
       const unique = (items: string[]) => [...new Set(items.map((item) => item.trim()).filter(Boolean))];
@@ -1286,31 +1434,104 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       //   - 'suggest' : full pool, novelty preferred
       //   - 'enhance' : rewrite of current value (or fall back to pool)
       //   - 'new'     : pool with current-similar entries weighted low
+      // ---------- Procedural builders (combinatorial, not enumerated) ----------
+      // Each call salts the RNG with a fresh nonce so the same context+history
+      // produces different outputs on every click. Pool size is the cartesian
+      // product of all picks → thousands of unique combinations per field.
+      const procRng = createRng(
+        Array.from(nextGenerationNonce(`proc-${normalizedField}-${action}`))
+          .reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 0),
+      );
+      const pickN = <T,>(arr: readonly T[]): T => arr[Math.floor(procRng() * arr.length)];
+
+      const PROMPT_FRAGMENTS = {
+        opener: [
+          'A', 'A late-night', 'A windswept', 'A neon-soaked', 'A sun-drenched',
+          'A rain-soaked', 'A pre-dawn', 'A widescreen', 'A claustrophobic',
+          'A cathedral-sized', 'A handheld', 'A monochrome', 'A kaleidoscopic',
+          'A blade-sharp', 'A plush', 'A weather-worn', 'A high-contrast',
+        ],
+        textureWord: [
+          'cinematic', 'kinetic', 'lush', 'minimal', 'maximalist', 'restrained',
+          'driving', 'pulsating', 'cascading', 'simmering', 'thunderous', 'glassy',
+          'gritty', 'sun-bleached', 'iridescent', 'velvet', 'metallic', 'aqueous',
+        ],
+        emotion: [
+          'longing', 'defiance', 'awe', 'tenderness', 'menace', 'release',
+          'dread', 'jubilation', 'reverence', 'rebellion', 'grief', 'wonder',
+        ],
+        instrumentHook: [
+          'a single tape-saturated piano motif', 'rolling 808 sub-bass', 'detuned analog leads',
+          'tabla-and-bansuri counterpoint', 'gated room drums', 'detuned pad swells',
+          'pizzicato strings on the offbeat', 'sliding 808s under chopped vocal stutters',
+          'a felt piano with shimmer reverb', 'distorted guitar in fifths',
+          'arpeggiated mono synth', 'slap-back guitar with spring reverb',
+          'modular bleeps over a rolling kick', 'choral pad through a tape stop',
+        ],
+        arrangementCue: [
+          'a slow burn into a triumphant final chorus',
+          'sudden silence before each drop',
+          'verses that whisper and choruses that shout',
+          'a half-time bridge that resets the room',
+          'cyclical four-bar loops that mutate every eight bars',
+          'a long intro that strips away as the hook lands',
+          'no chorus — only escalating refrains',
+          'a dub-style breakdown two-thirds in',
+          'a coda that abandons the groove for atmosphere',
+        ],
+        productionDetail: [
+          'sidechain ducking on the pads',
+          'parallel compression on the drums',
+          'a high-pass filter sweep into the chorus',
+          'tape saturation across the master bus',
+          'chamber reverb on the lead vocal only',
+          'micro-pitched harmonies wide on the chorus',
+          'a low-pass on every other section to create breath',
+          'mid-side EQ pushing the sides on the hooks',
+        ],
+      } as const;
+      const buildPromptSuggestion = (): string => {
+        const seedText = currentValue || inferredPrompt || `${inferredMood} ${baseGenre}`;
+        const opener = pickN(PROMPT_FRAGMENTS.opener);
+        const tex = pickN(PROMPT_FRAGMENTS.textureWord);
+        const emo = pickN(PROMPT_FRAGMENTS.emotion);
+        const hook = pickN(PROMPT_FRAGMENTS.instrumentHook);
+        const arr = pickN(PROMPT_FRAGMENTS.arrangementCue);
+        const prod = pickN(PROMPT_FRAGMENTS.productionDetail);
+        return `${opener} ${tex} ${baseGenre} track centered on ${emo}. Anchored by ${hook}, with ${arr}. Production: ${prod}. Echoes ${seedText.split('.')[0].slice(0, 80)}.`;
+      };
+
+      const MOOD_FRAGMENTS = {
+        intensifier: ['quietly', 'unrelentingly', 'cinematically', 'softly', 'electrically', 'achingly', 'savagely', 'dreamily', 'ferociously', 'reverently'],
+        core: ['euphoric', 'melancholic', 'menacing', 'tender', 'defiant', 'haunted', 'jubilant', 'reverent', 'restless', 'hypnotic', 'wistful', 'incandescent', 'foreboding', 'liberated', 'pensive'],
+        connector: ['with hints of', 'edging into', 'wrapped around', 'cut with', 'shading toward', 'tipping into'],
+        secondary: ['nostalgia', 'rage', 'devotion', 'awe', 'sorrow', 'mischief', 'serenity', 'urgency', 'wonder', 'grief'],
+      } as const;
+      const buildMoodSuggestion = (): string => {
+        const i = pickN(MOOD_FRAGMENTS.intensifier);
+        const c = pickN(MOOD_FRAGMENTS.core);
+        const conn = pickN(MOOD_FRAGMENTS.connector);
+        const s = pickN(MOOD_FRAGMENTS.secondary);
+        return `${i} ${c} ${conn} ${s}`;
+      };
+
       switch (normalizedField) {
         case 'prompt':
         case 'albumVibe': {
-          const promptPool = [
-            inferredPrompt,
-            newAlternativeField('music_prompt', currentValue || inferredPrompt, suggestionContext),
-            `${inferredPrompt} Prioritize dynamic contrast, cleaner hooks, and a distinctive sonic identity.`,
-            `${inferredPrompt} Emphasize cinematic transitions, stronger motif recall, and polished arrangement pacing.`,
-            `${inferredPrompt} Foreground a memorable melodic motif and use restraint in the verses to make the chorus hit harder.`,
-            `${inferredPrompt} Lean into texture: layered pads, organic percussion, and tasteful automation across sections.`,
-          ];
-          suggestionValue = action === 'enhance'
-            ? enhanceField('music_prompt', currentValue || inferredPrompt, suggestionContext)
-            : pickNovelCandidate(promptPool, currentValue, history, globalHistory);
+          // Combinatorial: 17 × 18 × 12 × 14 × 9 × 8 = 4.6M unique combos
+          if (action === 'enhance') {
+            suggestionValue = enhanceField('music_prompt', currentValue || inferredPrompt, suggestionContext);
+          } else {
+            // Generate 6 candidates, pick the one not seen in history.
+            const candidates = Array.from({ length: 6 }, () => buildPromptSuggestion());
+            suggestionValue = pickNovelCandidate(candidates, currentValue, history, globalHistory);
+          }
           break;
         }
         case 'mood': {
-          const moodPool = [
-            inferredMood,
-            newAlternativeField('mood', currentValue || inferredMood, suggestionContext),
-            ...(moodOptionsByGenre[baseGenre] ?? []),
-            'euphoric', 'melancholic', 'dark', 'chill', 'tense', 'romantic', 'aggressive',
-            'epic', 'nostalgic', 'uplifting', 'dreamy', 'menacing', 'hopeful', 'haunting',
-          ];
-          suggestionValue = pickNovelCandidate(moodPool, currentValue || inferredMood, history, globalHistory);
+          // Combinatorial: 10 × 15 × 6 × 10 = 9000 unique combos
+          const candidates = Array.from({ length: 8 }, () => buildMoodSuggestion());
+          suggestionValue = pickNovelCandidate(candidates, currentValue, history, globalHistory);
           break;
         }
         case 'tempo': {
@@ -1331,50 +1552,51 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           break;
         }
         case 'structureType': {
-          const structurePool = [
-            suggestSongStructure(suggestionContext),
-            newAlternativeField('song_structure', currentValue || suggestSongStructure(suggestionContext), suggestionContext),
-            'Intro-Verse-Pre-Chorus-Chorus-Verse-Chorus-Bridge-Chorus-Outro',
-            'Intro-Build-Drop-Verse-Build-Drop-Break-Outro',
-            'Intro-Theme-Variation-Climax-Coda',
-            'Verse-Chorus-Verse-Chorus-Bridge-Chorus-Outro',
-            'Intro-Hook-Verse-Hook-Verse-Hook-Outro',
-            'Intro-Drop-Verse-Drop-Break-Drop-Outro',
-            'AABA Form (32-bar)',
+          const sections = [
+            ['Intro', 'Verse', 'Pre-Chorus', 'Chorus', 'Verse', 'Chorus', 'Bridge', 'Chorus', 'Outro'],
+            ['Intro', 'Build', 'Drop', 'Verse', 'Build', 'Drop', 'Break', 'Drop', 'Outro'],
+            ['Intro', 'Theme', 'Variation', 'Development', 'Climax', 'Coda'],
+            ['Intro', 'Hook', 'Verse', 'Hook', 'Verse', 'Hook', 'Outro'],
+            ['Verse', 'Chorus', 'Verse', 'Chorus', 'Bridge', 'Chorus', 'Outro'],
+            ['Intro', 'Verse', 'Refrain', 'Verse', 'Refrain', 'Bridge', 'Final Refrain', 'Outro'],
+            ['A', 'A', 'B', 'A'],
+            ['Alap', 'Jor', 'Jhala', 'Tabla Solo', 'Jugalbandi'],
+            ['Head', 'Solo', 'Solo', 'Trade Fours', 'Head'],
+            ['Mukhda', 'Antara', 'Mukhda', 'Antara', 'Sanchari', 'Mukhda'],
+            ['Loop A', 'Loop A+B', 'Loop B', 'Loop B+C', 'Loop C', 'Drop Out'],
           ];
-          suggestionValue = pickNovelCandidate(structurePool, currentValue, history, globalHistory);
+          const layout = pickN(sections);
+          // Sometimes glue with arrows, sometimes dashes — adds variety
+          const glue = pickN([' → ', ' - ', ' • ']);
+          suggestionValue = pickNovelCandidate(
+            [layout.join(glue), layout.join(' → '), [...layout].reverse().slice(0, layout.length - 1).reverse().join(glue)],
+            currentValue,
+            history,
+            globalHistory,
+          );
           break;
         }
         case 'vocalStyle': {
-          const vocalStylePool = [
-            suggestVocalStyle(suggestionContext),
-            newAlternativeField('vocal_style', currentValue || suggestVocalStyle(suggestionContext), suggestionContext),
-            'intimate, close-mic phrasing with emotional restraint',
-            'dynamic mixed-voice delivery with rhythmic accents',
-            'airy falsetto layers with clean lead articulation',
-            'gritty chest-voice power with controlled belting in the chorus',
-            'whispered verses opening into anthemic, layered choruses',
-            'rap-sung hybrid with melodic ad-libs woven between bars',
-            'vintage warm tone with subtle vibrato and gentle compression',
-          ];
-          suggestionValue = action === 'enhance'
-            ? enhanceField('vocal_style', currentValue || suggestVocalStyle(suggestionContext), suggestionContext)
-            : pickNovelCandidate(vocalStylePool, currentValue, history, globalHistory);
+          const tone = ['intimate', 'gritty', 'breathy', 'commanding', 'velvet', 'feral', 'glassy', 'sun-bleached', 'soot-soaked', 'crystalline', 'rasped', 'silken', 'electrified'];
+          const technique = ['close-mic phrasing', 'mixed-voice belting', 'falsetto layers', 'rap-sung hybrid', 'spoken-word verses', 'choral stacks', 'call-and-response ad-libs', 'whisper-to-shout dynamic', 'melismatic runs', 'half-sung half-rapped flow'];
+          const accent = ['rhythmic accents on the off-beat', 'stuttering ad-libs at line-ends', 'octave doubles on the hook', 'a low harmony shadowing the lead', 'micro-pitch harmonies for width', 'a sotto-voce verse opening', 'a single shouted refrain', 'tape-saturated vocal grit'];
+          const buildVocalStyle = () => `${pickN(tone)} ${pickN(technique)} with ${pickN(accent)}`;
+          if (action === 'enhance') {
+            suggestionValue = enhanceField('vocal_style', currentValue || suggestVocalStyle(suggestionContext), suggestionContext);
+          } else {
+            const candidates = Array.from({ length: 6 }, () => buildVocalStyle());
+            suggestionValue = pickNovelCandidate(candidates, currentValue, history, globalHistory);
+          }
           break;
         }
         case 'videoStyle': {
-          const videoStylePool = [
-            suggestVideoStyle(suggestionContext),
-            'cinematic wide-angle storytelling with atmospheric color wash',
-            'stylized handheld realism with grain texture and punchy cuts',
-            'abstract geometric motion synced to rhythmic accents',
-            'neon-noir cityscape with reflective surfaces and lens flares',
-            'minimal performance shoot with controlled lighting and slow push-ins',
-            'surreal dreamscape with morphing textures and floating subjects',
-            'documentary-style footage with natural light and intimate framing',
-            'vibrant editorial fashion aesthetic with bold color blocking',
-          ];
-          suggestionValue = pickNovelCandidate(videoStylePool, currentValue, history, globalHistory);
+          const cinematography = ['cinematic wide-angle', 'handheld realism', 'static locked-off frames', 'whip-pan kinetic edits', 'slow dolly push-ins', 'overhead choreographed grids', 'macro abstract close-ups', 'one-take long-shots'];
+          const palette = ['neon-noir cyan and magenta', 'sun-bleached sepia', 'high-contrast monochrome', 'pastel dream gradients', 'industrial cool greys', 'desert ochres and terracotta', 'underwater teals', 'firelit oranges', 'rain-soaked blues', 'midnight purples'];
+          const subject = ['silhouetted dancers', 'moving cityscapes', 'morphing geometric shapes', 'a single performer in changing environments', 'macro shots of liquid and ink', 'choreographed crowd movement', 'CGI particle storms', 'archival-style stock footage cut tight'];
+          const motion = ['cuts synced to the snare', 'slow push-ins on every chorus', 'a continuous orbital camera', 'time-lapse and slo-mo crossfades', 'glitch transitions on the drop', 'whip-pans into each section'];
+          const buildVideoStyle = () => `${pickN(cinematography)}, ${pickN(palette)}, featuring ${pickN(subject)}, with ${pickN(motion)}`;
+          const candidates = Array.from({ length: 6 }, () => buildVideoStyle());
+          suggestionValue = pickNovelCandidate(candidates, currentValue, history, globalHistory);
           break;
         }
         case 'genre':

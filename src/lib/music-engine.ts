@@ -776,6 +776,41 @@ export async function generateTrack(
     profile = { ...profile, instruments: shuffled.slice(0, count) };
   }
 
+  // ===== DNA → Musical-shape biases (not just notes) =====
+  // Wire grooveBias, harmonicMood, motifShape, textureDensity into the
+  // structural / rhythmic / harmonic decisions so two runs with the same
+  // prompt produce songs that feel different in shape, not just in pitch.
+  if (dna) {
+    const swingShift = (dna.grooveBias - 0.5) * 0.3;          // ±0.15
+    const newSwing = Math.max(0, Math.min(0.6, (profile.swing ?? 0) + swingShift));
+    const densityShift = (dna.textureDensity - 0.5) * 0.25;   // ±0.125
+    const newDensity = Math.max(0.1, Math.min(1, (profile.density ?? 0.6) + densityShift));
+
+    // Pick a different rhythm-pattern tag based on grooveBias so the
+    // drum / bass templates pull from a genuinely different feel.
+    const rhythmFamilies = ['driving', 'syncopated', 'steady', 'minimal', 'polyrhythmic'];
+    const rhythmIdx = Math.floor(dna.grooveBias * rhythmFamilies.length) % rhythmFamilies.length;
+    const newRhythmStyle = rhythmFamilies[rhythmIdx];
+
+    // Add DNA-derived "characteristic" flags so chooseMelodyStyle and
+    // chooseBassStyleDynamic see real signal.
+    const dnaCharacteristics: string[] = [];
+    if (dna.harmonicMood > 0.7) dnaCharacteristics.push('bright', 'consonant');
+    else if (dna.harmonicMood < 0.3) dnaCharacteristics.push('dark', 'modal', 'minor-leaning');
+    if (dna.motifShape > 0.66) dnaCharacteristics.push('hook-led');
+    else if (dna.motifShape < 0.33) dnaCharacteristics.push('texture-led');
+    if (dna.textureDensity > 0.7) dnaCharacteristics.push('dense', 'layered');
+    else if (dna.textureDensity < 0.3) dnaCharacteristics.push('sparse', 'restrained');
+
+    profile = {
+      ...profile,
+      swing: newSwing,
+      density: newDensity,
+      rhythmStyle: newRhythmStyle,
+      characteristics: [...(profile.characteristics ?? []), ...dnaCharacteristics],
+    };
+  }
+
   const groove = getGrooveTemplate(profile.grooveTemplate);
 
   const { root, scale: parsedScale } = parseKey(`${key} ${scale}`);
