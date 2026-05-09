@@ -156,9 +156,9 @@ function randomizeStyle(base: VideoStyle, dna?: VideoGenerationDNA): VideoStyle 
     // Parse hex to RGB, rotate hue, return hex
     const match = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
     if (!match) return hex;
-    let red = parseInt(match[1], 16);
-    let green = parseInt(match[2], 16);
-    let blue = parseInt(match[3], 16);
+    const red = parseInt(match[1], 16);
+    const green = parseInt(match[2], 16);
+    const blue = parseInt(match[3], 16);
     // Simple hue rotation via channel shifting
     const shift = hueShift / 360;
     const rotated = [
@@ -461,17 +461,24 @@ async function transcodeToUniversalMp4Blob(
     const inputData = await fetchFile(videoBlob);
     await ffmpeg.writeFile(inputName, inputData);
 
+    // `-preset veryfast` is 3-5x faster than `medium` and visually
+     // indistinguishable for the canvas-visualizer content we record. The
+     // earlier `medium` preset was the dominant cost on long tracks.
+    // CRF 26 keeps file size reasonable while staying near-transparent for
+     // these flat-color/particle visuals.
     await ffmpeg.exec([
       '-i', inputName,
       '-map', '0:v:0',
       '-map', '0:a:0?',
       '-c:v', 'libx264',
-      '-preset', 'medium',
+      '-preset', 'veryfast',
+      '-tune', 'fastdecode',
+      '-crf', '26',
       '-profile:v', 'high',
       '-level', '4.0',
       '-pix_fmt', 'yuv420p',
       '-c:a', 'aac',
-      '-b:a', '192k',
+      '-b:a', '160k',
       '-ar', '44100',
       '-movflags', '+faststart',
       '-y',

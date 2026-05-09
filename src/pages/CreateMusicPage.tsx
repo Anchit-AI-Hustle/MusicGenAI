@@ -402,13 +402,14 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       case 'vocalArrangement': updateSongPrompt({ vocalArrangement: value }); break;
       case 'vocalStyle': updateSongPrompt({ vocalStyle: value }); break;
       case 'vocalIntensity': updateSongPrompt({ vocalIntensity: Math.max(1, Math.min(10, parseInt(value) || 5)) }); break;
-      case 'vocalEffects':
+      case 'vocalEffects': {
         const newEffects = value.split(',').map(e => e.trim()).filter(Boolean);
         updateSongPrompt(prev => ({
           ...prev,
           vocalEffects: Array.from(new Set([...prev.vocalEffects, ...newEffects])),
         }));
         break;
+      }
       case 'duration': {
         const p = parseInt(value);
         if (!isNaN(p)) {
@@ -558,6 +559,9 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   };
 
   const contextRef = useRef(getFormContext());
+  // getFormContext is a fresh closure on every render; listing it would cause
+  // an infinite loop. The state deps below cover everything it reads.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { contextRef.current = getFormContext(); }, [
     title, songDescription, genre, subgenre, duration, vocalLanguage,
     lyricsText, artistInspiration, videoStyle, tempo, mood, vocalsEnabled,

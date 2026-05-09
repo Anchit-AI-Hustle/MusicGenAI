@@ -371,7 +371,9 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
             const res = await fetch(track.audioUrl);
             const blob = await res.blob();
             zip.file(`${track.title}.wav`, blob);
-          } catch {}
+          } catch (err) {
+            console.warn(`Failed to fetch audio for "${track.title}"`, err);
+          }
         }
         if (track.videoUrl) {
           try {
@@ -379,7 +381,9 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
             const blob = await res.blob();
             const universalMp4 = await ensureUniversalMp4Blob(blob);
             zip.file(`${track.title}.mp4`, universalMp4);
-          } catch {}
+          } catch (err) {
+            console.warn(`Failed to fetch video for "${track.title}"`, err);
+          }
         }
       }));
       const content = await zip.generateAsync({ type: 'blob' });

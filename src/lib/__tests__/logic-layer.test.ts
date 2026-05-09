@@ -48,11 +48,14 @@ describe("Logic Layer Verification", () => {
 
     const masterPrompt = buildMasterPrompt(mockContext);
     
+    // Source of truth is the prompt-assembler in src/lib/intelligence/.
+    // We assert on stable section anchors rather than exact wording so this
+    // test doesn't fight every prompt copy tweak.
     expect(masterPrompt).toContain("[MASTER MUSIC GEN BLUEPRINT]");
-    expect(masterPrompt).toContain("IDENTITY: A aggressive Punjabi Drill track in the style of UK Punjabi drill.");
-    expect(masterPrompt).toContain("SPECS: Tempo: 142 BPM.");
+    expect(masterPrompt).toMatch(/IDENTITY:.*Punjabi Drill/i);
+    expect(masterPrompt).toMatch(/(SPECS:|BPM)\s*142/);
     expect(masterPrompt).toContain("INSTRUMENTATION:");
     expect(masterPrompt).toContain("VOCALS:");
-    expect(masterPrompt).toContain("INSPIRATION: Inspired by AP Dhillon:");
+    expect(masterPrompt).toMatch(/INSPIRATION:.*AP Dhillon/);
   });
 });

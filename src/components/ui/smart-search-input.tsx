@@ -12,13 +12,18 @@ interface SmartSearchInputProps {
   placeholder?: string;
   multiSelect?: boolean;
   className?: string;
+<<<<<<< Updated upstream
   /** Hide the trailing chevron (e.g. when used inline). */
   hideChevron?: boolean;
   /** Allow typing a value not in `options` and pressing Enter to commit. */
+=======
+  hideChevron?: boolean;
+>>>>>>> Stashed changes
   allowCustom?: boolean;
 }
 
 /**
+<<<<<<< Updated upstream
  * Combo-box style autocomplete.
  *
  * UX rules — match user expectation, do not deviate:
@@ -33,6 +38,19 @@ interface SmartSearchInputProps {
  *   4. Selecting closes the dropdown (single-select) or clears the search
  *      and stays open (multi-select). Pressing Enter on a non-matching
  *      query commits a custom value when `allowCustom` is true.
+=======
+ * Combo-box autocomplete.
+ *
+ * Rules:
+ *   1. Click / focus opens the dropdown showing **all** options (minus
+ *      anything already selected in multi-select mode).
+ *   2. Typing a single character filters by substring match.
+ *   3. The current selected value is shown as the input *placeholder*
+ *      (single-select) or as chips above (multi-select). The search field
+ *      is the **query**, never the value — so external value changes never
+ *      clobber what the user is typing.
+ *   4. Selecting closes the dropdown (single) or clears the search (multi).
+>>>>>>> Stashed changes
  */
 export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
   value,
@@ -68,7 +86,10 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
     return base;
   }, [options, search, values, multiSelect]);
 
+<<<<<<< Updated upstream
   // Whether the trailing "Add custom: «typed»" line should appear
+=======
+>>>>>>> Stashed changes
   const showCustomCommit =
     allowCustom &&
     search.trim().length > 0 &&
@@ -79,7 +100,10 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
     if (multiSelect) {
       if (!values.includes(val)) onChange([...values, val]);
       setSearch("");
+<<<<<<< Updated upstream
       // Keep the dropdown open so user can quickly add more
+=======
+>>>>>>> Stashed changes
       requestAnimationFrame(() => inputRef.current?.focus());
     } else {
       onChange(val);
@@ -102,7 +126,10 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
       const q = search.trim();
       if (q && allowCustom) {
         e.preventDefault();
+<<<<<<< Updated upstream
         // Prefer an exact-match option if one exists (case-insensitive)
+=======
+>>>>>>> Stashed changes
         const exact = options.find(o => o.toLowerCase() === q.toLowerCase());
         handleSelect(exact ?? q);
       } else if (filteredOptions.length > 0) {
@@ -115,13 +142,19 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
     } else if (e.key === "Backspace" && !search && multiSelect && values.length > 0) {
       handleRemove(values[values.length - 1]);
     } else if (e.key === "ArrowDown") {
+<<<<<<< Updated upstream
       // Open the dropdown if a user starts arrow-keying
+=======
+>>>>>>> Stashed changes
       setIsOpen(true);
     }
   };
 
+<<<<<<< Updated upstream
   // Placeholder shows current single-select value so the user can see
   // what's already chosen without us poisoning the search field.
+=======
+>>>>>>> Stashed changes
   const inputPlaceholder = multiSelect
     ? (values.length > 0 ? "Add more…" : placeholder)
     : (singleValue || placeholder);
@@ -169,7 +202,10 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
           <button
             type="button"
             onMouseDown={(e) => {
+<<<<<<< Updated upstream
               // mousedown so we toggle BEFORE the input's onFocus → setIsOpen(true)
+=======
+>>>>>>> Stashed changes
               e.preventDefault();
               if (isOpen) {
                 setIsOpen(false);
@@ -191,7 +227,10 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
           </button>
         )}
 
+<<<<<<< Updated upstream
         {/* Inline clear when single-select has a value and the search is empty */}
+=======
+>>>>>>> Stashed changes
         {!multiSelect && singleValue && !search && (
           <button
             type="button"
@@ -213,7 +252,10 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
           matchTriggerWidth
         >
           <div className="py-1">
+<<<<<<< Updated upstream
             {/* Single-select hint: current value shown at top of list */}
+=======
+>>>>>>> Stashed changes
             {!multiSelect && singleValue && !search && (
               <div className="px-4 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border">
                 Current: <span className="text-foreground">{singleValue}</span>

@@ -57,9 +57,11 @@ function inferContextLocally(description: string, seed: string) {
     'Metal': ['metal', 'heavy', 'death'],
   };
 
+  // First-match wins (more specific genres are listed earlier, so a hit on
+  // "punjabi drill" should beat the looser "punjabi" → "Bhangra" match below).
   let genre = 'Pop';
   for (const [g, kws] of Object.entries(genreKeywords)) {
-    if (kws.some(k => text.includes(k))) genre = g;
+    if (kws.some(k => text.includes(k))) { genre = g; break; }
   }
 
   // MOOD - Based on emotional keywords
@@ -78,21 +80,27 @@ function inferContextLocally(description: string, seed: string) {
 
   let mood = 'Energetic';
   for (const [m, kws] of Object.entries(moodKeywords)) {
-    if (kws.some(k => text.includes(k))) mood = m;
+    if (kws.some(k => text.includes(k))) { mood = m; break; }
   }
 
   // TEMPO - Based on energy + random variation
   const genreDef = findGenreByName(genre);
   let tempo = genreDef?.bpmTypical ?? 110;
-  
-  if (text.includes('slow') || text.includes('ballad') || text.includes('chill')) {
+  const isSlow = text.includes('slow') || text.includes('ballad') || text.includes('chill');
+  const isFast = text.includes('fast') || text.includes('dance') || text.includes('energetic');
+
+  if (isSlow) {
     tempo = genreDef?.bpmMin ?? 70;
-  }
-  if (text.includes('fast') || text.includes('dance') || text.includes('energetic')) {
+  } else if (isFast) {
     tempo = Math.min(180, (genreDef?.bpmMax ?? 160));
+  } else {
+    // Only jitter when the user hasn't pinned to a slow/fast extreme; the
+    // pin should saturate exactly at the genre's bpmMin/bpmMax.
+    tempo = tempo + (random % 21) - 10;
   }
-  // Add seed variation for uniqueness
-  tempo = tempo + (random % 21) - 10;
+  if (genreDef) {
+    tempo = Math.max(genreDef.bpmMin, Math.min(genreDef.bpmMax, tempo));
+  }
 
   // VOCAL LANGUAGE - Cultural keywords
   const langKeywords: Record<string, string[]> = {
@@ -110,7 +118,7 @@ function inferContextLocally(description: string, seed: string) {
 
   let vocalLanguage = 'English';
   for (const [l, kws] of Object.entries(langKeywords)) {
-    if (kws.some(k => text.includes(k))) vocalLanguage = l;
+    if (kws.some(k => text.includes(k))) { vocalLanguage = l; break; }
   }
 
   // ARTIST INSPIRATION - Artist name matching

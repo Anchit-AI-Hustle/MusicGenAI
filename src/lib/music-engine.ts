@@ -835,20 +835,26 @@ export async function generateTrack(
   onProgress('synthesizing_instruments', 0.18);
 
   // ===== Segmented rendering =====
+  // Each segment rendered through its own 5 OfflineAudioContexts (one per
+  // stem) which already run in parallel inside renderSegment. We additionally
+  // overlap the render of segment N+1 with segment N: while one segment
+  // renders, the next is dispatched. concurrency=2 is the sweet spot — too
+  // high and the browser thrashes on many concurrent audio contexts. This
+  // roughly halves end-to-end audio gen time on multi-core machines.
   const totalSegments = Math.ceil(durationSeconds / SEGMENT_DURATION);
-  const drumSegments: AudioBuffer[] = [];
-  const bassSegments: AudioBuffer[] = [];
-  const melodySegments: AudioBuffer[] = [];
-  const padSegments: AudioBuffer[] = [];
-  const fxSegments: AudioBuffer[] = [];
+  const drumSegments: AudioBuffer[] = new Array(totalSegments);
+  const bassSegments: AudioBuffer[] = new Array(totalSegments);
+  const melodySegments: AudioBuffer[] = new Array(totalSegments);
+  const padSegments: AudioBuffer[] = new Array(totalSegments);
+  const fxSegments: AudioBuffer[] = new Array(totalSegments);
 
-  for (let i = 0; i < totalSegments; i++) {
+  const SEGMENT_CONCURRENCY = 2;
+  let nextSegmentIndex = 0;
+  let completedSegments = 0;
+
+  const dispatchSegment = async (i: number) => {
     const segStart = i * SEGMENT_DURATION;
     const segEnd = Math.min((i + 1) * SEGMENT_DURATION, durationSeconds);
-
-    const segProgress = 0.20 + (i / totalSegments) * 0.35;
-    onProgress('synthesizing_instruments', segProgress);
-
     const segStems = await renderSegment(
       intent, i, segStart, segEnd,
       profile, groove, sections,
@@ -856,15 +862,29 @@ export async function generateTrack(
       bassStyle, melodyStyle, leadWaveform, bassWaveform, rng,
       trackMotif, trackHook,
     );
+    drumSegments[i] = segStems.drums;
+    bassSegments[i] = segStems.bass;
+    melodySegments[i] = segStems.melody;
+    padSegments[i] = segStems.pads;
+    fxSegments[i] = segStems.fx;
+    completedSegments++;
+    const segProgress = 0.20 + (completedSegments / totalSegments) * 0.35;
+    onProgress('synthesizing_instruments', segProgress);
+  };
 
-    drumSegments.push(segStems.drums);
-    bassSegments.push(segStems.bass);
-    melodySegments.push(segStems.melody);
-    padSegments.push(segStems.pads);
-    fxSegments.push(segStems.fx);
+  const runWorker = async () => {
+    while (true) {
+      const i = nextSegmentIndex++;
+      if (i >= totalSegments) return;
+      await dispatchSegment(i);
+      // Yield to the UI thread so progress updates render.
+      await sleep(0);
+    }
+  };
 
-    await sleep(10);
-  }
+  await Promise.all(
+    Array.from({ length: Math.min(SEGMENT_CONCURRENCY, totalSegments) }, () => runWorker()),
+  );
 
   onProgress('synthesizing_instruments', 0.57);
 

@@ -454,7 +454,7 @@ const MAX_PROMPT_WORDS = 20;
 const MAX_PROMPT_CHARACTERS = 120;
 
 function sanitizePrompt(raw: string): string {
-  let cleaned = raw.replace(/[^a-zA-Z0-9\s\-]/g, " ").replace(/\s+/g, " ").trim();
+  let cleaned = raw.replace(/[^a-zA-Z0-9\s-]/g, " ").replace(/\s+/g, " ").trim();
   cleaned = cleaned.split(" ").slice(0, MAX_PROMPT_WORDS).join(" ");
   if (cleaned.length > MAX_PROMPT_CHARACTERS) {
     cleaned = cleaned.substring(0, MAX_PROMPT_CHARACTERS).replace(/\s\S*$/, "").trim();

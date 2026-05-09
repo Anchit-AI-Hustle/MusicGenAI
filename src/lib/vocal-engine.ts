@@ -604,7 +604,7 @@ function calculateLanguageDistribution(genres: string[], context: CulturalContex
   const genreStr = genres.join(' ').toLowerCase();
 
   // Default distribution
-  let dist: LanguageDistribution = {
+  const dist: LanguageDistribution = {
     primaryWeight: 0.8,
     secondaryWeight: 0.15,
     adLibWeight: 0.05
