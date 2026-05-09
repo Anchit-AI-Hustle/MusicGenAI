@@ -7,8 +7,9 @@
 
 import { CompositionPlan, MotifPlan, VocalPlan, MixTargets, VisualPlan } from "./types";
 import { matchGenreId, getGenre, getBalanceRules, pickBpm, pickModeForMood } from "./genre-knowledge";
-import { pickProgression, getVoicing } from "./chord-progression-bank";
+import { pickProgression, getVoicingInKey } from "./chord-progression-bank";
 import { pickArchetypeId, buildSectionPlans, buildEmotionalArc } from "./emotional-arc-planner";
+import { inferContextFromDescription } from "../contextInference";
 
 const KEYS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
@@ -26,19 +27,49 @@ export interface BriefInput {
 }
 
 export function buildCompositionPlan(brief: BriefInput): CompositionPlan {
-  // 1. Resolve genre (canonical id + record)
-  const genreId = matchGenreId(brief.genre) ?? "pop-mainstream";
+  // 0. Mine the user's free-text description for additional cues.
+  // The brief's `mood` / `genre` / etc. come from form fields, but the
+  // description (`occasion`) often carries the actual creative intent.
+  // contextInference is local-only keyword classification — no model.
+  const inferredFromText = brief.occasion ? inferContextFromDescription(brief.occasion, brief.seed) : null;
+
+  // 1. Resolve genre (canonical id + record). Prefer the user's explicit
+  // genre selection; fall back to the inferred genre from the description
+  // only when the form genre is the default "Pop".
+  const inferredGenreId = inferredFromText ? matchGenreId(inferredFromText.genre) : null;
+  const explicitGenreId = matchGenreId(brief.genre);
+  const genreId = (explicitGenreId && brief.genre.toLowerCase() !== "pop")
+    ? explicitGenreId
+    : (inferredGenreId ?? explicitGenreId ?? "pop-mainstream");
   const genre = getGenre(genreId)!;
 
-  // 2. Tempo, key, mode, time sig
-  const bpm = pickBpm(genreId, brief.mood);
-  const { mode, isMinor } = pickModeForMood(genreId, brief.mood);
-  const key = pickKey(brief.seed, isMinor);
+  // Resolve mood: form mood wins unless it's the default "Energetic".
+  const resolvedMood = (brief.mood && brief.mood.toLowerCase() !== "energetic")
+    ? brief.mood
+    : (inferredFromText?.mood ?? brief.mood ?? "neutral");
+
+  // Seed-driven RNG used to vary plan choices that aren't already
+  // user-specified. The hook generates a fresh seed per request, so two
+  // identical briefs still produce different (but still on-brief) tracks.
+  const seedStr = brief.seed ?? `${Date.now()}-${Math.random()}`;
+  const planRng = seededRng(seedStr);
+
+  // 2. Tempo (with ±BPM jitter inside the genre band), key, mode, time sig.
+  // If the description inferred a tempo (e.g. "slow ballad" → low edge of
+  // band), respect it as the base before jitter.
+  const baseBpm = inferredFromText?.tempo ?? pickBpm(genreId, resolvedMood);
+  const bpmJitter = Math.round((planRng() - 0.5) * 8); // ±4 BPM
+  const bpmMin = (genre.bpm?.min ?? 60);
+  const bpmMax = (genre.bpm?.max ?? 200);
+  const bpm = clamp(baseBpm + bpmJitter, bpmMin, bpmMax);
+  const { mode, isMinor } = pickModeForMood(genreId, resolvedMood);
+  const key = pickKey(seedStr, isMinor);
   const timeSignature = (genre.time_signature ?? "4/4") as any;
 
-  // 3. Progression
-  const prog = pickProgression(brief.mood, genreId);
-  const voicing = getVoicing(prog, key);
+  // 3. Progression — pick by mood × genre with seed-driven variety,
+  //    then transpose to plan's actual key.
+  const prog = pickProgression(resolvedMood, genreId, seedStr);
+  const voicing = getVoicingInKey(prog, key, isMinor);
 
   // 4. Arrangement archetype + sections
   const durationSeconds = clamp(brief.durationSeconds ?? 180, 30, 600);
@@ -55,8 +86,8 @@ export function buildCompositionPlan(brief: BriefInput): CompositionPlan {
   // 6. Motifs
   const motifs = planMotifs(genreId, !!brief.instrumentalOnly);
 
-  // 7. Emotional arc
-  const emotionalArc = buildEmotionalArc({ mood: brief.mood, genre: genreId }, sections);
+  // 7. Emotional arc — uses the resolved mood (form > inference > default).
+  const emotionalArc = buildEmotionalArc({ mood: resolvedMood, genre: genreId }, sections);
 
   // 8. Vocal plan
   const vocal: VocalPlan = brief.instrumentalOnly
@@ -106,7 +137,7 @@ export function buildCompositionPlan(brief: BriefInput): CompositionPlan {
 
   return {
     brief: {
-      mood: brief.mood,
+      mood: resolvedMood,
       genre: brief.genre,
       audience: brief.audience,
       language: brief.language,
@@ -140,7 +171,7 @@ export function buildCompositionPlan(brief: BriefInput): CompositionPlan {
     meta: {
       planVersion: "1.0.0",
       createdAt: new Date().toISOString(),
-      seed: brief.seed,
+      seed: seedStr,
     },
   };
 }
@@ -150,6 +181,21 @@ export function buildCompositionPlan(brief: BriefInput): CompositionPlan {
 
 function clamp(x: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, x));
+}
+
+function seededRng(seed: string): () => number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return () => {
+    h += 0x6d2b79f5;
+    let t = h;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 function pickKey(seed: string | undefined, isMinor: boolean): string {

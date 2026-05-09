@@ -49,13 +49,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PortalDropdown } from '@/components/ui/portal-dropdown';
-import { 
-  Music, Disc, Wand2, Clock, Languages, Mic2, Users, 
+import {
+  Music, Disc, Clock, Languages, Mic2, Users,
   Video, Palette, Sparkles, Loader2, Play, Pause, Download, ChevronDown, X,
-  RefreshCw, Zap, Trash2, Activity, AudioWaveform, Share2, Check, Circle, MonitorPlay
+  Zap, Activity, AudioWaveform, Share2, Check, Circle, MonitorPlay
 } from 'lucide-react';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
+import { AiToolbar as SharedAiToolbar } from '@/components/AiToolbar';
 import { Button } from '@/components/ui/button';
+import { useLocalSynth, downloadArrayBuffer } from '@/hooks/useLocalSynth';
+import { nextGenerationNonce } from '@/lib/intelligence';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -173,6 +176,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const [tempo, setTempo] = useState(120);
   const [mood, setMood] = useState('Energetic');
   
+  // Generation backend: 'ai' = remote Replicate path, 'local' = browser-only synth
+  const [generationBackend, setGenerationBackend] = useState<'ai' | 'local'>('ai');
+  // Layer a vocoder/formant chant on chorus/drop in the local synth path
+  const [vocoderVoiceEnabled, setVocoderVoiceEnabled] = useState(true);
+  const localSynth = useLocalSynth();
+
   const [vocalsEnabled, setVocalsEnabled] = useState(true);
   const [vocalArrangement, setVocalArrangement] = useState('solo');
   const [vocalStyle, setVocalStyle] = useState('Pop Singing');
@@ -577,6 +586,28 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
     const ctx = contextRef.current;
 
+    // ── LOCAL SYNTH path: browser-only render, no API calls ────────────────
+    if (generationBackend === 'local' && mode === 'song') {
+      try {
+        await localSynth.generate({
+          mood: ctx.mood ?? 'Energetic',
+          genre: selectedGenres.length > 0 ? selectedGenres[0].label : (ctx.genre ?? 'Pop'),
+          language: ctx.vocalLanguage,
+          occasion: ctx.songDescription,
+          references: ctx.artistInspiration ? [ctx.artistInspiration] : undefined,
+          durationSeconds: ctx.duration ?? 180,
+          // Local synth has no real vocals; the optional vocoder voice
+          // adds a formant-synth chant layer to chorus/drop sections.
+          instrumentalOnly: !vocoderVoiceEnabled,
+          vocoderVoice: vocoderVoiceEnabled,
+          seed: `${Date.now()}`,
+        });
+      } catch (err: any) {
+        toast.error(`Local generation failed: ${err?.message ?? err}`);
+      }
+      return;
+    }
+
     // Duplicate prompt detection
     if (mode === 'song' && creations && Array.isArray(creations)) {
       const isDuplicate = creations.some(c => c.type === 'song' && c.songDescription === ctx.songDescription);
@@ -755,46 +786,29 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     }
   };
 
+  // AiToolbar lives in src/components/AiToolbar.tsx — single source of truth
+  // for icons, tooltips, colors, and accessibility. The local wrapper below
+  // keeps the existing <AiToolbar field="X" /> call-site syntax intact while
+  // delegating rendering and behavior to the shared component.
   const AiToolbar: React.FC<{ field: string }> = ({ field }) => {
-    const isSuggesting = !!suggestionState.loading[`${field}-suggest`];
-    const isEnhancing = !!suggestionState.loading[`${field}-enhance`];
-    const isNew = !!suggestionState.loading[`${field}-new`];
-    const isLoading = isSuggesting || isEnhancing || isNew;
+    // Album-level fields and any field used while in "album" creation mode
+    // get the album-flavored CTA headings; everything else stays song-mode.
+    const albumOnlyFields = new Set(['albumName', 'albumVibe']);
+    const toolbarMode: 'song' | 'album' =
+      albumOnlyFields.has(field) || mode === 'album' ? 'album' : 'song';
     return (
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <button 
-          onClick={() => handleAiSuggest(field)} 
-          disabled={isLoading} 
-          title="AI Suggest"
-          className="p-1.5 rounded-lg border border-primary/20 bg-primary/5 text-primary hover:bg-primary hover:text-black transition-all disabled:opacity-50"
-        >
-          {isSuggesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
-        </button>
-        <button 
-          onClick={() => handleEnhance(field)} 
-          disabled={isLoading} 
-          title="Enhance"
-          className="p-1.5 rounded-lg border border-accent/20 bg-accent/5 text-accent hover:bg-accent hover:text-black transition-all disabled:opacity-50"
-        >
-          {isEnhancing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-        </button>
-        <button 
-          onClick={() => handleNewSuggestion(field)} 
-          disabled={isLoading} 
-          title="New Alternative"
-          className="p-1.5 rounded-lg border border-white/10 bg-white/5 text-white/60 hover:text-white hover:bg-white/20 transition-all disabled:opacity-50"
-        >
-          {isNew ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-        </button>
-        <button 
-          onClick={() => handleClear(field)} 
-          disabled={isLoading} 
-          title="Clear"
-          className="p-1.5 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-50"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      <SharedAiToolbar
+        field={field}
+        onSuggest={handleAiSuggest}
+        onEnhance={handleEnhance}
+        onRetry={handleNewSuggestion}
+        onClear={handleClear}
+        isSuggesting={!!suggestionState.loading[`${field}-suggest`]}
+        isEnhancing={!!suggestionState.loading[`${field}-enhance`]}
+        isRetrying={!!suggestionState.loading[`${field}-new`]}
+        variant="labeled"
+        mode={toolbarMode}
+      />
     );
   };
 
@@ -1329,16 +1343,202 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
               </>
             )}
 
+          {/* Generation Backend Toggle */}
+          {mode === 'song' && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="space-y-2">
+              <div className="glass-card rounded-xl p-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setGenerationBackend('ai')}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    generationBackend === 'ai'
+                      ? 'bg-primary/20 border border-primary text-primary'
+                      : 'text-muted-foreground hover:text-foreground border border-transparent'
+                  }`}
+                >
+                  AI model (Replicate)
+                  <div className="text-[10px] opacity-70 mt-0.5">Vocals supported · slower · uses API quota</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGenerationBackend('local')}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    generationBackend === 'local'
+                      ? 'bg-accent/20 border border-accent text-accent'
+                      : 'text-muted-foreground hover:text-foreground border border-transparent'
+                  }`}
+                >
+                  Local synth (browser)
+                  <div className="text-[10px] opacity-70 mt-0.5">Instrumental · ~3s render · 100% offline</div>
+                </button>
+              </div>
+
+              {generationBackend === 'local' && (
+                <div className="glass-card rounded-xl p-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-foreground">Vocoder voice layer</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      Formant-synthesized vowel chant on chorus/drop sections — Daft-Punk-style robot vocals.
+                      Auto-skipped on trap, drill, lo-fi, ambient, classical (genre fit).
+                    </div>
+                  </div>
+                  <Switch
+                    checked={vocoderVoiceEnabled}
+                    onCheckedChange={setVocoderVoiceEnabled}
+                    aria-label="Toggle vocoder voice layer"
+                  />
+                </div>
+              )}
+            </motion.div>
+          )}
+
           {/* Generate Button */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}>
-            <Button onClick={handleGenerate} disabled={isCreating} variant="glow" size="xl" className="w-full">
-              {isCreating ? (
-                <><Loader2 className="w-5 h-5 animate-spin" /> Creating...</>
+            <Button
+              onClick={handleGenerate}
+              disabled={isCreating || localSynth.loading}
+              variant="glow"
+              size="xl"
+              className="w-full"
+            >
+              {(isCreating || localSynth.loading) ? (
+                <><Loader2 className="w-5 h-5 animate-spin" /> {localSynth.loading ? localSynth.message || 'Rendering…' : 'Creating…'}</>
               ) : (
                 <><Sparkles className="w-5 h-5" /> Generate {mode === 'song' ? 'Song' : `Album (${numberOfSongs} tracks)`}</>
               )}
             </Button>
+            {localSynth.loading && (
+              <div className="mt-2 h-1 w-full bg-white/10 rounded overflow-hidden">
+                <div
+                  className="h-full bg-accent transition-all duration-300"
+                  style={{ width: `${Math.round(localSynth.progress * 100)}%` }}
+                />
+              </div>
+            )}
           </motion.div>
+
+          {/* Local Synth Results Panel */}
+          <AnimatePresence>
+            {localSynth.result && generationBackend === 'local' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="glass-card rounded-xl p-4 sm:p-6 border-accent/30 space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display text-xl font-semibold text-foreground">
+                    Local synth render
+                  </h3>
+                  <Badge variant="secondary" className="bg-accent/20 text-accent">
+                    {localSynth.result.plan.resolved.bpm} BPM · {localSynth.result.plan.resolved.key} {localSynth.result.plan.resolved.mode} · {(localSynth.result.elapsedMs / 1000).toFixed(1)}s
+                  </Badge>
+                </div>
+
+                <audio src={localSynth.result.wavUrl} controls className="w-full" />
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="glass-card rounded-lg p-2">
+                    <div className="text-muted-foreground">Quality</div>
+                    <div className="font-mono text-foreground">{localSynth.result.quality.score}/100</div>
+                  </div>
+                  <div className="glass-card rounded-lg p-2">
+                    <div className="text-muted-foreground">LUFS</div>
+                    <div className="font-mono text-foreground">{localSynth.result.loudness.after.integratedLufs.toFixed(1)}</div>
+                  </div>
+                  <div className="glass-card rounded-lg p-2">
+                    <div className="text-muted-foreground">Peak</div>
+                    <div className="font-mono text-foreground">{localSynth.result.loudness.after.truePeakDb.toFixed(1)} dBTP</div>
+                  </div>
+                  <div className="glass-card rounded-lg p-2">
+                    <div className="text-muted-foreground">Sections</div>
+                    <div className="font-mono text-foreground">{localSynth.result.plan.resolved.sections.length}</div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      downloadArrayBuffer(
+                        localSynth.result!.wavArrayBuffer,
+                        `${localSynth.result!.plan.resolved.genreId}-${Date.now()}.wav`,
+                        'audio/wav'
+                      )
+                    }
+                  >
+                    <Download className="w-4 h-4 mr-1" /> WAV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      downloadArrayBuffer(
+                        localSynth.result!.midiArrayBuffer,
+                        `${localSynth.result!.plan.resolved.genreId}-${Date.now()}.mid`,
+                        'audio/midi'
+                      )
+                    }
+                  >
+                    <Download className="w-4 h-4 mr-1" /> MIDI
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={localSynth.reset}>
+                    <X className="w-4 h-4 mr-1" /> Discard
+                  </Button>
+                </div>
+
+                {localSynth.result.quality.rewrites.length > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    <span className="text-accent font-medium">Plan rewrites:</span>{' '}
+                    {localSynth.result.quality.rewrites.join(' · ')}
+                  </div>
+                )}
+
+                <div className="text-[11px] text-muted-foreground font-mono break-all">
+                  Seed: {localSynth.result.seed}
+                </div>
+
+                {localSynth.result.lyrics && (
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium text-foreground">
+                      Lyrics &mdash; sung by the vocoder
+                    </div>
+                    <div className="glass-card rounded-lg p-3 text-xs space-y-2 max-h-64 overflow-y-auto">
+                      <div className="text-accent font-medium">{localSynth.result.lyrics.title}</div>
+                      <div>
+                        <div className="text-muted-foreground uppercase text-[10px] tracking-wider mb-1">Verse 1</div>
+                        {localSynth.result.lyrics.verse1.map((line, i) => (
+                          <div key={`v1-${i}`} className="text-foreground/90">{line}</div>
+                        ))}
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground uppercase text-[10px] tracking-wider mb-1">Chorus</div>
+                        {localSynth.result.lyrics.chorus.map((line, i) => (
+                          <div key={`c-${i}`} className="text-foreground/90">{line}</div>
+                        ))}
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground uppercase text-[10px] tracking-wider mb-1">Verse 2</div>
+                        {localSynth.result.lyrics.verse2.map((line, i) => (
+                          <div key={`v2-${i}`} className="text-foreground/90">{line}</div>
+                        ))}
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground uppercase text-[10px] tracking-wider mb-1">Bridge</div>
+                        {localSynth.result.lyrics.bridge.map((line, i) => (
+                          <div key={`b-${i}`} className="text-foreground/90">{line}</div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground italic">
+                      The vocoder sings the vowel of each syllable at the lyric&apos;s rhythm. Consonants are not synthesized &mdash; you&apos;ll hear vowel sounds tracking the words.
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Output Section with Pipeline Progress + Audio Player */}
           <AnimatePresence>
