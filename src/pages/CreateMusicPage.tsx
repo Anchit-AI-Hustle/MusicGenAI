@@ -59,6 +59,8 @@ import { AiToolbar as SharedAiToolbar } from '@/components/AiToolbar';
 import { Button } from '@/components/ui/button';
 import { useLocalSynth, downloadArrayBuffer } from '@/hooks/useLocalSynth';
 import { nextGenerationNonce } from '@/lib/intelligence';
+import { inferContextFromDescription } from '@/lib/contextInference';
+import { Wand2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -343,6 +345,142 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     lyricsTheme,
     prompt: getSongPromptState(),
   });
+
+  /**
+   * Build a "what changed" summary string for the auto-fill toasts.
+   * Only includes fields whose value actually changed, capped to 4 lines
+   * so the toast stays scannable. Returns null if nothing changed.
+   */
+  const summarizeFillChanges = (
+    before: Record<string, string | number | undefined | null>,
+    after: Record<string, string | number | undefined | null>,
+  ): string | null => {
+    const labels: Record<string, string> = {
+      genre: 'Genre',
+      mood: 'Mood',
+      tempo: 'Tempo',
+      vocalLanguage: 'Language',
+      artistInspiration: 'Artist',
+      lyricsTheme: 'Lyric theme',
+      videoStyle: 'Video style',
+      vocalStyle: 'Vocal style',
+    };
+    const lines: string[] = [];
+    for (const key of Object.keys(labels)) {
+      const a = (after[key] ?? '').toString();
+      const b = (before[key] ?? '').toString();
+      if (a && a !== b) {
+        const suffix = key === 'tempo' ? ' BPM' : '';
+        lines.push(`${labels[key]} → ${a}${suffix}`);
+      }
+    }
+    if (lines.length === 0) return null;
+    const head = lines.slice(0, 4);
+    const more = lines.length - head.length;
+    return more > 0 ? `${head.join(' · ')}  + ${more} more` : head.join(' · ');
+  };
+
+  /**
+   * Auto-fill: take a single freeform prompt and populate every applicable
+   * song-mode field (genre, mood, tempo, language, artist, lyrics theme,
+   * video style, etc.) using the local context-inference engine. Synchronous
+   * — no network — so the UI updates immediately.
+   */
+  const fillSongFromPrompt = (text: string) => {
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      toast.error('Add a prompt or description first.');
+      return;
+    }
+    const inferred = inferContextFromDescription(trimmed, nextGenerationNonce('fill'));
+    const before = {
+      genre, mood, tempo, vocalLanguage, artistInspiration,
+      lyricsTheme, videoStyle, vocalStyle,
+    };
+    const tempoNext = inferred.tempo
+      ? Math.max(60, Math.min(200, inferred.tempo))
+      : tempo;
+    const after = {
+      genre: inferred.genre || genre,
+      mood: inferred.mood || mood,
+      tempo: tempoNext,
+      vocalLanguage: inferred.vocalLanguage || vocalLanguage,
+      artistInspiration: inferred.artistInspiration || artistInspiration,
+      lyricsTheme: inferred.lyricTheme || lyricsTheme,
+      videoStyle: inferred.videoStyle || videoStyle,
+      vocalStyle: inferred.vocalStyle || vocalStyle,
+    };
+    updateSongPrompt(prev => ({
+      ...prev,
+      songDescription: prev.songDescription || trimmed,
+      ...after,
+    }));
+    const summary = summarizeFillChanges(before, after);
+    toast.success(
+      summary ? `Filled from prompt — ${summary}` : 'Already aligned with this prompt.',
+    );
+  };
+
+  /**
+   * Auto-fill every track in album mode from the album-level vibe/theme.
+   * Each track gets its own nonce-salted inference so tempos and accents
+   * vary across the album instead of every track being identical.
+   */
+  const fillAllTracksFromAlbumVibe = () => {
+    const trimmed = (albumVibe || '').trim();
+    if (!trimmed) {
+      toast.error('Add an Album Vibe first.');
+      return;
+    }
+    // Aggregate counts across tracks so we can summarize the album-wide
+    // fill in a single toast rather than spamming one per track.
+    const genreCounts = new Map<string, number>();
+    const moodCounts = new Map<string, number>();
+    const tempos: number[] = [];
+    const languageCounts = new Map<string, number>();
+
+    setAlbumTracks(prev => prev.map((t, i) => {
+      const inferred = inferContextFromDescription(
+        trimmed,
+        nextGenerationNonce(`album-${i}`),
+      );
+      const next: TrackConfig = {
+        ...t,
+        songDescription: t.songDescription || trimmed,
+        genre: inferred.genre || t.genre,
+        mood: inferred.mood || t.mood,
+        tempo: inferred.tempo
+          ? Math.max(60, Math.min(200, inferred.tempo))
+          : t.tempo,
+        vocalLanguage: inferred.vocalLanguage || t.vocalLanguage,
+        artistInspiration: inferred.artistInspiration || t.artistInspiration,
+        lyricsTheme: inferred.lyricTheme || t.lyricsTheme,
+        videoStyle: inferred.videoStyle || t.videoStyle,
+        vocalStyle: inferred.vocalStyle || t.vocalStyle,
+      };
+      genreCounts.set(next.genre, (genreCounts.get(next.genre) ?? 0) + 1);
+      moodCounts.set(next.mood, (moodCounts.get(next.mood) ?? 0) + 1);
+      tempos.push(next.tempo);
+      languageCounts.set(next.vocalLanguage, (languageCounts.get(next.vocalLanguage) ?? 0) + 1);
+      return next;
+    }));
+
+    const topOf = (m: Map<string, number>): string =>
+      [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+    const tempoMin = tempos.length ? Math.min(...tempos) : 0;
+    const tempoMax = tempos.length ? Math.max(...tempos) : 0;
+    const tempoLabel =
+      tempoMin === tempoMax ? `${tempoMin} BPM` : `${tempoMin}–${tempoMax} BPM`;
+
+    const summary = [
+      `Genre → ${topOf(genreCounts)}`,
+      `Mood → ${topOf(moodCounts)}`,
+      `Tempo → ${tempoLabel}`,
+      `Language → ${topOf(languageCounts)}`,
+    ].filter(Boolean).join(' · ');
+
+    toast.success(`Filled all ${albumTracks.length} tracks — ${summary}`);
+  };
 
   const applyStructuredPromptSuggestion = (result: AiSuggestionResult) => {
     const structured = result.structured;
@@ -926,6 +1064,20 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                     <AiToolbar field="albumVibe" />
                   </div>
                   <Textarea placeholder="e.g., Dark atmospheric journey through urban nightscapes..." value={albumVibe} onChange={e => setAlbumVibe(e.target.value)} className="bg-input border-border min-h-20 resize-none" />
+                  <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      One-click fill every track from this vibe — each track gets its own variation so the album isn't repetitive.
+                    </p>
+                    <Button
+                      type="button"
+                      onClick={fillAllTracksFromAlbumVibe}
+                      disabled={!albumVibe.trim()}
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-2"
+                    >
+                      <Wand2 className="w-4 h-4" />
+                      Fill all tracks from album vibe
+                    </Button>
+                  </div>
                 </div>
                 <div>
                   <Label className="text-muted-foreground text-sm mb-2 block">Number of Songs</Label>
@@ -978,6 +1130,20 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <AiToolbar field="prompt" />
                 </div>
                 <Textarea placeholder="e.g., A dreamy nostalgic sunset vibe with warm synths..." value={songDescription} onChange={e => updateSongPrompt({ songDescription: e.target.value })} className="bg-input border-border min-h-32 resize-none" />
+                <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    One-click fill: infer genre, mood, tempo, language, artist, lyric theme, and video style from this prompt.
+                  </p>
+                  <Button
+                    type="button"
+                    onClick={() => fillSongFromPrompt(songDescription)}
+                    disabled={!songDescription.trim()}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-2"
+                  >
+                    <Wand2 className="w-4 h-4" />
+                    Fill all fields from this
+                  </Button>
+                </div>
               </motion.div>
 
               {/* Genres */}

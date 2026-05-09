@@ -206,11 +206,8 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
     if (result?.suggestion) applyToField(field, result.suggestion);
   };
 
-<<<<<<< Updated upstream
-  // AiToolbar lives in src/components/AiToolbar.tsx — single source of
-  // truth for icons, tooltips, colors, and accessibility. The local
-  // wrapper preserves the existing <AiToolbar field="X" /> call-site
-  // syntax and binds the shared component to this form's handlers.
+  // AiToolbar lives in src/components/AiToolbar.tsx — single source of truth.
+  // Album mode swaps in album-flavored CTA headings.
   const AiToolbar: React.FC<{ field: string }> = ({ field }) => (
     <SharedAiToolbar
       field={field}
@@ -225,30 +222,6 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
       mode="album"
     />
   );
-=======
-  const AiToolbar: React.FC<{ field: string }> = ({ field }) => {
-    const isSuggesting = !!suggestionState.loading[`${field}-suggest`];
-    const isEnhancing = !!suggestionState.loading[`${field}-enhance`];
-    const isNew = !!suggestionState.loading[`${field}-new`];
-    const isLoading = isSuggesting || isEnhancing || isNew;
-    return (
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <Button variant="outline" size="sm" onClick={() => handleAiAction(field, 'suggest')} disabled={isLoading} className="text-xs h-7 px-2 border-primary/30 text-primary hover:bg-primary/10">
-          {isSuggesting ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Wand2 className="w-3 h-3 mr-1" />} Album Idea
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => handleAiAction(field, 'enhance')} disabled={isLoading} className="text-xs h-7 px-2 border-accent/30 text-accent hover:bg-accent/10">
-          {isEnhancing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Zap className="w-3 h-3 mr-1" />} Refine
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => handleAiAction(field, 'new')} disabled={isLoading} className="text-xs h-7 px-2 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50">
-          {isNew ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />} New Variant
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => handleClearField(field)} disabled={isLoading} className="text-xs h-7 px-2 text-muted-foreground hover:text-destructive">
-          <Trash2 className="w-3 h-3 mr-1" /> Clear
-        </Button>
-      </div>
-    );
-  };
->>>>>>> Stashed changes
 
   const applyAlbumVibe = () => {
     if (albumVibe) update({ songDescription: albumVibe });
