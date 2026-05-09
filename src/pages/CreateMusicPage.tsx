@@ -58,6 +58,7 @@ import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { AiToolbar as SharedAiToolbar } from '@/components/AiToolbar';
 import { Button } from '@/components/ui/button';
 import { useLocalSynth, downloadArrayBuffer } from '@/hooks/useLocalSynth';
+import { nextGenerationNonce } from '@/lib/intelligence';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -789,19 +790,27 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   // for icons, tooltips, colors, and accessibility. The local wrapper below
   // keeps the existing <AiToolbar field="X" /> call-site syntax intact while
   // delegating rendering and behavior to the shared component.
-  const AiToolbar: React.FC<{ field: string }> = ({ field }) => (
-    <SharedAiToolbar
-      field={field}
-      onSuggest={handleAiSuggest}
-      onEnhance={handleEnhance}
-      onRetry={handleNewSuggestion}
-      onClear={handleClear}
-      isSuggesting={!!suggestionState.loading[`${field}-suggest`]}
-      isEnhancing={!!suggestionState.loading[`${field}-enhance`]}
-      isRetrying={!!suggestionState.loading[`${field}-new`]}
-      variant="labeled"
-    />
-  );
+  const AiToolbar: React.FC<{ field: string }> = ({ field }) => {
+    // Album-level fields and any field used while in "album" creation mode
+    // get the album-flavored CTA headings; everything else stays song-mode.
+    const albumOnlyFields = new Set(['albumName', 'albumVibe']);
+    const toolbarMode: 'song' | 'album' =
+      albumOnlyFields.has(field) || mode === 'album' ? 'album' : 'song';
+    return (
+      <SharedAiToolbar
+        field={field}
+        onSuggest={handleAiSuggest}
+        onEnhance={handleEnhance}
+        onRetry={handleNewSuggestion}
+        onClear={handleClear}
+        isSuggesting={!!suggestionState.loading[`${field}-suggest`]}
+        isEnhancing={!!suggestionState.loading[`${field}-enhance`]}
+        isRetrying={!!suggestionState.loading[`${field}-new`]}
+        variant="labeled"
+        mode={toolbarMode}
+      />
+    );
+  };
 
   // Pipeline Progress
   const PIPELINE_STEPS = [

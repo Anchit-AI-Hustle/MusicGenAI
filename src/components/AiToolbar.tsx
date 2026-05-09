@@ -37,14 +37,24 @@ export interface AiToolbarProps {
    * Tooltips are present in both variants — they explain the longer meaning.
    */
   variant?: "compact" | "labeled";
+  /**
+   * "song" → labels read for a single track ("Suggest", "Polish", "Remix", "Clear").
+   * "album" → labels read for the album/track-set context ("Album Idea",
+   * "Refine", "New Variant", "Clear"). Headings are kept short on purpose.
+   */
+  mode?: "song" | "album";
   className?: string;
 }
 
 interface ButtonSpec {
   key: "suggest" | "enhance" | "retry" | "clear";
-  label: string;            // short visible label when variant="labeled"
-  title: string;            // tooltip title (verb)
-  description: string;      // tooltip body (one line)
+  label: string;            // short visible label when variant="labeled" (song mode)
+  title: string;            // tooltip title (verb) — song mode
+  description: string;      // tooltip body (one line) — song mode
+  /** Album-mode overrides — kept terse to match the user's "in short" request. */
+  albumLabel?: string;
+  albumTitle?: string;
+  albumDescription?: string;
   icon: React.ComponentType<{ className?: string }>;
   loadingFlag: keyof Pick<AiToolbarProps, "isSuggesting" | "isEnhancing" | "isRetrying"> | null;
   /** Tailwind classes for the compact (icon-only) variant. */
@@ -56,9 +66,12 @@ interface ButtonSpec {
 const SPECS: ButtonSpec[] = [
   {
     key: "suggest",
-    label: "AI",
-    title: "AI Suggest",
+    label: "Suggest",
+    title: "Suggest",
     description: "Fill this field from your brief",
+    albumLabel: "Album Idea",
+    albumTitle: "Album Idea",
+    albumDescription: "Suggest for the whole album",
     icon: Wand2,
     loadingFlag: "isSuggesting",
     compactClasses:
@@ -68,9 +81,12 @@ const SPECS: ButtonSpec[] = [
   },
   {
     key: "enhance",
-    label: "Enhance",
-    title: "Enhance",
+    label: "Polish",
+    title: "Polish",
     description: "Polish what's already in this field",
+    albumLabel: "Refine",
+    albumTitle: "Refine",
+    albumDescription: "Refine across the album's vibe",
     icon: Zap,
     loadingFlag: "isEnhancing",
     compactClasses:
@@ -80,9 +96,12 @@ const SPECS: ButtonSpec[] = [
   },
   {
     key: "retry",
-    label: "Try another",
-    title: "Try another",
+    label: "Remix",
+    title: "Remix",
     description: "Generate a different alternative",
+    albumLabel: "New Variant",
+    albumTitle: "New Variant",
+    albumDescription: "Try another album-level variant",
     icon: RefreshCw,
     loadingFlag: "isRetrying",
     compactClasses:
@@ -114,6 +133,7 @@ export const AiToolbar: React.FC<AiToolbarProps> = ({
   isEnhancing,
   isRetrying,
   variant = "compact",
+  mode = "song",
   className,
 }) => {
   const isLoading = !!(isSuggesting || isEnhancing || isRetrying);
@@ -141,7 +161,11 @@ export const AiToolbar: React.FC<AiToolbarProps> = ({
             "transition-all disabled:opacity-50",
             variant === "compact" ? spec.compactClasses : spec.labeledClasses,
           );
-          const ariaLabel = `${spec.title} — ${spec.description}`;
+          const isAlbum = mode === "album";
+          const title = isAlbum && spec.albumTitle ? spec.albumTitle : spec.title;
+          const description = isAlbum && spec.albumDescription ? spec.albumDescription : spec.description;
+          const label = isAlbum && spec.albumLabel ? spec.albumLabel : spec.label;
+          const ariaLabel = `${title} — ${description}`;
 
           return (
             <Tooltip key={spec.key}>
@@ -158,12 +182,12 @@ export const AiToolbar: React.FC<AiToolbarProps> = ({
                   ) : (
                     <Icon className={cn(iconSize, variant === "labeled" && "mr-1")} />
                   )}
-                  {variant === "labeled" && <span>{spec.label}</span>}
+                  {variant === "labeled" && <span>{label}</span>}
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top">
-                <div className="font-medium">{spec.title}</div>
-                <div className="text-xs text-muted-foreground">{spec.description}</div>
+                <div className="font-medium">{title}</div>
+                <div className="text-xs text-muted-foreground">{description}</div>
               </TooltipContent>
             </Tooltip>
           );

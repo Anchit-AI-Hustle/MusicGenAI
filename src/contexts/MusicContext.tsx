@@ -25,6 +25,7 @@ import {
 } from '@/engine';
 import { moodToVector } from '@/engine/normalizer';
 import { applyInferenceToContext, resolveCreativeContext } from '@/lib/contextInference';
+import { nextGenerationNonce } from '@/lib/intelligence';
 import { CreativeContext } from '@/types/creative-context';
 import type { GenerationIntent, RawUserInput } from '@/engine/types';
 
@@ -1049,7 +1050,12 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     ]);
 
     const fresh = pool.find((item) => !seen.has(normalizeToken(item)));
-    return fresh ?? pool[0];
+    if (fresh) return fresh;
+    // Pool exhausted vs. history. Salt with a fresh nonce so the fallback
+    // varies between rapid clicks instead of always returning pool[0].
+    const nonce = nextGenerationNonce('pick');
+    const idx = nonce.split('').reduce((a, c) => (a + c.charCodeAt(0)) >>> 0, 0) % pool.length;
+    return pool[idx];
   };
 
   const formatSuggestionForField = (field: string, value: string): string => {

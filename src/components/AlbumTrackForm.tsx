@@ -221,6 +221,7 @@ export const AlbumTrackForm: React.FC<AlbumTrackFormProps> = ({ index, config, o
       isEnhancing={!!suggestionState.loading[`${field}-enhance`]}
       isRetrying={!!suggestionState.loading[`${field}-new`]}
       variant="labeled"
+      mode="album"
     />
   );
 
