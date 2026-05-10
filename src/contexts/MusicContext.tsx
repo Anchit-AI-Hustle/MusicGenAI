@@ -26,6 +26,7 @@ import {
 import { moodToVector } from '@/engine/normalizer';
 import { applyInferenceToContext, resolveCreativeContext } from '@/lib/contextInference';
 import { nextGenerationNonce } from '@/lib/intelligence';
+import { ARTIST_NAMES } from '@/lib/musicData/artists';
 import { CreativeContext } from '@/types/creative-context';
 import type { GenerationIntent, RawUserInput } from '@/engine/types';
 
@@ -597,7 +598,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       vocal_language: languageList.length > 0 ? languageList : ['English'],
       lyric_theme: input.lyricsTheme || (input.mood || 'emotional narrative'),
       lyrics: input.lyricsText?.trim() ? input.lyricsText : null,
-      artist_inspiration: artistList.length > 0 ? artistList : ['MuseVibe Reference'],
+      artist_inspiration: artistList.length > 0 ? artistList : [],
       generate_video: !!input.videoStyle,
       video_style: input.videoStyle ? input.videoStyle : null,
     };
@@ -1096,7 +1097,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       mood,
       tempo_bpm: Number(context.tempo || 120),
       music_prompt: String(context.songDescription || ''),
-      artist_inspiration: artistList.length > 0 ? artistList : ['MuseVibe Reference'],
+      artist_inspiration: artistList.length > 0 ? artistList : [],
       lyric_theme: String(context.lyricsTheme || ''),
       vocal_style: String(context.vocalStyle || ''),
       video_style: context.videoStyle ? String(context.videoStyle) : null,
@@ -1115,7 +1116,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     mood: suggestMood(suggestionContext),
     energy: String(Math.max(1, Math.min(10, Math.round(suggestionContext.mood.arousal)))),
     tempo: String(suggestTempo(suggestionContext)),
-    artist_inspiration: parseList(context.artistInspiration).join(', ') || 'MuseVibe Reference',
+    artist_inspiration: parseList(context.artistInspiration).join(', ') || '',
     lyrics: String(context.lyricsText || ''),
     description: suggestionText,
     prompt: suggestionText,
@@ -1639,34 +1640,79 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
               globalHistory,
             );
           break;
-        case 'lyrics':
-          suggestionValue = action === 'new'
-            ? pickNovelCandidate(
+        case 'lyrics': {
+          // The "Narrative & Lyrics" field needs BOTH a short narrative
+          // framing (story / theme / emotional setup) AND the actual verse
+          // + chorus lines. Build them combinatorially so each click yields
+          // a new pairing.
+          const themeSeed = effectiveContext.lyricsTheme || `${inferredMood} ${baseGenre}`;
+          const narrativeOpeners = [
+            `A song about`, `A late-night confession on`, `A widescreen meditation on`,
+            `A defiant manifesto for`, `A handwritten letter about`, `A cinematic vignette of`,
+            `A neon-soaked elegy for`, `A whispered prayer about`,
+          ];
+          const narrativeMiddles = [
+            'two strangers refusing to disappear',
+            'the moment between letting go and starting over',
+            'falling in love with the city that broke you',
+            'every version of yourself that brought you here',
+            'finding faith in a chorus you almost forgot',
+            'the ghost of a name you stopped saying',
+            'turning the long drive home into a sacred ritual',
+            'choosing softness in a world that prefers noise',
+          ];
+          const verseBank = [
+            `City lights fade while we run from yesterday.\nEvery scar is a map to where we are today.\nHold me through the noise until the dawn arrives.\nTurn this ache to fire and bring us back to life.`,
+            `Static in the skyline, thunder in my chest.\nI learned to dance with fear and still call this progress.\nIf the night keeps pulling, I will pull back too.\nMake a home in the chaos till the morning cuts through.`,
+            `We were shadows on the overpass, names lost in rain.\nYou said every wound can bloom if we stay through pain.\nWhen the sirens fade, keep your heartbeat close to mine.\nWe'll turn broken neon into something that can shine.`,
+            `I keep a candle burning where the silence used to live.\nEvery word I never said is something I forgive.\nThere's a kind of mercy that you only learn alone —\nlearning how to call this body, finally, my home.`,
+            `Some nights the rain remembers what the dryness tries to hide.\nI've been writing love letters to the parts of me that died.\nIf you ever come back looking, leave the locks the way they are —\nI replaced them all with windows so I'd never feel that far.`,
+          ];
+          const chorusBank = [
+            `So go wild, go wild, until the morning calls our name.\nGo wild, go wild — we'll burn this beautiful again.`,
+            `Hold the line, hold the light, hold the version that survives.\nOne more night, one more night, and we'll forget we ever cried.`,
+            `If you fall, I'll fall louder — we go down like fireworks.\nIf you stay, I'll stay forever, even when forever hurts.`,
+            `Pull me close, pull me closer, let the static drown the noise.\nWe were always meant to find each other in this kind of poise.`,
+          ];
+          const narrative = `${pickN(narrativeOpeners)} ${pickN(narrativeMiddles)} — colored by ${themeSeed}.`;
+          const verse = pickN(verseBank);
+          const chorus = pickN(chorusBank);
+          const composed = `[Narrative]\n${narrative}\n\n[Verse 1]\n${verse}\n\n[Chorus]\n${chorus}`;
+          // For 'enhance', wrap whatever the user already has + a fresh chorus;
+          // for 'suggest' / 'new', return the full composed block.
+          if (action === 'enhance' && currentValue.trim()) {
+            suggestionValue = `${currentValue.trim()}\n\n[Chorus]\n${chorus}`;
+          } else {
+            suggestionValue = pickNovelCandidate(
               [
-                `City lights fade while we run from yesterday.\nEvery scar is a map to where we are today.\nHold me through the noise until the dawn arrives.\nTurn this ache to fire and bring us back to life.`,
-                `Static in the skyline, thunder in my chest.\nI learned to dance with fear and still call this progress.\nIf the night keeps pulling, I will pull back too.\nMake a home in the chaos till the morning cuts through.`,
-                `We were shadows on the overpass, names lost in rain.\nYou said every wound can bloom if we stay through pain.\nWhen the sirens fade, keep your heartbeat close to mine.\nWe'll turn broken neon into something that can shine.`,
+                composed,
+                `[Narrative]\n${pickN(narrativeOpeners)} ${pickN(narrativeMiddles)}.\n\n[Verse 1]\n${pickN(verseBank)}\n\n[Chorus]\n${pickN(chorusBank)}`,
+                `[Narrative]\n${pickN(narrativeOpeners)} ${pickN(narrativeMiddles)}.\n\n[Verse 1]\n${pickN(verseBank)}\n\n[Chorus]\n${pickN(chorusBank)}`,
               ],
               currentValue,
               history,
               globalHistory,
-            )
-            : currentValue || `City lights fade while we run from yesterday.\nEvery scar is a map to where we are today.\nHold me through the noise until the dawn arrives.\nTurn this ache to fire and bring us back to life.`;
+            );
+          }
           break;
-        case 'artistInspiration':
-          suggestionValue = pickNovelCandidate(
-            [
-              unique([
-                ...parseList(effectiveContext.artistInspiration),
-                ...(genreArtistMap[baseGenre] ?? ['The Weeknd', 'Kendrick Lamar', 'Hans Zimmer']),
-              ]).slice(0, 3).join(', '),
-              unique([...(genreArtistMap[baseGenre] ?? []), 'Tame Impala', 'Rosalia']).slice(0, 3).join(', '),
-            ],
-            currentValue,
-            history,
-            globalHistory,
-          );
+        }
+        case 'artistInspiration': {
+          // Pull from the curated trending-artists list AND any genre-specific
+          // companions; build distinct 2-3 artist combinations per click.
+          const trending = ARTIST_NAMES();
+          const genrePool = genreArtistMap[baseGenre] ?? [];
+          const buildArtistPick = () => {
+            const picks: string[] = [];
+            const tryPush = (a: string | undefined) => { if (a && !picks.includes(a)) picks.push(a); };
+            if (genrePool.length) tryPush(genrePool[Math.floor(procRng() * genrePool.length)]);
+            tryPush(trending[Math.floor(procRng() * trending.length)]);
+            tryPush(trending[Math.floor(procRng() * trending.length)]);
+            return picks.slice(0, 3).join(', ');
+          };
+          const candidates = Array.from({ length: 6 }, () => buildArtistPick()).filter(Boolean);
+          suggestionValue = pickNovelCandidate(candidates, currentValue, history, globalHistory);
           break;
+        }
         case 'vocalLanguage':
           suggestionValue = pickNovelCandidate(
             [

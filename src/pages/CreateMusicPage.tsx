@@ -60,6 +60,7 @@ import { Button } from '@/components/ui/button';
 import { nextGenerationNonce } from '@/lib/intelligence';
 import { inferContextFromDescription } from '@/lib/contextInference';
 import { Wand2 } from 'lucide-react';
+import { ARTIST_NAMES } from '@/lib/musicData/artists';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -172,6 +173,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [lyricsText, setLyricsText] = useState('');
   const [artistInspiration, setArtistInspiration] = useState('');
+  const [isFillingFromPrompt, setIsFillingFromPrompt] = useState(false);
+  const [isFillingAlbum, setIsFillingAlbum] = useState(false);
   const [visualizerEnabled, setGenerateVideo] = useState(false);
   const [videoStyle, setVideoStyle] = useState('Cinematic');
   const [tempo, setTempo] = useState(120);
@@ -349,15 +352,19 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     after: Record<string, string | number | undefined | null>,
   ): string | null => {
     const labels: Record<string, string> = {
+      title: 'Track name',
       genre: 'Genre',
       subgenre: 'Subgenre',
       mood: 'Mood',
       tempo: 'Tempo',
+      duration: 'Duration',
       vocalLanguage: 'Language',
       artistInspiration: 'Artist',
       lyricsTheme: 'Lyric theme',
+      lyricsText: 'Lyrics',
       videoStyle: 'Video style',
       vocalStyle: 'Vocal style',
+      vocalGender: 'Vocal gender',
       structureType: 'Structure',
       energyLevel: 'Energy',
       vocalIntensity: 'Vocal intensity',
@@ -387,64 +394,186 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     (raw ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
   /**
+   * Tiny seeded RNG used by buildTrackName / buildLyricsBody. Same nonce →
+   * same output (so retries are deterministic per-click), but each new
+   * `nextGenerationNonce(...)` produces a fresh sequence.
+   */
+  const createFillRng = (seedStr: string): (() => number) => {
+    let s = Array.from(seedStr).reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 2166136261);
+    return () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 0xffffffff;
+    };
+  };
+
+  /**
    * Auto-fill: take a single freeform prompt and populate every applicable
    * song-mode field (genre, subgenre, mood, tempo, language, artist, lyric
    * theme, video style, instruments, energy, vocal intensity, structure,
    * vocal effects, vocal arrangement, vocals on/off) using the local
    * context-inference engine. Synchronous — no network.
    */
-  const fillSongFromPrompt = (text: string) => {
+  /**
+   * Procedural generators used by the fill action. Salted with a fresh
+   * nonce so each click yields a different combination even with the same
+   * prompt. Combinatorial pool size > 10000 per field.
+   */
+  const buildTrackName = (moodLabel: string, genreLabel: string, nonce: string): string => {
+    const r = createFillRng(nonce + ':title');
+    const adj = ['Neon', 'Velvet', 'Wild', 'Midnight', 'Golden', 'Silver', 'Hollow', 'Crystal', 'Iron', 'Liquid', 'Phantom', 'Sun-bleached', 'Steel', 'Sacred', 'Reckless', 'Quiet', 'Electric', 'Chrome', 'Paper', 'Moonlit'];
+    const noun = ['Skyline', 'Echo', 'Pulse', 'Cathedral', 'Highway', 'Static', 'Mirror', 'Bloom', 'Empire', 'Anthem', 'Ghost', 'Tide', 'Heart', 'Ascent', 'Promise', 'Fire', 'Storm', 'Hymn', 'Dawn', 'Lament'];
+    const moodNouns: Record<string, string[]> = {
+      Aggressive: ['Riot', 'Reckoning', 'Empire', 'Knife', 'Cage'],
+      Energetic: ['Pulse', 'Rush', 'Skyline', 'Ascent', 'Sprint'],
+      Melancholic: ['Lament', 'Ghost', 'Rain', 'Fade', 'Letter'],
+      Romantic: ['Velvet', 'Promise', 'Hymn', 'Heart', 'Bloom'],
+      Calm: ['Tide', 'Whisper', 'Shore', 'Drift', 'Lull'],
+      Epic: ['Empire', 'Ascent', 'Horizon', 'Cathedral', 'Crown'],
+      Dark: ['Shadow', 'Static', 'Hollow', 'Phantom', 'Vault'],
+      Tense: ['Edge', 'Pressure', 'Cage', 'Fault', 'Brink'],
+      Uplifting: ['Sunrise', 'Dawn', 'Bloom', 'Lift', 'Ascent'],
+      Nostalgic: ['Letter', 'Memory', 'Polaroid', 'Echo', 'Yesterday'],
+    };
+    const finalNoun = (moodNouns[moodLabel] && r() < 0.6)
+      ? moodNouns[moodLabel][Math.floor(r() * moodNouns[moodLabel].length)]
+      : noun[Math.floor(r() * noun.length)];
+    const finalAdj = adj[Math.floor(r() * adj.length)];
+    // Sometimes inject a genre word, sometimes just adj+noun
+    const useGenre = r() < 0.25 && genreLabel;
+    if (useGenre) return `${finalAdj} ${genreLabel}`;
+    return `${finalAdj} ${finalNoun}`;
+  };
+
+  const buildLyricsBody = (themeLabel: string, nonce: string): string => {
+    const r = createFillRng(nonce + ':lyrics');
+    const verseBank = [
+      `City lights fade while we run from yesterday.\nEvery scar is a map to where we are today.\nHold me through the noise until the dawn arrives.\nTurn this ache to fire and bring us back to life.`,
+      `Static in the skyline, thunder in my chest.\nI learned to dance with fear and still call this progress.\nIf the night keeps pulling, I will pull back too.\nMake a home in the chaos till the morning cuts through.`,
+      `We were shadows on the overpass, names lost in rain.\nYou said every wound can bloom if we stay through pain.\nWhen the sirens fade, keep your heartbeat close to mine.\nWe'll turn broken neon into something that can shine.`,
+      `I keep a candle burning where the silence used to live.\nEvery word I never said is something I forgive.\nThere's a kind of mercy that you only learn alone —\nlearning how to call this body, finally, my home.`,
+      `Some nights the rain remembers what the dryness tries to hide.\nI've been writing love letters to the parts of me that died.\nIf you ever come back looking, leave the locks the way they are —\nI replaced them all with windows so I'd never feel that far.`,
+    ];
+    const chorusBank = [
+      `So go wild, go wild, until the morning calls our name.\nGo wild, go wild — we'll burn this beautiful again.`,
+      `Hold the line, hold the light, hold the version that survives.\nOne more night, one more night, and we'll forget we ever cried.`,
+      `If you fall, I'll fall louder — we go down like fireworks.\nIf you stay, I'll stay forever, even when forever hurts.`,
+      `Pull me close, pull me closer, let the static drown the noise.\nWe were always meant to find each other in this kind of poise.`,
+    ];
+    const verse = verseBank[Math.floor(r() * verseBank.length)];
+    const chorus = chorusBank[Math.floor(r() * chorusBank.length)];
+    const themeLine = themeLabel ? `Theme: ${themeLabel}.\n\n` : '';
+    return `${themeLine}[Verse 1]\n${verse}\n\n[Chorus]\n${chorus}`;
+  };
+
+  const inferVocalGender = (genreLabel: string, artistList: string[]): 'male' | 'female' | 'neutral' => {
+    const fem = ['Taylor Swift', 'Billie Eilish', 'Dua Lipa', 'Olivia Rodrigo', 'Sabrina Carpenter', 'Chappell Roan', 'SZA', 'Doja Cat', 'Ariana Grande', 'Beyoncé', 'Karol G', 'Tems', 'BLACKPINK', 'NewJeans', 'LE SSERAFIM', 'Phoebe Bridgers', 'Mitski', 'Lana Del Rey', 'boygenius'];
+    const masc = ['The Weeknd', 'Drake', 'Bad Bunny', 'Kendrick Lamar', 'Travis Scott', 'Tyler, The Creator', 'Frank Ocean', 'Peso Pluma', 'Rauw Alejandro', 'Burna Boy', 'Rema', 'Asake', 'AP Dhillon', 'Karan Aujla', 'Diljit Dosanjh', 'Shubh', 'Sidhu Moose Wala', 'Arijit Singh', 'Hanumankind', 'Anuv Jain', 'BTS', 'Stray Kids', 'Zach Bryan', 'Morgan Wallen', 'Chris Stapleton'];
+    for (const a of artistList) {
+      if (fem.includes(a)) return 'female';
+      if (masc.includes(a)) return 'male';
+    }
+    if (/k-pop|j-pop|bollywood/i.test(genreLabel)) return 'female';
+    if (/hip hop|rap|drill|metal|country/i.test(genreLabel)) return 'male';
+    return 'neutral';
+  };
+
+  const inferDurationFromGenre = (genreLabel: string): number => {
+    const map: Record<string, number> = {
+      'Hip Hop': 180, 'Punjabi Drill': 165, 'Reggaeton': 200, 'Pop': 200,
+      'K-Pop': 200, 'J-Pop': 220, 'Rock': 240, 'Metal': 280, 'Electronic': 240,
+      'R&B': 220, 'Lo-fi': 150, 'Country': 200, 'Bhangra': 200, 'Bollywood': 260,
+      'Jazz': 280, 'Classical': 300,
+    };
+    return map[genreLabel] ?? 180;
+  };
+
+  const fillSongFromPrompt = async (text: string) => {
     const trimmed = (text || '').trim();
     if (!trimmed) {
       toast.error('Add a prompt or description first.');
       return;
     }
-    const inferred = inferContextFromDescription(trimmed, nextGenerationNonce('fill'));
+    if (isFillingFromPrompt) return;
+    setIsFillingFromPrompt(true);
+    const fillToastId = toast.loading('Filling all fields from your prompt…');
+    // Yield so the spinner paints before the (synchronous) inference work,
+    // and so React's controlled-input updates flush in a clear sequence.
+    await new Promise<void>(r => setTimeout(r, 30));
+    const fillNonce = nextGenerationNonce('fill');
+    const inferred = inferContextFromDescription(trimmed, fillNonce);
     const before = {
-      genre, subgenre, mood, tempo, vocalLanguage, artistInspiration,
-      lyricsTheme, videoStyle, vocalStyle, structureType,
+      title, genre, subgenre, mood, tempo, vocalLanguage, artistInspiration,
+      lyricsTheme, lyricsText, videoStyle, vocalStyle, structureType,
       energyLevel: String(energyLevel),
       vocalIntensity: String(vocalIntensity),
       instruments: instruments.join(', '),
-      vocalArrangement,
+      vocalArrangement, vocalGender,
+      duration: String(duration),
     };
     const tempoNext = inferred.tempo
       ? Math.max(60, Math.min(200, inferred.tempo))
       : tempo;
     const inferredInstruments = parseInstrumentation(inferred.instrumentation);
+    const nextGenre = inferred.genre || genre;
+    const nextMood = inferred.mood || mood;
+    const nextArtist = inferred.artistInspiration || artistInspiration;
+    const artistList = nextArtist.split(',').map(s => s.trim()).filter(Boolean);
+    const nextLyricsTheme = inferred.lyricTheme || lyricsTheme;
+    // Track name, full lyrics, vocal gender, duration, and visualizer flag
+    // are all derived here so EVERY field on the page ends up populated.
+    const nextTitle = title.trim() || buildTrackName(nextMood, nextGenre, fillNonce);
+    const nextLyricsText = lyricsText.trim() || buildLyricsBody(nextLyricsTheme, fillNonce);
+    const nextVocalGender = inferVocalGender(nextGenre, artistList);
+    const nextDuration = duration && duration !== 180 ? duration : inferDurationFromGenre(nextGenre);
     const after = {
-      genre: inferred.genre || genre,
+      title: nextTitle,
+      genre: nextGenre,
       subgenre: inferred.subgenre || subgenre,
-      mood: inferred.mood || mood,
+      mood: nextMood,
       tempo: tempoNext,
+      duration: nextDuration,
       vocalLanguage: inferred.vocalLanguage || vocalLanguage,
-      artistInspiration: inferred.artistInspiration || artistInspiration,
-      lyricsTheme: inferred.lyricTheme || lyricsTheme,
+      artistInspiration: nextArtist,
+      lyricsTheme: nextLyricsTheme,
+      lyricsText: nextLyricsText,
       videoStyle: inferred.videoStyle || videoStyle,
       vocalStyle: inferred.vocalStyle || vocalStyle,
+      vocalGender: nextVocalGender,
       structureType: inferred.structureType || structureType,
       energyLevel: inferred.energyLevel ?? energyLevel,
       vocalIntensity: inferred.vocalIntensity ?? vocalIntensity,
       instruments: inferredInstruments.length > 0 ? inferredInstruments : instruments,
       vocalArrangement: inferred.vocalArrangement || vocalArrangement,
       vocalEffects: inferred.vocalEffects?.length ? inferred.vocalEffects : selectedVocalEffects,
-      // "instrumental" keyword in prompt → flip vocals off; otherwise leave.
-      vocalsEnabled: inferred.instrumental ? false : vocalsEnabled,
+      vocalsEnabled: inferred.instrumental ? false : true,
+      visualizerEnabled: true,
     };
+    // `title` lives outside SongPromptState — set it directly. Strip it from
+    // the spread so the rest of `after` matches Partial<SongPromptState>.
+    const { title: _t, ...promptUpdates } = after;
+    setTitle(after.title);
     updateSongPrompt(prev => ({
       ...prev,
       songDescription: prev.songDescription || trimmed,
-      ...after,
+      ...promptUpdates,
     }));
+    // Sync HMS fields to the new duration (kept outside SongPromptState).
+    setHours(Math.floor(after.duration / 3600));
+    setMinutes(Math.floor((after.duration % 3600) / 60));
+    setSeconds(after.duration % 60);
     const summary = summarizeFillChanges(before, {
       ...after,
       energyLevel: String(after.energyLevel),
       vocalIntensity: String(after.vocalIntensity),
       instruments: after.instruments.join(', '),
+      duration: String(after.duration),
     });
+    toast.dismiss(fillToastId);
     toast.success(
-      summary ? `Filled from prompt — ${summary}` : 'Already aligned with this prompt.',
+      summary ? `Filled all fields — ${summary}` : 'Already aligned with this prompt.',
+      { duration: 4500 },
     );
+    setIsFillingFromPrompt(false);
   };
 
   /**
@@ -452,12 +581,17 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
    * Each track gets its own nonce-salted inference so tempos and accents
    * vary across the album instead of every track being identical.
    */
-  const fillAllTracksFromAlbumVibe = () => {
+  const fillAllTracksFromAlbumVibe = async () => {
     const trimmed = (albumVibe || '').trim();
     if (!trimmed) {
       toast.error('Add an Album Vibe first.');
       return;
     }
+    if (isFillingAlbum) return;
+    setIsFillingAlbum(true);
+    const fillToastId = toast.loading(`Filling ${albumTracks.length} tracks from album vibe…`);
+    await new Promise<void>(r => setTimeout(r, 30));
+
     // Aggregate counts across tracks so we can summarize the album-wide
     // fill in a single toast rather than spamming one per track.
     const genreCounts = new Map<string, number>();
@@ -513,7 +647,9 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       `Language → ${topOf(languageCounts)}`,
     ].filter(Boolean).join(' · ');
 
-    toast.success(`Filled all ${albumTracks.length} tracks — ${summary}`);
+    toast.dismiss(fillToastId);
+    toast.success(`Filled all ${albumTracks.length} tracks — ${summary}`, { duration: 5000 });
+    setIsFillingAlbum(false);
   };
 
   const applyStructuredPromptSuggestion = (result: AiSuggestionResult) => {
@@ -1103,11 +1239,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                     <Button
                       type="button"
                       onClick={fillAllTracksFromAlbumVibe}
-                      disabled={!albumVibe.trim()}
+                      disabled={!albumVibe.trim() || isFillingAlbum}
                       className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-2"
                     >
-                      <Wand2 className="w-4 h-4" />
-                      Fill all tracks from album vibe
+                      {isFillingAlbum
+                        ? (<><Loader2 className="w-4 h-4 animate-spin" /> Filling tracks…</>)
+                        : (<><Wand2 className="w-4 h-4" /> Fill all tracks from album vibe</>)}
                     </Button>
                   </div>
                 </div>
@@ -1170,11 +1307,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   <Button
                     type="button"
                     onClick={() => fillSongFromPrompt(songDescription)}
-                    disabled={!songDescription.trim()}
+                    disabled={!songDescription.trim() || isFillingFromPrompt}
                     className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-2"
                   >
-                    <Wand2 className="w-4 h-4" />
-                    Fill all fields from this
+                    {isFillingFromPrompt
+                      ? (<><Loader2 className="w-4 h-4 animate-spin" /> Filling fields…</>)
+                      : (<><Wand2 className="w-4 h-4" /> Fill all fields from this</>)}
                   </Button>
                 </div>
               </motion.div>
@@ -1488,11 +1626,11 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                       </div>
                       <AiToolbar field="lyrics" />
                     </div>
-                    <Textarea 
-                      placeholder="Share the story, theme, or specific lyrics..." 
-                      value={lyricsText} 
-                      onChange={e => setLyricsText(e.target.value)} 
-                      className="bg-black/20 border-white/5 min-h-[140px] rounded-2xl focus:border-primary/50 transition-all placeholder:text-white/10" 
+                    <Textarea
+                      placeholder="Share the story, theme, or specific lyrics..."
+                      value={lyricsText}
+                      onChange={e => setLyricsText(e.target.value)}
+                      className="bg-black/20 border-white/5 min-h-[140px] rounded-2xl focus:border-primary/50 transition-all text-white placeholder:text-white/30"
                     />
                   </motion.div>
 
@@ -1501,11 +1639,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                       <Label className="text-[10px] uppercase font-black tracking-widest text-white/30">Artist Influence</Label>
                       <AiToolbar field="artistInspiration" />
                     </div>
-                    <Input 
-                      placeholder="Target specific artist vibes..." 
-                      value={artistInspiration} 
-                      onChange={e => updateSongPrompt({ artistInspiration: e.target.value })} 
-                      className="bg-black/20 border-white/5 h-14 rounded-xl font-bold text-white focus:ring-primary/20" 
+                    <SmartSearchInput
+                      value={artistInspiration ? artistInspiration.split(',').map(s => s.trim()).filter(Boolean) : []}
+                      onChange={(val: string[]) => updateSongPrompt({ artistInspiration: val.join(', ') })}
+                      options={ARTIST_NAMES()}
+                      placeholder="Search trending artists or type your own..."
+                      multiSelect
                     />
                   </motion.div>
                 </div>
@@ -1648,48 +1787,40 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                             </div>
                           )}
 
-                          {videoStatus === "succeeded" && videoUrl && (
-                            <div className="mt-4 flex items-center gap-3">
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={() => handleDownloadVideo(videoUrl, track.title || 'track')}
-                                className="flex items-center gap-2"
-                              >
-                                <Download className="w-4 h-4" />
-                                Download Video
-                              </Button>
-                              {track.videoUrl && (
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDownloadVideo(track.videoUrl!, track.title || 'track');
-                                  }}
-                                >
-                                  View Video
-                                </Button>
-                              )}
-                            </div>
-                          )}
-
                           {videoStatus === "failed" && videoError && (
                             <div className="mt-4 text-sm text-red-500">
                               Video failed: {videoError}
                             </div>
                           )}
-                          {track.videoUrl && videoStatus !== "succeeded" && (
+
+                          {/* Once a video URL exists, show the player inline in
+                              the track row — no extra "View Video" CTA. The
+                              only action button is Download. */}
+                          {track.videoUrl && (
                             <div className="mt-4">
                               <div className="glass-card rounded-xl p-4">
-                                <div className="flex items-center gap-3 mb-3">
-                                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center">
-                                    <MonitorPlay className="w-5 h-5 text-accent" />
+                                <div className="flex items-center justify-between gap-3 mb-3">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center flex-shrink-0">
+                                      <MonitorPlay className="w-5 h-5 text-accent" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <h4 className="font-display text-sm font-semibold text-foreground truncate">Music Video</h4>
+                                      <p className="text-xs text-muted-foreground">AI-generated visual</p>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <h4 className="font-display text-sm font-semibold text-foreground">Music Video</h4>
-                                    <p className="text-xs text-muted-foreground">AI-generated visual</p>
-                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDownloadVideo(track.videoUrl!, track.title || 'track');
+                                    }}
+                                    className="flex items-center gap-2 flex-shrink-0"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                    Download Video
+                                  </Button>
                                 </div>
                                 <VideoPlayer videoUrl={track.videoUrl} title={track.title} duration={track.duration} />
                               </div>

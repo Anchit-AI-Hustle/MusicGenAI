@@ -111,9 +111,13 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
     }
   };
 
+  // Single-select mode shows the current value as a bright Badge ABOVE the
+  // search input (mirroring the multi-select chip pattern) so the filled
+  // value never looks like a faded placeholder. The search input below is a
+  // pure query field — typing filters, the badge shows what's selected.
   const inputPlaceholder = multiSelect
     ? (values.length > 0 ? "Add more…" : placeholder)
-    : (singleValue || placeholder);
+    : (singleValue ? "Type to change selection…" : placeholder);
 
   return (
     <div className={cn("space-y-2", className)} ref={containerRef}>
@@ -139,6 +143,25 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
         </div>
       )}
 
+      {!multiSelect && singleValue && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          <Badge
+            variant="secondary"
+            className="bg-primary/20 text-primary border-primary/30 flex items-center gap-1 pr-1 max-w-full"
+          >
+            <span className="truncate">{singleValue}</span>
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="hover:bg-primary/20 rounded-full p-0.5 transition-colors flex-shrink-0"
+              aria-label="Clear selection"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </Badge>
+        </div>
+      )}
+
       <div className="relative">
         <Input
           ref={inputRef}
@@ -151,7 +174,10 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
           onClick={() => setIsOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder={inputPlaceholder}
-          className={cn("bg-input border-border", !hideChevron && "pr-10")}
+          className={cn(
+            "bg-input border-border text-foreground placeholder:text-muted-foreground",
+            !hideChevron && "pr-10",
+          )}
         />
 
         {!hideChevron && (
@@ -179,19 +205,7 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
           </button>
         )}
 
-        {!multiSelect && singleValue && !search && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onChange("");
-            }}
-            className="absolute right-9 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-secondary/60 transition-colors"
-            aria-label="Clear selection"
-          >
-            <X className="w-3.5 h-3.5 text-muted-foreground" />
-          </button>
-        )}
+        {/* Single-select clear is now in the badge above; no inline X here. */}
 
         <PortalDropdown
           open={isOpen}
