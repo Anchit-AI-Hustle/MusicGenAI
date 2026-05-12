@@ -26,6 +26,7 @@ import { generateBassline, chooseBassStyleDynamic, type BassStyle } from './bass
 import { generateMelody, generateChords, chooseMelodyStyle, generateMotif, generateHook, type Motif } from './melody-generator';
 import { generateArrangement, getTransitionType } from './arrangement-engine';
 import { renderTransition } from './transition-engine';
+import { renderSegmentStems as renderSegmentStemsSoundFont, type SfNoteEvent } from './soundfont/sf-renderer';
 
 // ===== Types =====
 
@@ -166,6 +167,13 @@ export interface MusicIntent {
   generationDNA?: GenerationSeed;
   // AI-inferred style profile
   styleProfile?: StyleProfile;
+  /**
+   * Route bass / lead / pad notes through a sampled SoundFont renderer for
+   * dramatically better timbre (real piano, bass, strings, etc.) instead
+   * of raw oscillators. Falls back to oscillators silently if the soundfont
+   * can't load. Drums + FX always stay synthesized.
+   */
+  useSoundFont?: boolean;
 }
 
 export interface SectionPlan {
@@ -534,6 +542,15 @@ async function renderSegment(
   const padBus = padCtx.createGain(); padBus.connect(padCtx.destination);
   const fxBus = fxCtx.createGain(); fxBus.connect(fxCtx.destination);
 
+  // Parallel collectors for SoundFont rendering. We always populate these
+  // (cheap), and if `intent.useSoundFont` is true we swap the bass/melody/
+  // pad oscillator buffers for soundfont-rendered ones at the end. The
+  // oscillator path keeps running so we have a guaranteed fallback if the
+  // SF library or the .sf3 asset fails to load.
+  const sfBassEvents: SfNoteEvent[] = [];
+  const sfLeadEvents: SfNoteEvent[] = [];
+  const sfPadEvents: SfNoteEvent[] = [];
+
   let sectionStart = 0;
   for (let sIdx = 0; sIdx < sections.length; sIdx++) {
     const section = sections[sIdx];
@@ -625,6 +642,7 @@ async function renderSegment(
             const localTime = groovedGlobal - startTime;
             if (localTime >= 0 && localTime < segDuration) {
               renderBassNote(bassCtx, bassBus, localTime, midiToFreq(evt.midi), evt.duration, evt.velocity, bassWaveform);
+              sfBassEvents.push({ time: localTime, midi: evt.midi, duration: evt.duration, velocity: evt.velocity });
             }
           }
         }
@@ -651,6 +669,7 @@ async function renderSegment(
           const localTime = groovedGlobal - startTime;
           if (localTime >= 0 && localTime < segDuration) {
             renderLeadNote(synthCtx, synthBus, localTime, midiToFreq(evt.midi), evt.duration, evt.velocity, leadWaveform);
+            sfLeadEvents.push({ time: localTime, midi: evt.midi, duration: evt.duration, velocity: evt.velocity });
           }
         }
       }
@@ -665,7 +684,11 @@ async function renderSegment(
         if (evt.time >= overlapStart && evt.time < overlapEnd) {
           const localTime = evt.time - startTime;
           if (localTime >= 0 && localTime < segDuration) {
-            renderPadChord(padCtx, padBus, localTime, evt.midis.map(midiToFreq), Math.min(evt.duration, segDuration - localTime), evt.velocity);
+            const chordDur = Math.min(evt.duration, segDuration - localTime);
+            renderPadChord(padCtx, padBus, localTime, evt.midis.map(midiToFreq), chordDur, evt.velocity);
+            for (const m of evt.midis) {
+              sfPadEvents.push({ time: localTime, midi: m, duration: chordDur, velocity: evt.velocity });
+            }
           }
         }
       }
@@ -675,13 +698,40 @@ async function renderSegment(
   }
 
   try {
-    const [drums, bass, melody, pads, fx] = await Promise.all([
+    const [drums, bassOsc, melodyOsc, padsOsc, fx] = await Promise.all([
       drumCtx.startRendering(),
       bassCtx.startRendering(),
       synthCtx.startRendering(),
       padCtx.startRendering(),
       fxCtx.startRendering(),
     ]);
+
+    let bass = bassOsc;
+    let melody = melodyOsc;
+    let pads = padsOsc;
+
+    // If SoundFont mode is requested, try to swap the bass/melody/pads
+    // buffers for soundfont-rendered ones. Any failure (network, IDB,
+    // unsupported worklet, missing .sf3 asset) silently falls back to the
+    // oscillator buffers we already produced — the user always gets audio.
+    if (intent.useSoundFont) {
+      try {
+        const sfBuffers = await renderSegmentStemsSoundFont({
+          bassEvents: sfBassEvents,
+          leadEvents: sfLeadEvents,
+          padEvents: sfPadEvents,
+          durationSeconds: segDuration,
+          sampleRate,
+          numChannels,
+        });
+        bass = sfBuffers.bass;
+        melody = sfBuffers.lead;
+        pads = sfBuffers.pads;
+      } catch (err) {
+        console.warn('[music-engine] SoundFont render failed — using oscillator fallback for this segment.', err);
+      }
+    }
+
     return { drums, bass, melody, pads, fx };
   } finally {
     renderRandomSource = null;

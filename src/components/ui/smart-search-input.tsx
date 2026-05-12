@@ -47,6 +47,7 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const reactId = React.useId();
 
   const values = useMemo(
     () => Array.isArray(value) ? value : (value ? [value] : []),
@@ -144,12 +145,13 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
       )}
 
       {!multiSelect && singleValue && (
-        <div className="flex flex-wrap gap-1.5 mb-2">
+        <div className="flex flex-wrap gap-1.5 mb-2 min-w-0">
           <Badge
             variant="secondary"
-            className="bg-primary/20 text-primary border-primary/30 flex items-center gap-1 pr-1 max-w-full"
+            className="bg-primary/20 text-primary border-primary/30 flex items-center gap-1 pr-1 max-w-full min-w-0 whitespace-normal"
+            title={singleValue}
           >
-            <span className="truncate">{singleValue}</span>
+            <span className="truncate min-w-0 max-w-[calc(100%-1.5rem)]">{singleValue}</span>
             <button
               type="button"
               onClick={() => onChange("")}
@@ -174,6 +176,18 @@ export const SmartSearchInput: React.FC<SmartSearchInputProps> = ({
           onClick={() => setIsOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder={inputPlaceholder}
+          // Disable native browser autofill / autocomplete suggestions so they
+          // don't overlay our custom dropdown. A randomized name + role=combobox
+          // tells Chrome/Safari this is a custom widget, not a credit card field.
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          name={`smart-search-${reactId}`}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={isOpen}
+          aria-controls="smart-search-listbox"
           className={cn(
             "bg-input border-border text-foreground placeholder:text-muted-foreground",
             !hideChevron && "pr-10",

@@ -1,0 +1,10 @@
+# Stage 1 — minimal deps. The heavy ML stack (torch, espnet, pyworld,
+# librosa) lands in Stage 3 when we plug in DiffSinger. Keeping Stage 1
+# lean so the service runs in seconds for end-to-end verification.
+fastapi>=0.111,<1.0
+uvicorn[standard]>=0.30,<1.0
+pydantic>=2.6,<3.0
+mido>=1.3,<2.0
+numpy>=1.26,<3.0
+soundfile>=0.12,<1.0
+python-multipart>=0.0.9,<1.0

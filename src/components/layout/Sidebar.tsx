@@ -51,8 +51,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
 
   const sidebarContent = (
     <aside
+      style={{ position: 'fixed', top: 0, left: 0, bottom: 0 }}
       className={cn(
-        "fixed left-0 top-0 h-full bg-black/40 backdrop-blur-3xl border-r border-white/10 flex flex-col z-50 shadow-[4px_0_24px_rgba(0,0,0,0.5)]",
+        // Sidebar is anchored to the viewport (position: fixed, inset-y-0)
+        // and clips its own content (overflow-hidden). Page scroll never
+        // moves it. The inline style is a defensive guarantee against any
+        // ancestor that might otherwise create a containing block.
+        "h-screen bg-black/40 backdrop-blur-3xl border-r border-white/10 flex flex-col z-50 shadow-[4px_0_24px_rgba(0,0,0,0.5)] overflow-hidden",
         isMobile ? "w-72 transition-transform duration-300 ease-out" : cn(isCollapsed ? "w-20" : "w-64", "transition-all duration-300 ease-in-out"),
         isMobile && !isMobileOpen && "-translate-x-full",
         isMobile && isMobileOpen && "translate-x-0",
@@ -64,7 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
         </button>
       )}
 
-      <div className="p-8 pb-10">
+      <div className="p-6 pb-6 flex-shrink-0">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary via-primary/80 to-accent flex items-center justify-center shadow-[0_0_20px_rgba(var(--primary),0.3)] shrink-0">
             <Music className="w-6 h-6 text-black font-bold" />
@@ -87,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
         </button>
       )}
 
-      <nav className="flex-1 px-4 space-y-2">
+      <nav className="flex-1 min-h-0 px-4 space-y-2 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentPage === item.id;
@@ -119,8 +124,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
         })}
       </nav>
 
-      <div className="p-6 mt-auto">
-        <div className="p-4 rounded-3xl bg-white/5 border border-white/5 space-y-4">
+      <div className="p-4 mt-auto flex-shrink-0">
+        <div className="p-3 rounded-2xl bg-white/5 border border-white/5 space-y-3">
           {isAuthenticated ? (
             <div className="space-y-4">
               <div className={cn("flex items-center gap-3", !showLabels && "justify-center")}>

@@ -1,0 +1,21 @@
+# Run the vocal sidecar in isolation. Usage:
+#   docker compose -f docker-compose.vocal.yml up --build
+#
+# Frontend reads VITE_VOCAL_SERVICE_URL (default http://127.0.0.1:8765)
+# and falls back to the Whisper-tiny browser path if this service is down.
+services:
+  vocal-service:
+    build:
+      context: ./python-services/vocal-service
+    image: musevibe/vocal-service:stage1
+    container_name: musevibe-vocal-service
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./generated_vocals:/data/generated_vocals
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped

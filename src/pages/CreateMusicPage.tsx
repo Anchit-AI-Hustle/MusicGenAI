@@ -242,6 +242,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
     setDuration(next.duration);
     setVocalsEnabled(next.vocalsEnabled);
     setVocalStyle(next.vocalStyle);
+    setVocalGender(next.vocalGender);
     setVocalLanguage(next.vocalLanguage);
     setVocalIntensity(next.vocalIntensity);
     setSelectedVocalEffects(next.vocalEffects);
@@ -489,18 +490,24 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   const fillSongFromPrompt = async (text: string) => {
     const trimmed = (text || '').trim();
+    console.log('[fillSongFromPrompt] click — prompt length:', trimmed.length);
     if (!trimmed) {
       toast.error('Add a prompt or description first.');
       return;
     }
-    if (isFillingFromPrompt) return;
+    if (isFillingFromPrompt) {
+      console.log('[fillSongFromPrompt] skipping — already filling');
+      return;
+    }
     setIsFillingFromPrompt(true);
     const fillToastId = toast.loading('Filling all fields from your prompt…');
+   try {
     // Yield so the spinner paints before the (synchronous) inference work,
     // and so React's controlled-input updates flush in a clear sequence.
     await new Promise<void>(r => setTimeout(r, 30));
     const fillNonce = nextGenerationNonce('fill');
     const inferred = inferContextFromDescription(trimmed, fillNonce);
+    console.log('[fillSongFromPrompt] inferred:', inferred);
     const before = {
       title, genre, subgenre, mood, tempo, vocalLanguage, artistInspiration,
       lyricsTheme, lyricsText, videoStyle, vocalStyle, structureType,
@@ -548,10 +555,32 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       vocalsEnabled: inferred.instrumental ? false : true,
       visualizerEnabled: true,
     };
-    // `title` lives outside SongPromptState — set it directly. Strip it from
-    // the spread so the rest of `after` matches Partial<SongPromptState>.
-    const { title: _t, ...promptUpdates } = after;
+    // `title` lives outside SongPromptState — set it directly. Build the
+    // prompt update object explicitly to avoid unused-variable lint rules
+    // tripping a silent build failure on the dev server.
     setTitle(after.title);
+    const promptUpdates: Partial<SongPromptState> = {
+      genre: after.genre,
+      subgenre: after.subgenre,
+      mood: after.mood,
+      tempo: after.tempo,
+      duration: after.duration,
+      vocalLanguage: after.vocalLanguage,
+      artistInspiration: after.artistInspiration,
+      lyricsTheme: after.lyricsTheme,
+      lyricsText: after.lyricsText,
+      videoStyle: after.videoStyle,
+      vocalStyle: after.vocalStyle,
+      vocalGender: after.vocalGender,
+      structureType: after.structureType,
+      energyLevel: after.energyLevel,
+      vocalIntensity: after.vocalIntensity,
+      instruments: after.instruments,
+      vocalArrangement: after.vocalArrangement,
+      vocalEffects: after.vocalEffects,
+      vocalsEnabled: after.vocalsEnabled,
+      visualizerEnabled: after.visualizerEnabled,
+    };
     updateSongPrompt(prev => ({
       ...prev,
       songDescription: prev.songDescription || trimmed,
@@ -568,12 +597,19 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       instruments: after.instruments.join(', '),
       duration: String(after.duration),
     });
+    console.log('[fillSongFromPrompt] applied:', after);
     toast.dismiss(fillToastId);
     toast.success(
       summary ? `Filled all fields — ${summary}` : 'Already aligned with this prompt.',
       { duration: 4500 },
     );
-    setIsFillingFromPrompt(false);
+   } catch (err) {
+     console.error('[fillSongFromPrompt] failed:', err);
+     toast.dismiss(fillToastId);
+     toast.error('Could not fill fields — see console for details.');
+   } finally {
+     setIsFillingFromPrompt(false);
+   }
   };
 
   /**
@@ -1579,17 +1615,21 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                                 <Label className="text-xs font-black uppercase tracking-widest text-white/40">Voice Gender</Label>
                               </div>
                               <div className="flex gap-2">
-                                {(['male', 'female', 'neutral'] as const).map((g) => (
+                                {([
+                                  { value: 'male' as const, label: 'Male' },
+                                  { value: 'female' as const, label: 'Female' },
+                                  { value: 'neutral' as const, label: 'Male & Female Both' },
+                                ]).map((g) => (
                                   <button
-                                    key={g}
-                                    onClick={() => setVocalGender(g)}
+                                    key={g.value}
+                                    onClick={() => setVocalGender(g.value)}
                                     className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold transition-all ${
-                                      vocalGender === g
+                                      vocalGender === g.value
                                         ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg shadow-primary/20'
                                         : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/10'
                                     }`}
                                   >
-                                    {g.charAt(0).toUpperCase() + g.slice(1)}
+                                    {g.label}
                                   </button>
                                 ))}
                               </div>

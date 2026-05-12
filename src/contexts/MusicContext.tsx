@@ -649,6 +649,13 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     durationSeconds: intent.meta.duration_seconds,
     genres: [intent.genre_profile.primary, ...intent.genre_profile.secondary],
     generationDNA: dna,
+    // SoundFont rendering is on by default — the renderer silently falls back
+    // to oscillators if the .sf3 asset can't be loaded, so this never breaks
+    // generation. Users can disable via localStorage('musevibe.soundfont',
+    // 'false') if they want the raw synth sound.
+    useSoundFont: typeof window !== 'undefined'
+      ? window.localStorage.getItem('musevibe.soundfont') !== 'false'
+      : true,
   });
 
   // Helper to calculate bars

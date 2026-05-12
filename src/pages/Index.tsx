@@ -63,25 +63,31 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-transparent relative overflow-x-hidden text-white selection:bg-primary/30">
+    <>
       <AnimatedBackground />
-      <GlobalGenerationTicker
-        onNavigate={handleNavigate}
-        sidebarOffsetClass={sidebarCollapsed ? 'lg:left-20' : 'lg:left-64'}
-      />
+      {/* Sidebar is rendered as a top-level sibling so no ancestor
+          (overflow, transform, filter, perspective) can ever create
+          a containing block that would let it scroll with the page.
+          It is position: fixed and must remain locked to the viewport. */}
       <Sidebar
         currentPage={currentPage === 'song-detail' ? 'dashboard' : currentPage}
         onNavigate={handleNavigate}
         onAuthClick={() => setShowAuthModal(true)}
         onCollapsedChange={setSidebarCollapsed}
       />
-      <main className={`${isMobile ? "pt-20" : `${sidebarCollapsed ? "ml-20" : "ml-64"} pt-14 transition-all duration-300`} ${currentTrack ? 'pb-24' : ''}`}>
-        {renderPage()}
-      </main>
-      <SystemDemoDiagnostics />
-      <GlobalPlayer sidebarOffsetClass={sidebarCollapsed ? 'lg:left-20' : 'lg:left-64'} />
-      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
-    </div>
+      <div className="min-h-screen bg-transparent relative overflow-x-hidden text-white selection:bg-primary/30">
+        <GlobalGenerationTicker
+          onNavigate={handleNavigate}
+          sidebarOffsetClass={sidebarCollapsed ? 'lg:left-20' : 'lg:left-64'}
+        />
+        <main className={`${isMobile ? "pt-20" : `${sidebarCollapsed ? "ml-20" : "ml-64"} pt-14 transition-all duration-300`} ${currentTrack ? 'pb-24' : ''}`}>
+          {renderPage()}
+        </main>
+        <SystemDemoDiagnostics />
+        <GlobalPlayer sidebarOffsetClass={sidebarCollapsed ? 'lg:left-20' : 'lg:left-64'} />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+      </div>
+    </>
   );
 };
 
