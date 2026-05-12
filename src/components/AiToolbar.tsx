@@ -38,9 +38,9 @@ export interface AiToolbarProps {
    */
   variant?: "compact" | "labeled";
   /**
-   * "song" → labels read for a single track ("Suggest", "Polish", "Remix", "Clear").
-   * "album" → labels read for the album/track-set context ("Album Idea",
-   * "Refine", "New Variant", "Clear"). Headings are kept short on purpose.
+   * Legacy prop — labels are now unified across song + album modes
+   * ("Suggest / Enhance / New / Clear"). Kept for back-compat with
+   * existing call sites; has no visual effect.
    */
   mode?: "song" | "album";
   className?: string;
@@ -48,13 +48,9 @@ export interface AiToolbarProps {
 
 interface ButtonSpec {
   key: "suggest" | "enhance" | "retry" | "clear";
-  label: string;            // short visible label when variant="labeled" (song mode)
-  title: string;            // tooltip title (verb) — song mode
-  description: string;      // tooltip body (one line) — song mode
-  /** Album-mode overrides — kept terse to match the user's "in short" request. */
-  albumLabel?: string;
-  albumTitle?: string;
-  albumDescription?: string;
+  label: string;            // short visible label when variant="labeled"
+  title: string;            // tooltip title (verb)
+  description: string;      // tooltip body (one line)
   icon: React.ComponentType<{ className?: string }>;
   loadingFlag: keyof Pick<AiToolbarProps, "isSuggesting" | "isEnhancing" | "isRetrying"> | null;
   /** Tailwind classes for the compact (icon-only) variant. */
@@ -66,12 +62,13 @@ interface ButtonSpec {
 const SPECS: ButtonSpec[] = [
   {
     key: "suggest",
+    // Unified across song + album modes. The previous "Album Idea / Refine /
+    // New Variant" set only made sense for the album-vibe field but showed
+    // on every per-field toolbar (genre, tempo, vocal style…), which was
+    // confusing. Clean action verbs read correctly in both contexts.
     label: "Suggest",
     title: "Suggest",
     description: "Fill this field from your brief",
-    albumLabel: "Album Idea",
-    albumTitle: "Album Idea",
-    albumDescription: "Suggest for the whole album",
     icon: Wand2,
     loadingFlag: "isSuggesting",
     compactClasses:
@@ -81,12 +78,9 @@ const SPECS: ButtonSpec[] = [
   },
   {
     key: "enhance",
-    label: "Polish",
-    title: "Polish",
+    label: "Enhance",
+    title: "Enhance",
     description: "Polish what's already in this field",
-    albumLabel: "Refine",
-    albumTitle: "Refine",
-    albumDescription: "Refine across the album's vibe",
     icon: Zap,
     loadingFlag: "isEnhancing",
     compactClasses:
@@ -96,12 +90,9 @@ const SPECS: ButtonSpec[] = [
   },
   {
     key: "retry",
-    label: "Remix",
-    title: "Remix",
+    label: "New",
+    title: "New",
     description: "Generate a different alternative",
-    albumLabel: "New Variant",
-    albumTitle: "New Variant",
-    albumDescription: "Try another album-level variant",
     icon: RefreshCw,
     loadingFlag: "isRetrying",
     compactClasses:
@@ -161,10 +152,7 @@ export const AiToolbar: React.FC<AiToolbarProps> = ({
             "transition-all disabled:opacity-50",
             variant === "compact" ? spec.compactClasses : spec.labeledClasses,
           );
-          const isAlbum = mode === "album";
-          const title = isAlbum && spec.albumTitle ? spec.albumTitle : spec.title;
-          const description = isAlbum && spec.albumDescription ? spec.albumDescription : spec.description;
-          const label = isAlbum && spec.albumLabel ? spec.albumLabel : spec.label;
+          const { title, description, label } = spec;
           const ariaLabel = `${title} — ${description}`;
 
           return (

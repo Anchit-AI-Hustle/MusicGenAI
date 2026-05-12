@@ -94,9 +94,9 @@ function pickRandom<T>(arr: T[], seed: number, count = 1): T[] {
 
 const FIELD_PROMPTS: Record<string, string> = {
   albumName: "Suggest a short, evocative album title (2-5 words max). Be creative and memorable. Return ONLY the title, no descriptions or explanations.",
-  albumVibe: "Write a Suno/Udio-grade album-wide vibe description (5-8 sentences, 120-180 words). Cover the overarching sonic palette, the specific genres/subgenres each track set could explore, recurring instruments and textures across the album, the production aesthetic (warm tape vs glossy digital vs gritty lo-fi etc.), the emotional arc from opener to closer, and the listener scene the album should evoke. Be vivid and specific — name real instruments, real production techniques, and real reference artists.",
+  albumVibe: "Write a thorough, Suno/Udio-grade album-wide vibe description. No upper word limit — be as detailed as the album warrants (minimum 8 sentences). Cover the overarching sonic palette, the specific genres/subgenres each track set could explore, recurring instruments and textures across the album, the production aesthetic (warm tape vs glossy digital vs gritty lo-fi etc.), the emotional arc from opener to closer, the listener scene the album should evoke, and reference artists per track set. Be vivid and specific — name real instruments, real production techniques, and real reference artists.",
   trackName: "Suggest a creative, evocative track name for a music piece. Return ONLY the title (2-5 words). No descriptions.",
-  prompt: "Write a Suno/Udio-grade music generation prompt (5-8 sentences, 100-180 words). Be specific and dense. Cover: (1) precise genre + subgenre, (2) concrete tempo in BPM and key/scale, (3) 5-7 named instruments and sound design elements, (4) vocal description (gender, register, technique, language, intensity) OR explicit instrumental note, (5) production adjectives (3-5 from: warm, punchy, lush, lo-fi, wide stereo, sidechained, analog tape, glossy, gritty, sub-heavy, vinyl crackle, tight low end), (6) 2-3 reference artists, (7) a vivid scene or emotional arc the track should evoke. No generic adjectives alone — every claim should be concrete.",
+  prompt: "Write a thorough, Suno/Udio-grade music generation prompt. No upper word limit — be as detailed as the brief warrants (minimum 8 sentences). Be specific and dense. Cover: (1) precise genre + subgenre, (2) concrete tempo in BPM and key/scale, (3) every relevant named instrument and sound design element with its role in the mix, (4) full vocal description (gender, register, technique, language, intensity, phrasing) OR explicit instrumental note, (5) production adjectives covering low/mid/high end, stereo image, reverb/delay sizing, and saturation/compression character, (6) 2-3 reference artists, (7) a vivid scene or emotional arc the track should evoke, (8) the dynamic arc across sections (intro/verse/pre/chorus/bridge/outro). No generic adjectives alone — every claim should be concrete.",
   genres: "Suggest 2-4 fitting music genres from any style worldwide. Return as comma-separated list.",
   lyrics: "Suggest lyrical themes, storylines, or actual lyrics. Be poetic and emotionally resonant.",
   artistInspiration: "Suggest 2-3 artists whose style would complement this track. Include diverse influences.",
@@ -114,9 +114,9 @@ const FIELD_PROMPTS: Record<string, string> = {
 
 const ENHANCE_PROMPTS: Record<string, string> = {
   albumName: "Take this album name and make it more evocative and memorable. Return ONLY the improved title (2-5 words), no descriptions.",
-  albumVibe: "Expand this album vibe into a Suno/Udio-grade prompt (5-8 sentences, 120-180 words). Preserve the user's core idea, then layer in: specific subgenres for each track set, named instruments and textures, production aesthetic adjectives, emotional arc opener-to-closer, and a listener scene. Replace any generic word with a concrete one — every adjective must be paired with a specific instrument, technique, or reference.",
+  albumVibe: "Expand this album vibe into a thorough, Suno/Udio-grade prompt. No upper word limit — be as detailed as the brief warrants (minimum 8 sentences). Preserve the user's core idea, then layer in: specific subgenres for each track set, named instruments and textures, production aesthetic adjectives, emotional arc opener-to-closer, listener scene, and reference artists per set. Replace any generic word with a concrete one — every adjective must be paired with a specific instrument, technique, or reference.",
   trackName: "Take this track name and make it more evocative, unique, and memorable. Return ONLY the improved title (2-5 words), no descriptions.",
-  prompt: "Expand this prompt into a Suno/Udio-grade music generation prompt (5-8 sentences, 100-180 words). Preserve the user's core intent. Add precise BPM + key, 5-7 named instruments, vocal description (or instrumental note), 3-5 production adjectives from {warm, punchy, lush, lo-fi, wide stereo, sidechained, analog tape, glossy, gritty, sub-heavy, tight low end, vinyl crackle}, 2-3 reference artists, and a vivid scene/emotional arc. Replace every generic adjective with a concrete claim.",
+  prompt: "Expand this prompt into a thorough, Suno/Udio-grade music generation prompt. No upper word limit — be as detailed as the brief warrants (minimum 8 sentences). Preserve the user's core intent. Add precise BPM + key, every relevant named instrument with its mix role, full vocal description (or instrumental note), production adjectives covering low/mid/high end + stereo image + reverb/delay + saturation, 2-3 reference artists, a vivid scene/emotional arc, and the dynamic arc across sections. Replace every generic adjective with a concrete claim.",
   genres: "Refine these genre selections — suggest more specific sub-genres or complementary genres. Return as comma-separated list.",
   lyrics: "Enhance these lyrics/themes — add more poetic depth, stronger imagery, better flow. Keep the core meaning.",
   artistInspiration: "Expand on these artist inspirations — add complementary artists for a richer sonic palette.",
@@ -134,9 +134,9 @@ const ENHANCE_PROMPTS: Record<string, string> = {
 
 const NEW_PROMPTS: Record<string, string> = {
   albumName: "Invent a completely fresh album title unrelated to previous ideas. Return ONLY the title.",
-  albumVibe: "Generate a fresh, Suno/Udio-grade album vibe (5-8 sentences, 120-180 words). New sonic identity, different genre family from any prior suggestion, named instruments, production aesthetic, emotional arc opener-to-closer, and a listener scene. Be concrete — no generic adjectives without paired specifics.",
+  albumVibe: "Generate a fresh, Suno/Udio-grade album vibe. No upper word limit — be as detailed as the album warrants (minimum 8 sentences). New sonic identity, different genre family from any prior suggestion, named instruments, production aesthetic, emotional arc opener-to-closer, listener scene, and reference artists. Be concrete — no generic adjectives without paired specifics.",
   trackName: "Invent a completely fresh track title unrelated to previous ideas. Return ONLY the title.",
-  prompt: "Generate a fresh, Suno/Udio-grade music generation prompt (5-8 sentences, 100-180 words). Different genre family from prior ideas. Include: precise BPM + key, 5-7 named instruments, vocal description (or instrumental note), 3-5 production adjectives from {warm, punchy, lush, lo-fi, wide stereo, sidechained, analog tape, glossy, gritty, sub-heavy, tight low end, vinyl crackle}, 2-3 reference artists, and a vivid scene/emotional arc.",
+  prompt: "Generate a fresh, Suno/Udio-grade music generation prompt. No upper word limit — be as detailed as the brief warrants (minimum 8 sentences). Different genre family from prior ideas. Include: precise BPM + key, every relevant named instrument with its mix role, full vocal description (or instrumental note), production adjectives covering low/mid/high end + stereo image + reverb/delay + saturation, 2-3 reference artists, a vivid scene/emotional arc, and the dynamic arc across sections.",
   genres: "Generate a completely fresh set of 2-4 genres or hybrid styles from any musical tradition worldwide. Return as comma-separated list.",
   lyrics: "Generate a completely fresh lyrical premise or lyric fragment with a different emotional angle.",
   artistInspiration: "Generate a completely fresh set of artist inspirations with wider stylistic contrast.",
@@ -347,7 +347,7 @@ CRITICAL RULES:
 - For "new" actions, do not preserve the current wording. Invent a new concept with different imagery, production cues, and stylistic framing.
 - Be specific, vivid, and inspiring. Avoid generic or cliché descriptions.
 - LENGTH RULES BY FIELD TYPE (this overrides any prior concision instruction):
-  - PROSE FIELDS ("prompt", "albumVibe", "videoStyle", "mood", "lyrics"): write 4-8 dense sentences (80-180 words). Treat the output as a Suno/Udio-grade music-generation prompt. ALWAYS include in this order:
+  - PROSE FIELDS ("prompt", "albumVibe", "videoStyle", "mood", "lyrics"): write a thorough, generation-ready prompt. NO upper word limit — be as detailed as the brief demands. Minimum 8 sentences. Treat the output as a Suno/Udio-grade music-generation prompt. ALWAYS include in this order:
     1) Genre + subgenre (specific, e.g. "Punjabi drill with UK garage swing", not just "pop")
     2) Tempo (concrete BPM) and key/scale if relevant
     3) 4-8 specific instruments / sound design elements
@@ -392,11 +392,12 @@ CRITICAL RULES:
         model: "google/gemini-3-flash-preview",
         temperature,
         top_p: 0.95,
-        // 600 tokens leaves room for the 5-8 sentence prose responses that
-        // prose fields ("prompt", "albumVibe", "videoStyle", "mood",
-        // "lyrics") are now required to produce. Short-label fields use a
-        // small fraction of this anyway.
-        max_tokens: 600,
+        // Generous ceiling so prose fields ("prompt", "albumVibe",
+        // "videoStyle", "mood", "lyrics") can produce thorough,
+        // Suno/Udio-grade output without truncation. Short-label fields
+        // use a tiny fraction of this anyway, so the only cost is a slightly
+        // larger upper bound on worst-case latency.
+        max_tokens: 2400,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: freshUserContent },

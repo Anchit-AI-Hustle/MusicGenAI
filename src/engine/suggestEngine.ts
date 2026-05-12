@@ -118,16 +118,21 @@ export function suggestMusicPrompt(partial: Partial<NormalizedInput>): string {
 
   const prompt = [
     `${mood} ${genre} track${secondaryClause}, ${tempo} BPM, in a tonal center that supports the mood.`,
-    `Arrangement built around ${instruments.join(', ')}, with each element occupying a distinct frequency pocket.`,
+    `Arrangement built around ${instruments.join(', ')}, with each element occupying a distinct frequency pocket and a defined role in the mix.`,
     `${vocalLine}`,
-    `Production: ${productionAdjectives}.`,
+    `Production palette: ${productionAdjectives}.`,
     `${refClause}`,
-    `Lyrical direction: ${lyricTheme}.`,
+    `Lyrical direction: ${lyricTheme}. Phrasing should mirror the genre's idiomatic cadence — internal rhyme density, line lengths, and breath placement aligned to the groove.`,
     `Scene to evoke: ${scene}.`,
-    `Build a clear emotional arc with a strong hook payoff and one decisive dynamic shift.`,
+    `Dynamic arc: intro establishes the world, verses tighten the focus, the pre-chorus signals lift, the chorus delivers the hook payoff with full arrangement, the bridge introduces a single decisive shift (key change, half-time drop, or arrangement strip), and the outro resolves on the strongest motif.`,
+    `Mix targets: clear vocal-instrumental separation, controlled low-end, defined transient detail on drums, and stereo width on pads and FX. Reverbs and delays sized to the tempo so tails breathe between phrases rather than blurring them.`,
   ].join(' ')
 
-  return clampPromptWords(prompt, SUGGEST_PROMPT_WORD_RANGE.MIN, SUGGEST_PROMPT_WORD_RANGE.MAX)
+  // Prose prompts have a soft floor (don't return a one-liner) but no upper
+  // cap — Suno/Udio/ACE-Step prompts perform better with thorough detail.
+  return prompt.trim().split(/\s+/).filter(Boolean).length >= SUGGEST_PROMPT_WORD_RANGE.MIN
+    ? prompt
+    : clampPromptWords(prompt, SUGGEST_PROMPT_WORD_RANGE.MIN, Number.MAX_SAFE_INTEGER)
 }
 
 /** Suggests canonical mood based on genre, tempo, artist references, and lyric theme. */
