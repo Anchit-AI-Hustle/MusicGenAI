@@ -55,8 +55,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
       className={cn(
         // Sidebar is anchored to the viewport (position: fixed, inset-y-0)
         // and clips its own content (overflow-hidden). Page scroll never
-        // moves it. The inline style is a defensive guarantee against any
-        // ancestor that might otherwise create a containing block.
+        // moves it. The profile section is absolutely pinned to the bottom
+        // so it is always visible in the first viewport.
         "h-screen bg-black/40 backdrop-blur-3xl border-r border-white/10 flex flex-col z-50 shadow-[4px_0_24px_rgba(0,0,0,0.5)] overflow-hidden",
         isMobile ? "w-72 transition-transform duration-300 ease-out" : cn(isCollapsed ? "w-20" : "w-64", "transition-all duration-300 ease-in-out"),
         isMobile && !isMobileOpen && "-translate-x-full",
@@ -92,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
         </button>
       )}
 
-      <nav className="flex-1 min-h-0 px-4 space-y-2 overflow-y-auto">
+      <nav className="flex-1 min-h-0 px-4 space-y-2 pb-32">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentPage === item.id;
@@ -124,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
         })}
       </nav>
 
-      <div className="p-4 mt-auto flex-shrink-0">
+      <div className="absolute bottom-0 left-0 right-0 p-4">
         <div className="p-3 rounded-2xl bg-white/5 border border-white/5 space-y-3">
           {isAuthenticated ? (
             <div className="space-y-4">

@@ -79,6 +79,9 @@
     "vite-plugin-pwa": "^1.2.0",
     "zod": "^3.25.76"
   },
+  "overrides": {
+    "spessasynth_core": "3.26.6"
+  },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@tailwindcss/typography": "^0.5.16",
