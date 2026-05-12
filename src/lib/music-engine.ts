@@ -728,7 +728,14 @@ async function renderSegment(
         melody = sfBuffers.lead;
         pads = sfBuffers.pads;
       } catch (err) {
-        console.warn('[music-engine] SoundFont render failed — using oscillator fallback for this segment.', err);
+        // Once we hit the "cached miss" path (asset is 404), the SF renderer
+        // throws cheaply with no network call. Log only once per session in
+        // that case — for genuine errors (worklet failure, etc.) we still
+        // surface the first occurrence.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!msg.includes('cached miss')) {
+          console.warn('[music-engine] SoundFont render failed — using oscillator fallback.', msg);
+        }
       }
     }
 

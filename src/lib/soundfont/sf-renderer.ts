@@ -111,27 +111,45 @@ async function saveToIdb(key: string, buf: ArrayBuffer): Promise<void> {
   }
 }
 
+// Once a soundfont URL is known to be missing (404 / wrong path), don't
+// retry it for every segment in every track for the rest of the session.
+// Without this guard a 200-second track produces 10+ redundant 404s.
+const knownMissingUrls = new Set<string>();
+
 /**
  * Fetch + cache the soundfont. The same promise is reused for the lifetime
  * of the tab, so concurrent callers (parallel segment renders) share one
  * download.
  */
 function getSoundFont(url: string = DEFAULT_SOUNDFONT_URL): Promise<ArrayBuffer> {
+  if (knownMissingUrls.has(url)) {
+    return Promise.reject(new Error(`SoundFont unavailable (cached miss): ${url}`));
+  }
   if (sfBufferPromise) return sfBufferPromise;
   sfBufferPromise = (async () => {
     const cached = await loadFromIdb(url);
     if (cached && cached.byteLength > 0) return cached;
     const res = await fetch(url, { credentials: "omit" });
-    if (!res.ok) throw new Error(`SoundFont fetch failed: ${res.status} ${res.statusText}`);
+    if (!res.ok) {
+      // 404 / 4xx → asset isn't deployed. Mark missing so we stop retrying
+      // and the oscillator fallback is used silently for the rest of the
+      // session. Transient 5xx errors are NOT cached so a retry can succeed.
+      if (res.status >= 400 && res.status < 500) {
+        knownMissingUrls.add(url);
+      }
+      throw new Error(`SoundFont fetch failed: ${res.status} ${res.statusText}`);
+    }
     const buf = await res.arrayBuffer();
     if (buf.byteLength < 1024) {
+      knownMissingUrls.add(url);
       throw new Error(`SoundFont at ${url} looks too small (${buf.byteLength} bytes) — wrong path?`);
     }
     await saveToIdb(url, buf);
     return buf;
   })().catch((err) => {
-    // Reset so a later retry can re-attempt the fetch instead of failing
-    // forever from a transient error.
+    // Reset the in-flight promise so a *different* URL (or a retry after
+    // the missing flag is cleared) can re-attempt. The knownMissingUrls
+    // set is what prevents the same dead URL from being retried.
     sfBufferPromise = null;
     throw err;
   });

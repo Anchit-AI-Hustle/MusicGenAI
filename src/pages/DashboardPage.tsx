@@ -607,15 +607,20 @@ return (
 };
 
 const DASH_PIPELINE_STEPS = [
-  { key: 'analyzing', label: 'Analyzing', match: /analyz/i },
+  { key: 'analyzing', label: 'Analyzing', match: /analyz(?:e|ing).*(?:prompt|composition)/i },
   { key: 'seeding', label: 'Creating DNA', match: /generationdna|seed|dna/i },
   { key: 'planning', label: 'Planning', match: /plan|arrang/i },
   { key: 'composing', label: 'Composing', match: /melody|motif|hook/i },
-  { key: 'instrumental', label: 'Synthesizing', match: /synthesi[sz].*instrument|render.*audio|generat.*segment/i },
+  { key: 'ai_audio', label: 'AI Audio', match: /\bai\b.*(audio|music|model|segment|instrumental)|loading ai|downloading.*model|musicgen/i },
+  { key: 'instrumental', label: 'Synthesizing', match: /synthesi[sz].*instrument|render.*audio|generat.*segment(?!.*\bai)/i },
   { key: 'vocals', label: 'Vocals', match: /vocal|lyric|singing|synthe/i },
   { key: 'vocal_align', label: 'Mixing', match: /align.*vocal|mix.*vocal/i },
   { key: 'mixing', label: 'Mixing', match: /mix(?!.*vocal)/i },
   { key: 'mastering', label: 'Mastering', match: /master/i },
+  { key: 'beats', label: 'Beats', match: /analyzing beats|beat structure/i },
+  { key: 'video_gen', label: 'Visuals', match: /render.*visual|render.*video|generat.*video/i },
+  { key: 'video_enc', label: 'Encoding', match: /encod.*video|optimizing mp4|transcod/i },
+  { key: 'finalizing', label: 'Finalizing', match: /finaliz|upload/i },
   { key: 'complete', label: 'Complete', match: /complete/i },
 ];
 

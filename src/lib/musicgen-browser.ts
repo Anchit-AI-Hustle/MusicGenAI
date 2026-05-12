@@ -33,11 +33,27 @@ const CROSSFADE_SECONDS = 0.4;
 
 type ProgressCb = (msg: string, progress?: number) => void;
 
+// Transformers.js v3 returns the audio as a Tensor wrapping a Float32Array
+// (accessible via `.data`), not a raw Float32Array. The actual sample rate
+// is on the result object directly. Both shapes are tolerated by the
+// unwrap helper below to avoid crashes if the library changes again.
+interface MusicGenAudioResult {
+  audio: Float32Array | { data: Float32Array };
+  sampling_rate?: number;
+}
+
 interface MusicGenPipe {
   (
     prompt: string,
     options?: { max_new_tokens?: number; do_sample?: boolean; guidance_scale?: number },
-  ): Promise<{ audio: Float32Array; sampling_rate: number }>;
+  ): Promise<MusicGenAudioResult>;
+}
+
+function unwrapAudio(out: MusicGenAudioResult): Float32Array {
+  const a = out.audio as Float32Array | { data: Float32Array };
+  if (a instanceof Float32Array) return a;
+  if (a && 'data' in a && a.data instanceof Float32Array) return a.data;
+  throw new Error('MusicGen returned an unexpected audio shape — Transformers.js API may have changed.');
 }
 
 let pipePromise: Promise<MusicGenPipe> | null = null;
@@ -55,10 +71,13 @@ async function getPipeline(onProgress?: ProgressCb): Promise<MusicGenPipe> {
       env.useBrowserCache = true;
 
       // Prefer WebGPU; transformers.js falls back to wasm if unavailable.
+      // dtype 'q8' (8-bit quantized) keeps RAM to ~250 MB and runs on iGPUs
+      // and mobile Safari. 'fp32' would consume ~1.2 GB and OOM on most
+      // consumer devices, so it is NOT used.
       const device = (typeof navigator !== 'undefined' && 'gpu' in navigator) ? 'webgpu' : 'wasm';
       const pipe = await pipeline('text-to-audio', 'Xenova/musicgen-small', {
         device,
-        dtype: 'fp32',
+        dtype: 'q8',
         progress_callback: (p: { status: string; progress?: number; file?: string }) => {
           if (p.status === 'progress' && typeof p.progress === 'number') {
             onProgress?.(`Downloading ${p.file ?? 'model'}…`, p.progress / 100);
@@ -220,8 +239,9 @@ export async function generateInstrumentalWithMusicGen(
         guidance_scale: 3.0,
       });
 
+      const samples = unwrapAudio(out);
       const segBuf = await resampleMonoToStereo(
-        out.audio,
+        samples,
         out.sampling_rate ?? MUSICGEN_SAMPLE_RATE,
         INTERNAL_SAMPLE_RATE,
       );

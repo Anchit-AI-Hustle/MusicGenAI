@@ -631,12 +631,33 @@ export async function generateVideoFromAudio(
   canvas.height = height;
   const ctx = canvas.getContext('2d')!;
 
-  // Decode audio for analysis
+  // Decode audio for analysis. Fetch can hang silently when the audio URL
+  // is unreachable (Supabase Storage CORS misconfigured, blob: URL lost
+  // after reload, transient network failure). Without a timeout the whole
+  // video pipeline sits at 84% indefinitely until the outer 5-minute cap.
+  // Emit progress before AND after the fetch so the UI shows liveness, and
+  // bail loudly if the fetch never resolves.
+  onProgress?.({ stage: 'analyzing_beat_structure', progress: 0.04 });
   const audioContext = new AudioContext();
-  const audioResponse = await fetch(audioUrl);
+  const FETCH_TIMEOUT_MS = 45_000;
+  const audioResponse = await Promise.race([
+    fetch(audioUrl, { credentials: 'omit' }),
+    new Promise<Response>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Audio fetch timed out after ${FETCH_TIMEOUT_MS / 1000}s — check Supabase Storage CORS for this domain, or the blob URL may have been invalidated by a page reload.`)),
+        FETCH_TIMEOUT_MS,
+      ),
+    ),
+  ]);
+  if (!audioResponse.ok) {
+    throw new Error(`Audio fetch returned ${audioResponse.status} ${audioResponse.statusText} — visual pipeline cannot proceed.`);
+  }
+  onProgress?.({ stage: 'analyzing_beat_structure', progress: 0.08 });
   const audioArrayBuffer = await audioResponse.arrayBuffer();
+  onProgress?.({ stage: 'analyzing_beat_structure', progress: 0.12 });
   const audioBuffer = await audioContext.decodeAudioData(audioArrayBuffer);
   await audioContext.resume().catch(() => undefined);
+  onProgress?.({ stage: 'analyzing_beat_structure', progress: 0.18 });
 
   const fps = 30;
   const totalFrames = Math.ceil(durationSeconds * fps);

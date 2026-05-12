@@ -712,10 +712,16 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const instrumentalResult = await generateTrack(
         intent,
         (stage: string, progress: number) => {
-          updateTrackLocal(creationId, trackId, { 
-            status: 'processing', 
-            currentStage: stage, 
-            progress: 0.2 + (progress * 0.4) // 20% to 60%
+          // When AI Audio is on, the procedural buffer will be discarded —
+          // compress this phase into 0.20 → 0.35 so the AI render owns the
+          // larger 0.35 → 0.65 band and overall progress only moves forward.
+          // When AI is off, this phase keeps its original 0.20 → 0.60 span.
+          const proceduralCeiling = runtimeInput.useAiAudio ? 0.35 : 0.60;
+          const proceduralSpan = proceduralCeiling - 0.20;
+          updateTrackLocal(creationId, trackId, {
+            status: 'processing',
+            currentStage: stage,
+            progress: 0.20 + (progress * proceduralSpan),
           });
         }
       );
@@ -724,14 +730,22 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       // AI Audio Mode: replace the procedural instrumental with an
       // open-source MusicGen render. Free, runs in the user's browser via
-      // Transformers.js. Silently falls back to the procedural buffer if
-      // the model can't load (no WebGPU + no WASM, network error, etc.)
-      // so the user always gets *some* audio.
+      // Transformers.js. The procedural buffer is still produced because
+      // the vocal pipeline below needs `compositionGraph.songStructure` for
+      // section-aligned phrasing — but its audio is discarded when AI
+      // returns a valid buffer. Silently falls back to the procedural
+      // buffer if the model can't load.
       if (runtimeInput.useAiAudio) {
+        const hasWebGPU = typeof navigator !== 'undefined' && 'gpu' in navigator;
+        if (!hasWebGPU) {
+          toast.warning('AI mode without WebGPU is slow (5–15 min per minute of audio). Use Chrome or Edge with WebGPU enabled for fast rendering.');
+        }
         updateTrackLocal(creationId, trackId, {
           status: 'processing',
-          currentStage: 'Loading AI music model (first run downloads ~250 MB)…',
-          progress: 0.45,
+          currentStage: hasWebGPU
+            ? 'Loading AI music model (first run downloads ~250 MB)…'
+            : 'Loading AI music model on CPU — this will be slow…',
+          progress: 0.36,
         });
         try {
           const { generateInstrumentalWithMusicGen } = await import('@/lib/musicgen-browser');
@@ -743,8 +757,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
               updateTrackLocal(creationId, trackId, {
                 status: 'processing',
                 currentStage: `AI audio: ${msg}`,
-                // Span 45% → 65% for the AI render.
-                progress: 0.45 + (typeof p === 'number' ? p : 0) * 0.2,
+                // Span 36% → 65% for the AI render. Monotonic with the
+                // 0.20 → 0.35 procedural phase above.
+                progress: 0.36 + (typeof p === 'number' ? p : 0) * 0.29,
               });
             },
           });
@@ -798,16 +813,28 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const { masterAudio } = await import('@/lib/audio-utils');
       const mastered = masterAudio(finalBuffer);
 
-      // 6. Persist audio to storage (blob: URLs break after reload and block reliable video fetch)
+      // 6. Persist audio to storage. If upload fails (CORS, bucket misconfig,
+      //    network), fall back to a local blob: URL so the user STILL gets
+      //    a playable track in-session — they just lose persistence across
+      //    reloads. The track is marked completed either way.
       const audioPath = `tracks/${trackId}/master.wav`;
-      const audioUploadPromise = supabase.storage
-        .from('music-files')
-        .upload(audioPath, mastered.blob, { contentType: 'audio/wav', upsert: true });
-      const { error: audioUpErr } = await withTimeout(audioUploadPromise, AUDIO_UPLOAD_TIMEOUT_MS, 'Audio upload');
-      if (audioUpErr) throw new Error(`Could not upload audio: ${audioUpErr.message}`);
-
-      const { data: audioPub } = supabase.storage.from('music-files').getPublicUrl(audioPath);
-      const publicAudioUrl = audioPub.publicUrl;
+      let publicAudioUrl: string;
+      let uploadSucceeded = false;
+      try {
+        const audioUploadPromise = supabase.storage
+          .from('music-files')
+          .upload(audioPath, mastered.blob, { contentType: 'audio/wav', upsert: true });
+        const { error: audioUpErr } = await withTimeout(audioUploadPromise, AUDIO_UPLOAD_TIMEOUT_MS, 'Audio upload');
+        if (audioUpErr) throw new Error(audioUpErr.message);
+        const { data: audioPub } = supabase.storage.from('music-files').getPublicUrl(audioPath);
+        publicAudioUrl = audioPub.publicUrl;
+        uploadSucceeded = true;
+      } catch (uploadErr) {
+        const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+        console.warn(`[${trackId}] Audio upload to Supabase failed — falling back to in-memory blob URL. Reason:`, msg);
+        toast.warning('Audio saved in this session only — cloud upload blocked (check Supabase Storage CORS for this domain).');
+        publicAudioUrl = URL.createObjectURL(mastered.blob);
+      }
 
       updateTrackLocal(creationId, trackId, {
         status: 'completed',
@@ -816,17 +843,33 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         audioUrl: publicAudioUrl,
       });
 
-      const { error: audioDbErr } = await supabase.from('tracks').update({
-        audio_url: publicAudioUrl,
-        status: 'completed',
-        progress: 1,
-        current_stage: 'Completed',
-      }).eq('id', trackId);
-      if (audioDbErr) console.error('[tracks] audio finalize', trackId, audioDbErr.message);
+      // Only persist URL to DB if it's a stable Supabase URL — blob: URLs
+      // are tab-scoped and would 404 for anyone else.
+      if (uploadSucceeded) {
+        const { error: audioDbErr } = await supabase.from('tracks').update({
+          audio_url: publicAudioUrl,
+          status: 'completed',
+          progress: 1,
+          current_stage: 'Completed',
+        }).eq('id', trackId);
+        if (audioDbErr) console.error('[tracks] audio finalize', trackId, audioDbErr.message);
+      } else {
+        // Mark completed in DB but leave audio_url null so we don't store
+        // an unreachable blob: URL.
+        const { error: audioDbErr } = await supabase.from('tracks').update({
+          status: 'completed',
+          progress: 1,
+          current_stage: 'Completed (local only — upload blocked)',
+        }).eq('id', trackId);
+        if (audioDbErr) console.error('[tracks] audio finalize', trackId, audioDbErr.message);
+      }
 
-      // 7. Handle Video (uses stable HTTPS URL)
-      if (runtimeInput.videoStyle) {
+      // 7. Handle Video (uses stable HTTPS URL). Skip if upload failed,
+      // since the video pipeline needs a publicly fetchable audio URL.
+      if (runtimeInput.videoStyle && uploadSucceeded) {
         runAsyncVideoRender(trackId, creationId, runtimeInput, trackTitle, publicAudioUrl, dna, []).catch(console.warn);
+      } else if (runtimeInput.videoStyle && !uploadSucceeded) {
+        console.warn(`[${trackId}] Skipping video render — needs a public audio URL, but upload failed.`);
       }
 
       return 'completed';

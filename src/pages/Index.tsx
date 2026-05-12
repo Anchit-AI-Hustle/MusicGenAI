@@ -37,7 +37,7 @@ const AppContent: React.FC = () => {
   const renderPage = () => {
     switch (currentPage) {
       case 'home': return <HomePage onNavigate={handleNavigate} />;
-      case 'create': return <CreateMusicPage onAuthClick={() => setShowAuthModal(true)} />;
+      case 'create': return <CreateMusicPage onAuthClick={() => setShowAuthModal(true)} onNavigate={handleNavigate} />;
       case 'dashboard': return <DashboardPage onAuthClick={() => setShowAuthModal(true)} onNavigate={handleNavigate} />;
       case 'settings': return <AccountSettingsPage onAuthClick={() => setShowAuthModal(true)} onNavigate={handleNavigate} />;
       case 'song-detail': return songDetailParams ? (

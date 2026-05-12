@@ -52,7 +52,7 @@ import { PortalDropdown } from '@/components/ui/portal-dropdown';
 import {
   Music, Disc, Clock, Languages, Mic2, Users,
   Video, Palette, Sparkles, Loader2, Play, Pause, Download, ChevronDown, X,
-  Zap, Activity, AudioWaveform, Share2, Check, Circle, MonitorPlay
+  Zap, Activity, AudioWaveform, Share2, Check, Circle, MonitorPlay, LayoutDashboard
 } from 'lucide-react';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { AiToolbar as SharedAiToolbar } from '@/components/AiToolbar';
@@ -115,6 +115,8 @@ const ACTIVE_STATUSES = ['analyzing', 'processing', 'seeding', 'inferring', 'pla
 
 interface CreateMusicPageProps {
   onAuthClick: () => void;
+  /** Lets the completion-state CTA jump straight to the dashboard. */
+  onNavigate?: (page: string) => void;
 }
 
 interface SongPromptState {
@@ -142,9 +144,9 @@ interface SongPromptState {
   useHighQualityVocals: boolean;
 }
 
-export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick }) => {
+export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, onNavigate }) => {
   const { isAuthenticated } = useAuth();
-  const { createMusic, currentCreation, isCreating, aiSuggest, updateFormState, suggestionState, creations = [] } = useMusic();
+  const { createMusic, currentCreation, isCreating, aiSuggest, updateFormState, suggestionState, creations = [], setCurrentCreation } = useMusic();
   const player = usePlayer();
   const [mode, setMode] = useState<'song' | 'album'>('song');
   
@@ -1167,25 +1169,33 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
 
   // Pipeline Progress
   const PIPELINE_STEPS = [
-    { key: 'analyzing', label: 'Analyzing prompt', icon: '🔍', match: /analyz/i },
+    // Narrowed from /analyz/i so it doesn't shadow the later "Analyzing beats"
+    // step in the video pipeline (that regex matched first via findIndex, which
+    // pinned the UI to step 1 while the video phase was actually running).
+    { key: 'analyzing', label: 'Analyzing prompt', icon: '🔍', match: /analyz(?:e|ing).*(?:prompt|composition)/i },
     { key: 'seeding', label: 'Creating GenerationDNA', icon: '🧬', match: /generationdna|seed|dna|prepar/i },
     { key: 'inferring', label: 'Inferring musical style', icon: '🎯', match: /infer|style/i },
     { key: 'planning', label: 'Planning arrangement', icon: '🎼', match: /plan|arrang/i },
     { key: 'composing', label: 'Generating melody', icon: '🎹', match: /melody|motif|hook/i },
-    { key: 'instrumental', label: 'Synthesizing instruments', icon: '🎵', match: /synthesi[sz].*instrument|instrument layer|segment/i },
+    { key: 'ai_audio', label: 'AI music generation', icon: '🤖', match: /\bai\b.*(audio|music|model|segment|instrumental)|loading ai|downloading.*model|musicgen/i },
+    { key: 'instrumental', label: 'Synthesizing instruments', icon: '🎵', match: /synthesi[sz].*instrument|instrument layer|segment(?!.*\bai)/i },
     { key: 'vocals', label: 'Generating vocals', icon: '🎤', match: /vocal|lyric|singing|synthe/i },
     { key: 'vocal_align', label: 'Aligning & mixing vocals', icon: '🎙️', match: /align.*vocal|mix.*vocal/i },
     { key: 'mixing', label: 'Mixing audio', icon: '🎚️', match: /mix(?!.*vocal)/i },
     { key: 'mastering', label: 'Mastering track', icon: '💿', match: /master/i },
     { key: 'beat_analysis', label: 'Analyzing beats', icon: '📊', match: /analyzing beats|beat structure/i },
     { key: 'video_gen', label: 'Rendering visuals', icon: '🎬', match: /render.*visual|render.*video|generat.*video/i },
-    { key: 'video_enc', label: 'Encoding video', icon: '📹', match: /encod.*video/i },
+    { key: 'video_enc', label: 'Encoding video', icon: '📹', match: /encod.*video|optimizing mp4|transcod/i },
     { key: 'finalizing', label: 'Finalizing & uploading', icon: '💾', match: /finaliz|upload/i },
     { key: 'complete', label: 'Complete', icon: '✅', match: /complete/i },
   ];
 
-  const PipelineProgress: React.FC<{ currentStage: string; progress: number; estimatedTimeLeft: number }> = ({ currentStage, progress, estimatedTimeLeft }) => {
-    const currentStepIdx = PIPELINE_STEPS.findIndex(s => s.match.test(currentStage));
+  const PipelineProgress: React.FC<{ currentStage: string; progress: number; estimatedTimeLeft: number; hasVideo?: boolean }> = ({ currentStage, progress, estimatedTimeLeft, hasVideo = false }) => {
+    // Hide video-only steps when the track is audio-only so "Step N of M"
+    // reflects what's actually going to run.
+    const videoStepKeys = new Set(['beat_analysis', 'video_gen', 'video_enc']);
+    const visibleSteps = hasVideo ? PIPELINE_STEPS : PIPELINE_STEPS.filter(s => !videoStepKeys.has(s.key));
+    const currentStepIdx = visibleSteps.findIndex(s => s.match.test(currentStage));
     const activeIdx = currentStepIdx >= 0 ? currentStepIdx : 0;
 
     const formatEta = (secs: number) => {
@@ -1194,10 +1204,34 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
       return `~${secs}s`;
     };
 
+    // Heavy/long-blocking stages — surface a prominent banner so users
+    // understand WHY the bar is moving slowly (model download, transcoding).
+    const isAiLoading = /loading ai|downloading.*model/i.test(currentStage);
+    const isTranscoding = /optimizing mp4|transcod/i.test(currentStage);
+
     return (
       <div className="mt-4 space-y-3">
+        {(isAiLoading || isTranscoding) && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-start gap-3 p-3 rounded-xl bg-primary/10 border border-primary/30"
+          >
+            <Loader2 className="w-5 h-5 text-primary animate-spin flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-primary">
+                {isAiLoading ? 'Loading AI music model' : 'Optimizing video for playback'}
+              </p>
+              <p className="text-xs text-white/60 mt-0.5">
+                {isAiLoading
+                  ? 'First run downloads ~250 MB and caches it forever. Subsequent generations skip this step.'
+                  : 'Re-encoding to universal MP4 so the video plays everywhere. This is the final video step.'}
+              </p>
+            </div>
+          </motion.div>
+        )}
         <div className="space-y-1.5">
-          {PIPELINE_STEPS.map((step, idx) => {
+          {visibleSteps.map((step, idx) => {
             const isComplete = idx < activeIdx;
             const isActive = idx === activeIdx;
             const isPending = idx > activeIdx;
@@ -1212,7 +1246,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         </div>
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="font-medium">Step {activeIdx + 1} of {PIPELINE_STEPS.length}</span>
+            <span className="font-medium">Step {activeIdx + 1} of {visibleSteps.length}</span>
             <div className="flex items-center gap-3">
               {estimatedTimeLeft > 0 && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatEta(estimatedTimeLeft)} remaining</span>}
               <span className="font-mono">{Math.round(progress * 100)}%</span>
@@ -1786,18 +1820,66 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </h3>
                   <Badge variant="secondary" className={`${currentCreation.status === 'completed' ? 'bg-green-500/20 text-green-400' : currentCreation.status === 'failed' ? 'bg-destructive/20 text-destructive' : 'bg-primary/20 text-primary'}`}>
                     {STATUS_LABELS[currentCreation.status] || currentCreation.status}
+                    {/* Inline ETA — pulled from the longest-remaining track so
+                        users see "Generating · ~2m 30s" at a glance instead of
+                        having to scan every track's progress bar. */}
+                    {(() => {
+                      const eta = Math.max(0, ...currentCreation.tracks.map(t => t.estimatedTimeLeft ?? 0));
+                      if (eta <= 0 || currentCreation.status === 'completed' || currentCreation.status === 'failed') return null;
+                      const mins = Math.floor(eta / 60);
+                      const secs = eta % 60;
+                      return <span className="ml-2 opacity-80">· ~{mins > 0 ? `${mins}m ` : ''}{secs}s</span>;
+                    })()}
                   </Badge>
                 </div>
 
                 <div className="space-y-3 sm:space-y-4">
+                  {/* Completion-state CTA — appears once at least one track in this
+                      creation is finished. Gives users an obvious path forward
+                      (view in dashboard / make another) so the page doesn't dead-end. */}
+                  {currentCreation.tracks.some(t => t.status === 'completed' || t.status === 'audio_complete_video_failed') && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-primary/15 via-primary/5 to-accent/10 border border-primary/30"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+                          <Check className="w-5 h-5 text-primary" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-display text-sm font-semibold text-white">Ready to share</p>
+                          <p className="text-xs text-white/60 truncate">Your track is saved to your library. Make another or jump to the dashboard.</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {onNavigate && (
+                          <Button variant="outline" size="sm" onClick={() => onNavigate('dashboard')} className="gap-2">
+                            <LayoutDashboard className="w-4 h-4" /> View in Dashboard
+                          </Button>
+                        )}
+                        <Button variant="default" size="sm" onClick={() => { setCurrentCreation(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="gap-2">
+                          <Sparkles className="w-4 h-4" /> Create Another
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
                   {currentCreation.tracks.map((track, index) => (
                     <div key={track.id} className="p-3 sm:p-4 bg-secondary/50 rounded-lg relative group">
                       {ACTIVE_STATUSES.includes(track.status) && (
                         <button
                           onClick={() => {
-                            if (window.confirm('Cancel this generation?')) {
-                              handleCancelTrack?.(track.id);
-                            }
+                            // Sonner inline confirm — replaces window.confirm so
+                            // the cancel flow stays in-app (no native dialog).
+                            toast('Cancel this generation?', {
+                              description: 'The track will stop processing immediately.',
+                              action: {
+                                label: 'Cancel track',
+                                onClick: () => handleCancelTrack?.(track.id),
+                              },
+                              cancel: { label: 'Keep going', onClick: () => undefined },
+                              duration: 8000,
+                            });
                           }}
                           // Always visible on touch devices (no hover); on
                           // pointer-fine devices, fade in on hover only.
@@ -1831,6 +1913,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                               currentStage={track.currentStage || track.status}
                               progress={track.progress || 0}
                               estimatedTimeLeft={track.estimatedTimeLeft || 0}
+                              hasVideo={!!visualizerEnabled}
                             />
                           )}
                           {track.audioUrl && (
