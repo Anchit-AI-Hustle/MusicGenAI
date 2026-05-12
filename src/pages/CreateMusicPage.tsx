@@ -191,6 +191,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
   const [lyricsTheme, setLyricsTheme] = useState('');
   const [energyLevel, setEnergyLevel] = useState(5);
   const [instruments, setInstruments] = useState<string[]>([]);
+  const [useAiAudio, setUseAiAudio] = useState(false);
 
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoStatus, setVideoStatus] = useState<"idle" | "generating" | "polling" | "succeeded" | "failed">("idle");
@@ -1016,6 +1017,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
         lyricsTheme: ctx.lyricsTheme || undefined,
         energyLevel: ctx.energyLevel,
         instruments: ctx.instruments,
+        useAiAudio,
       });
     }
   };
@@ -1689,6 +1691,28 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick })
                   </motion.div>
                 </div>
               </div>
+
+            {/* AI Audio Mode (free, in-browser open-source MusicGen) */}
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.45 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-primary/30 transition-all">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/20">
+                    <Sparkles className="w-6 h-6 text-black" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-white tracking-tight">AI Audio Mode <span className="text-[10px] font-bold text-primary ml-2 align-middle">BETA · FREE</span></h3>
+                    <p className="text-xs font-bold text-white/30 uppercase tracking-widest">Open-source MusicGen · runs in your browser</p>
+                    <p className="text-[11px] text-white/40 mt-2 max-w-[480px]">
+                      Replaces the procedural engine with neural instrumental synthesis. First run downloads ~250 MB once, then audio generates on your device — no servers, no cost. Falls back to the built-in engine if your browser can't run the model.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/5 border border-white/10">
+                  <span className="text-[10px] font-black uppercase text-white/40">AI</span>
+                  <Switch checked={useAiAudio} onCheckedChange={setUseAiAudio} />
+                </div>
+              </div>
+            </motion.div>
 
             {/* Visualizer Cluster */}
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-accent/30 transition-all">
