@@ -94,9 +94,9 @@ function pickRandom<T>(arr: T[], seed: number, count = 1): T[] {
 
 const FIELD_PROMPTS: Record<string, string> = {
   albumName: "Suggest a short, evocative album title (2-5 words max). Be creative and memorable. Return ONLY the title, no descriptions or explanations.",
-  albumVibe: "Suggest a vivid album-wide mood/vibe description. Describe the overarching atmosphere, sonic palette, and emotional journey of the album.",
+  albumVibe: "Write a Suno/Udio-grade album-wide vibe description (5-8 sentences, 120-180 words). Cover the overarching sonic palette, the specific genres/subgenres each track set could explore, recurring instruments and textures across the album, the production aesthetic (warm tape vs glossy digital vs gritty lo-fi etc.), the emotional arc from opener to closer, and the listener scene the album should evoke. Be vivid and specific — name real instruments, real production techniques, and real reference artists.",
   trackName: "Suggest a creative, evocative track name for a music piece. Return ONLY the title (2-5 words). No descriptions.",
-  prompt: "Suggest a detailed music prompt describing mood, energy, atmosphere, and imagery for a track. Be vivid and cinematic.",
+  prompt: "Write a Suno/Udio-grade music generation prompt (5-8 sentences, 100-180 words). Be specific and dense. Cover: (1) precise genre + subgenre, (2) concrete tempo in BPM and key/scale, (3) 5-7 named instruments and sound design elements, (4) vocal description (gender, register, technique, language, intensity) OR explicit instrumental note, (5) production adjectives (3-5 from: warm, punchy, lush, lo-fi, wide stereo, sidechained, analog tape, glossy, gritty, sub-heavy, vinyl crackle, tight low end), (6) 2-3 reference artists, (7) a vivid scene or emotional arc the track should evoke. No generic adjectives alone — every claim should be concrete.",
   genres: "Suggest 2-4 fitting music genres from any style worldwide. Return as comma-separated list.",
   lyrics: "Suggest lyrical themes, storylines, or actual lyrics. Be poetic and emotionally resonant.",
   artistInspiration: "Suggest 2-3 artists whose style would complement this track. Include diverse influences.",
@@ -114,9 +114,9 @@ const FIELD_PROMPTS: Record<string, string> = {
 
 const ENHANCE_PROMPTS: Record<string, string> = {
   albumName: "Take this album name and make it more evocative and memorable. Return ONLY the improved title (2-5 words), no descriptions.",
-  albumVibe: "Enhance this album vibe description — add richer sonic textures, stronger emotional arcs, and more specific imagery.",
+  albumVibe: "Expand this album vibe into a Suno/Udio-grade prompt (5-8 sentences, 120-180 words). Preserve the user's core idea, then layer in: specific subgenres for each track set, named instruments and textures, production aesthetic adjectives, emotional arc opener-to-closer, and a listener scene. Replace any generic word with a concrete one — every adjective must be paired with a specific instrument, technique, or reference.",
   trackName: "Take this track name and make it more evocative, unique, and memorable. Return ONLY the improved title (2-5 words), no descriptions.",
-  prompt: "Take this music prompt and expand it with richer detail — add specific instruments, textures, spatial qualities, and emotional arcs.",
+  prompt: "Expand this prompt into a Suno/Udio-grade music generation prompt (5-8 sentences, 100-180 words). Preserve the user's core intent. Add precise BPM + key, 5-7 named instruments, vocal description (or instrumental note), 3-5 production adjectives from {warm, punchy, lush, lo-fi, wide stereo, sidechained, analog tape, glossy, gritty, sub-heavy, tight low end, vinyl crackle}, 2-3 reference artists, and a vivid scene/emotional arc. Replace every generic adjective with a concrete claim.",
   genres: "Refine these genre selections — suggest more specific sub-genres or complementary genres. Return as comma-separated list.",
   lyrics: "Enhance these lyrics/themes — add more poetic depth, stronger imagery, better flow. Keep the core meaning.",
   artistInspiration: "Expand on these artist inspirations — add complementary artists for a richer sonic palette.",
@@ -134,9 +134,9 @@ const ENHANCE_PROMPTS: Record<string, string> = {
 
 const NEW_PROMPTS: Record<string, string> = {
   albumName: "Invent a completely fresh album title unrelated to previous ideas. Return ONLY the title.",
-  albumVibe: "Generate a completely fresh album concept with new sonic identity, emotional arc, and production direction.",
+  albumVibe: "Generate a fresh, Suno/Udio-grade album vibe (5-8 sentences, 120-180 words). New sonic identity, different genre family from any prior suggestion, named instruments, production aesthetic, emotional arc opener-to-closer, and a listener scene. Be concrete — no generic adjectives without paired specifics.",
   trackName: "Invent a completely fresh track title unrelated to previous ideas. Return ONLY the title.",
-  prompt: "Generate a completely fresh music prompt with a new stylistic combination, vivid atmosphere, instrument ideas, arrangement direction, and production cues.",
+  prompt: "Generate a fresh, Suno/Udio-grade music generation prompt (5-8 sentences, 100-180 words). Different genre family from prior ideas. Include: precise BPM + key, 5-7 named instruments, vocal description (or instrumental note), 3-5 production adjectives from {warm, punchy, lush, lo-fi, wide stereo, sidechained, analog tape, glossy, gritty, sub-heavy, tight low end, vinyl crackle}, 2-3 reference artists, and a vivid scene/emotional arc.",
   genres: "Generate a completely fresh set of 2-4 genres or hybrid styles from any musical tradition worldwide. Return as comma-separated list.",
   lyrics: "Generate a completely fresh lyrical premise or lyric fragment with a different emotional angle.",
   artistInspiration: "Generate a completely fresh set of artist inspirations with wider stylistic contrast.",
@@ -346,7 +346,16 @@ CRITICAL RULES:
 - Analyze the user's filled fields deeply: genre influences mood, mood influences lyrics, BPM influences energy.
 - For "new" actions, do not preserve the current wording. Invent a new concept with different imagery, production cues, and stylistic framing.
 - Be specific, vivid, and inspiring. Avoid generic or cliché descriptions.
-- Keep output concise (1-3 sentences max for text fields, or a short comma-separated list for selection fields).
+- LENGTH RULES BY FIELD TYPE (this overrides any prior concision instruction):
+  - PROSE FIELDS ("prompt", "albumVibe", "videoStyle", "mood", "lyrics"): write 4-8 dense sentences (80-180 words). Treat the output as a Suno/Udio-grade music-generation prompt. ALWAYS include in this order:
+    1) Genre + subgenre (specific, e.g. "Punjabi drill with UK garage swing", not just "pop")
+    2) Tempo (concrete BPM) and key/scale if relevant
+    3) 4-8 specific instruments / sound design elements
+    4) Vocal description: gender, register, technique, language, intensity
+    5) Production adjectives: 3-5 of {warm, punchy, lush, lo-fi, wide stereo, sidechained, analog tape, glossy, gritty, airy, tight low end, sub-heavy, vinyl crackle}
+    6) Reference artists for style (2-3)
+    7) A vivid scene or emotional arc (1-2 sentences of imagery the listener should feel)
+  - ID/LABEL FIELDS (below): keep terse as instructed.
 - For "albumName": return ONLY a short album title (2-5 words). No descriptions, no genre labels, no dashes or subtitles.
 - For "trackName": return ONLY a short track title (2-5 words). No descriptions, no genre labels, no dashes or subtitles.
 - For "genres": return ONLY a comma-separated list of genre names.
@@ -383,6 +392,11 @@ CRITICAL RULES:
         model: "google/gemini-3-flash-preview",
         temperature,
         top_p: 0.95,
+        // 600 tokens leaves room for the 5-8 sentence prose responses that
+        // prose fields ("prompt", "albumVibe", "videoStyle", "mood",
+        // "lyrics") are now required to produce. Short-label fields use a
+        // small fraction of this anyway.
+        max_tokens: 600,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: freshUserContent },

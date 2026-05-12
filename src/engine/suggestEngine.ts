@@ -58,15 +58,74 @@ function bestStyleReference(input: Partial<NormalizedInput>): string {
   return `${first.artist} inspired ${first.production_style}`
 }
 
-/** Suggests a deterministic 30-80 word music prompt. */
+/**
+ * Suggests a dense, Suno/Udio-grade music prompt.
+ *
+ * Structure (always in this order): genre line → tempo + key → instruments
+ * → vocal description → production adjectives → reference artists → scene.
+ *
+ * Used as the local fallback when the LLM edge function is unreachable, so
+ * the user still gets a substantive prompt instead of a one-liner.
+ */
 export function suggestMusicPrompt(partial: Partial<NormalizedInput>): string {
   const genre = primaryGenre(partial)
+  const secondary = partial.genre_profile?.secondary ?? []
+  const tempo = partial.tempo_bpm ?? suggestTempo(partial)
   const mood = suggestMood(partial)
-  const instruments = (partial.genre_profile?.instrumentation ?? ['drums', 'bass', 'keys']).slice(0, 3)
-  const lyricTheme = partial.lyrics?.theme ?? 'an emotionally focused narrative'
-  const styleReference = bestStyleReference(partial)
+  const instruments = (partial.genre_profile?.instrumentation ?? ['layered drums', 'sub bass', 'electric piano', 'pad textures', 'lead synth']).slice(0, 6)
+  const lyricTheme = partial.lyrics?.theme ?? 'an emotionally focused narrative arc'
+  const ref = partial.style_reference?.[0]
+  const refClause = ref
+    ? `Reference: ${ref.artist}-style ${ref.production_style ?? 'production'}.`
+    : 'Reference: contemporary chart-leaning production aesthetic.'
+  const vocalLang = partial.vocal?.languages?.[0] ?? 'English'
+  const vocalArrangement = partial.vocal?.arrangement ?? 'solo'
+  const vocalIntensity = partial.vocal?.intensity ?? 6
+  const vocalLine = vocalArrangement === 'none'
+    ? 'Fully instrumental — no vocals.'
+    : `${vocalArrangement} ${vocalLang} vocal at intensity ${vocalIntensity}/10, with breath-textured phrasing and tight pocket against the groove.`
 
-  const prompt = `${mood} ${genre} track featuring ${instruments.join(', ')}. Lean into ${styleReference} while keeping the arrangement emotionally coherent and rhythmically precise, and shape lyrical direction around ${lyricTheme}. Preserve clarity, depth, and a strong hook-driven payoff.`
+  const prodPalette: Record<string, string> = {
+    metal: 'gritty distortion, tight low end, wide stereo guitars, punchy drums',
+    'hip-hop': 'sub-heavy 808s, sidechained pads, vinyl crackle, glossy hi-hats',
+    trap: 'sub-heavy 808s, rolling hats, tight snares, dark wide pads',
+    edm: 'sidechained pads, wide stereo, punchy kick, glossy lead',
+    house: 'four-on-the-floor pocket, warm analog filter, wide stereo, lush pads',
+    classical: 'natural hall reverb, wide stereo strings, dynamic restraint',
+    jazz: 'warm tape, intimate room sound, gentle compression, brushed drums',
+    rnb: 'warm tape, lush stacked harmonies, sidechained pads, glossy keys',
+    pop: 'glossy production, wide stereo, punchy kick, lush stacked harmonies',
+    ambient: 'lush reverb, slow attack pads, airy stereo width, soft saturation',
+    folk: 'warm tape, intimate room sound, gentle compression, breathy vocal',
+  }
+  const productionAdjectives = prodPalette[genre] ?? 'warm tape, wide stereo, punchy low end, glossy top end'
+
+  const sceneByMood: Record<string, string> = {
+    happy: 'sunlit rooftop at golden hour with a crowd singing along',
+    sad: 'a rain-streaked window at 3am, headlights blurring past',
+    angry: 'a stadium pit just before the drop, sweat and adrenaline',
+    romantic: 'a slow dance under string lights on a summer evening',
+    epic: 'a cinematic horizon shot with everything building toward release',
+    melancholic: 'an empty highway at dusk, taillights vanishing into fog',
+    euphoric: 'a festival peak hour with hands in the air and confetti falling',
+    dark: 'a neon-lit underpass at midnight, shadows in motion',
+    chill: 'a quiet apartment with afternoon light through the blinds',
+    tense: 'the moment before the first beat drops, pure anticipation',
+  }
+  const scene = sceneByMood[mood] ?? 'a vivid emotional scene the listener can step into'
+
+  const secondaryClause = secondary.length > 0 ? ` blended with ${secondary.slice(0, 2).join(' / ')}` : ''
+
+  const prompt = [
+    `${mood} ${genre} track${secondaryClause}, ${tempo} BPM, in a tonal center that supports the mood.`,
+    `Arrangement built around ${instruments.join(', ')}, with each element occupying a distinct frequency pocket.`,
+    `${vocalLine}`,
+    `Production: ${productionAdjectives}.`,
+    `${refClause}`,
+    `Lyrical direction: ${lyricTheme}.`,
+    `Scene to evoke: ${scene}.`,
+    `Build a clear emotional arc with a strong hook payoff and one decisive dynamic shift.`,
+  ].join(' ')
 
   return clampPromptWords(prompt, SUGGEST_PROMPT_WORD_RANGE.MIN, SUGGEST_PROMPT_WORD_RANGE.MAX)
 }
@@ -206,32 +265,40 @@ export function suggestVideoStyle(partial: Partial<NormalizedInput>): string {
   return `${baseVideoStyle(mood, genre)} with ${eraTexture(era)}`
 }
 
-/** Enhances field text while preserving semantics and constraints. */
+/**
+ * Enhances field text while preserving semantics and constraints.
+ *
+ * For prose fields ("music_prompt", "mood", "vocal_style") this layers the
+ * user's words into the dense Suno/Udio-grade scaffold from
+ * `suggestMusicPrompt`, so even the local fallback path produces
+ * Suno-grade detail instead of a thin "X with refined Y" stub.
+ */
 export function enhanceField(field: string, currentValue: string, context: Partial<NormalizedInput>): string {
   const genre = primaryGenre(context)
   const mood = suggestMood(context)
+  const tempo = context.tempo_bpm ?? suggestTempo(context)
   const value = currentValue.trim()
 
   if (field === 'mood') {
-    if (value.toLowerCase().includes('sad')) return 'deeply melancholic, introspective sadness with warmth'
-    return `${value || mood} with nuanced emotional contour and clear expressive direction`
+    const base = value || mood
+    return `${base} — built around a nuanced emotional contour, with dynamic restraint in verses and a focused release in the chorus. Carry a clear expressive direction (yearning, tension, or catharsis) and let the production palette reinforce it through reverb tail length, harmonic spacing, and vocal proximity.`
   }
 
   if (field === 'music_prompt') {
-    if (value.toLowerCase() === 'sad guitar song') {
-      return 'melancholic fingerpicked acoustic guitar ballad with ambient reverb and warm room acoustics'
-    }
-    return `${value || suggestMusicPrompt(context)} with tighter ${genre} detail, richer atmosphere, and a more focused ${mood} emotional arc`
+    // Build the dense Suno-grade scaffold, then prepend the user's intent
+    // so their wording leads and the structure supports it.
+    const scaffold = suggestMusicPrompt(context)
+    if (!value) return scaffold
+    return `${value}. ${scaffold} Preserve the original intent above as the emotional anchor; the structural details below sharpen it into a generation-ready prompt.`
   }
 
   if (field === 'vocal_style') {
-    if (value.toLowerCase() === 'raspy') {
-      return 'raw, raspy chest-voice delivery with subtle breath texture'
-    }
-    return `${value || suggestVocalStyle(context)} with refined articulation and genre-aligned phrasing`
+    const base = value || suggestVocalStyle(context)
+    return `${base} — refined articulation with genre-aligned phrasing, breath-textured intimacy on verses, controlled chest-voice or mixed register on hooks, and a tight pocket against the ${tempo} BPM groove. Subtle pitch inflection on phrase ends, with the lead bus running gentle compression, a short slap delay, and a long stereo plate reverb sized to the ${genre} aesthetic.`
   }
 
-  return `${value || suggestMusicPrompt(context)} refined for clearer intent and stronger creative specificity`
+  // Generic fallback — never return a one-liner.
+  return `${value ? `${value}. ` : ''}${suggestMusicPrompt(context)}`
 }
 
 /** Creates a different valid alternative while keeping constraints. */
@@ -258,8 +325,22 @@ export function newAlternativeField(field: string, currentValue: string, context
   }
 
   if (field === 'music_prompt') {
-    const base = suggestMusicPrompt(context)
-    return `${base} Shift emphasis toward ${genre} groove contrast and a fresh melodic contour.`
+    // Re-roll the dense scaffold with a deliberate stylistic pivot so "Try
+    // another" actually returns a different concept, not a paraphrase.
+    const pivotedContext: Partial<NormalizedInput> = {
+      ...context,
+      mood: context.mood,
+      // Nudge instrumentation/style by swapping the primary genre's
+      // adjacent neighbour where one exists.
+      genre_profile: context.genre_profile
+        ? {
+            ...context.genre_profile,
+            instrumentation: (context.genre_profile.instrumentation ?? []).slice().reverse(),
+          }
+        : context.genre_profile,
+    }
+    const base = suggestMusicPrompt(pivotedContext)
+    return `${base} Approach the arrangement from a different stylistic angle — shift groove contrast, melodic contour, and the emotional pivot point compared with prior ideas.`
   }
 
   if (field === 'song_structure') {

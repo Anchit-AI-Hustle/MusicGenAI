@@ -30,7 +30,10 @@ export const DURATION_RANGE = { MIN: 30, MAX: 600 } as const;
 export const ALBUM_SONG_COUNT_RANGE = { MIN: 2, MAX: 20 } as const;
 export const MAX_INSTRUMENTATION_COUNT = 10 as const;
 export const GENERATION_PROMPT_WORD_RANGE = { MIN: 80, MAX: 150 } as const;
-export const SUGGEST_PROMPT_WORD_RANGE = { MIN: 30, MAX: 80 } as const;
+// Tuned for Suno/Udio-grade prompts: dense enough to specify BPM, key,
+// instruments, vocal description, production adjectives, references, and
+// a scene — but capped so model context isn't dominated by the prompt.
+export const SUGGEST_PROMPT_WORD_RANGE = { MIN: 90, MAX: 180 } as const;
 export const MOOD_VALENCE_CONFLICT_THRESHOLD = 3 as const;
 export const ALBUM_MIN_TEMPO_SPREAD = 20 as const;
 

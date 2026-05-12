@@ -92,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
         </button>
       )}
 
-      <nav className="flex-1 min-h-0 px-4 space-y-2 pb-32">
+      <nav className="flex-1 min-h-0 px-4 space-y-2 pb-32 overflow-y-auto overscroll-contain">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentPage === item.id;
