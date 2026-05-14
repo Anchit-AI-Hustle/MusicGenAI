@@ -190,8 +190,13 @@ function fireEvent(ctx: BaseAudioContext, ev: SynthEvent, b: Buses) {
       break;
     case "kick":
       kickAt(ctx, ev.t, b.drumBus, { velocity: ev.velocity });
-      // Layer sub on every kick for low-end weight
-      subAt(ctx, ev.t, b.drumBus, { freq: 50, duration: 0.18, velocity: (ev.velocity ?? 1) * 0.5 });
+      // Sub-on-kick is gated by bass activity (see render loop). When bass
+      // is playing the same low-region, doubling it on the kick creates
+      // 30-80 Hz mud. Sequencer marks the kick event with `flavor='solo'`
+      // when no bass is concurrent, allowing the sub layer to fire.
+      if (ev.flavor === "solo") {
+        subAt(ctx, ev.t, b.drumBus, { freq: 55, duration: 0.14, velocity: (ev.velocity ?? 1) * 0.45 });
+      }
       break;
     case "sub":
       if (ev.freq && ev.duration) subAt(ctx, ev.t, b.bassBus, { freq: ev.freq, duration: ev.duration, velocity: ev.velocity });

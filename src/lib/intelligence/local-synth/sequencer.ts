@@ -9,7 +9,7 @@
  * yields identical event stream — which keeps tracks reproducible.
  */
 
-import type { CompositionPlan } from "../types";
+import type { CompositionPlan, StoredMelody } from "../types";
 import { chordToMidi, chordBassMidi, midiToFreq, scaleMidi, parseChord } from "./theory";
 import { syllabifyLine, type Syllable } from "./syllabify";
 import type { LyricBundle } from "../lyric-engine";
@@ -224,10 +224,34 @@ export function sequence(plan: CompositionPlan, seed = "default", opts: Sequence
         });
       }
 
-      // ── Lead motif on chorus / hook / drop sections ─────────────────────
-      if (/chorus|drop|hook|climax|final/i.test(section.name) && section.density >= 0.6) {
-        const leadEvents = generateLeadMotif(barStart, scale, deps, voicings, chordIdx, sectionName);
-        events.push(...leadEvents);
+      // ── Lead melody from the STORED motif (repeats verbatim) ────────────
+      // This is the song-ness fix. We no longer regenerate random notes
+      // per bar — the same hook plays every time a chorus appears, and
+      // the verse motif plays every time a verse appears. The melodic
+      // shape is mapped onto the current chord's root, so a hook written
+      // around C transposes correctly when the chord moves to Am, F, G.
+      const useHook = /chorus|drop|hook|climax|final/i.test(section.name)
+        && section.density >= 0.55
+        && !!plan.resolved.hookMelody;
+      const useVerse = /verse|pre-chorus|pre_chorus/i.test(section.name)
+        && section.density >= 0.4
+        && section.density < 0.85
+        && !!plan.resolved.verseMelody;
+
+      if (useHook || useVerse) {
+        const stored = useHook ? plan.resolved.hookMelody! : plan.resolved.verseMelody!;
+        const chordRootMidi = chordBassMidi(chord, 4); // base octave for melody
+        const motifBarIdx = bar % stored.bars;
+        const motifEvents = playStoredMotifBar(
+          stored,
+          motifBarIdx,
+          barStart,
+          deps.secondsPerBeat,
+          chordRootMidi,
+          useHook ? 1.0 : 0.65, // verse is quieter
+          sectionName,
+        );
+        events.push(...motifEvents);
       }
     }
 
@@ -236,6 +260,23 @@ export function sequence(plan: CompositionPlan, seed = "default", opts: Sequence
 
   // Sort events for renderer; stable for identical timestamps.
   events.sort((a, b) => a.t - b.t);
+
+  // Post-pass: mark kicks that fire when no bass note is concurrently
+  // active as `flavor: 'solo'`. The renderer reads this and only layers
+  // the sub-on-kick when solo — preventing 30-80 Hz mud where bass +
+  // sub-on-kick would otherwise stack.
+  const bassWindowSec = 0.12;
+  const bassIntervals: Array<[number, number]> = events
+    .filter(e => e.kind === "bass" && e.duration && e.freq)
+    .map(e => [e.t, e.t + (e.duration ?? 0)]);
+  for (const e of events) {
+    if (e.kind !== "kick") continue;
+    const bassActive = bassIntervals.some(([start, end]) =>
+      e.t >= start - bassWindowSec && e.t <= end
+    );
+    if (!bassActive) e.flavor = "solo";
+  }
+
   return { events, totalSeconds: cursor };
 }
 
@@ -468,6 +509,49 @@ function bassFlavorFor(genreId: string): "sub" | "808" | "synth" {
   if (/edm|house|techno|dubstep|trance/.test(genreId)) return "synth";
   if (/lo-fi|jazz|neo-soul|rnb|ambient/.test(genreId)) return "sub";
   return "synth";
+}
+
+// ---------------------------------------------------------------------------
+// Stored-motif playback — plays one bar's worth of a pre-computed melody
+// ---------------------------------------------------------------------------
+
+function playStoredMotifBar(
+  motif: StoredMelody,
+  motifBarIdx: number,
+  barStart: number,
+  secondsPerBeat: number,
+  chordRootMidi: number,
+  velocityScale: number,
+  sectionName: string,
+): SynthEvent[] {
+  const beatsPerBar = (motif.bars > 0)
+    ? Math.max(1, Math.round(
+        motif.notes.length > 0
+          ? Math.max(...motif.notes.map(n => n.beat + n.durationBeats)) / motif.bars
+          : 4
+      ))
+    : 4;
+  const motifBarStartBeat = motifBarIdx * beatsPerBar;
+  const motifBarEndBeat   = (motifBarIdx + 1) * beatsPerBar;
+
+  const out: SynthEvent[] = [];
+  for (const note of motif.notes) {
+    if (note.rest) continue;
+    if (note.beat < motifBarStartBeat || note.beat >= motifBarEndBeat) continue;
+    const localBeat = note.beat - motifBarStartBeat;
+    const tAbsolute = barStart + localBeat * secondsPerBeat;
+    const midi = chordRootMidi + note.degreeFromChordRoot;
+    out.push({
+      t: tAbsolute,
+      duration: Math.max(0.08, note.durationBeats * secondsPerBeat),
+      freq: midiToFreq(midi),
+      velocity: Math.min(1, note.velocity * velocityScale),
+      kind: "lead",
+      flavor: "fm",
+      sectionName,
+    });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

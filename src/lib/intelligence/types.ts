@@ -40,6 +40,40 @@ export interface MotifPlan {
   developmentPlan?: ("repetition" | "sequence" | "inversion" | "augmentation" | "diminution" | "fragmentation" | "reharmonization")[];
 }
 
+/**
+ * A concrete, pre-computed melodic phrase. Notes are stored as
+ * intervals relative to the chord ROOT they sit over — so a hook can be
+ * mapped onto any chord cycle without re-rolling.
+ *
+ * This is the single biggest "does this sound like a song" fix. Without
+ * stored motifs the sequencer regenerates random notes per bar, and the
+ * brain never gets a hook to latch onto. With stored motifs the same
+ * melodic shape repeats verbatim every time the section returns.
+ */
+export interface StoredMelody {
+  /** Length in bars. Hooks are typically 4 bars; verse motifs 2-4. */
+  bars: number;
+  /** Notes ordered by `beat`. */
+  notes: StoredMelodyNote[];
+}
+
+export interface StoredMelodyNote {
+  /** Beat offset from the motif's start (0..beatsPerBar * bars). */
+  beat: number;
+  /**
+   * Semitone offset from the active chord's root. Positive = above root.
+   * Sequencer maps this onto whatever chord is current when the motif fires.
+   * Typical chord-tone values: 0 (root), 4 (maj 3), 3 (min 3), 7 (5), 12 (oct).
+   */
+  degreeFromChordRoot: number;
+  /** Note duration in beats. */
+  durationBeats: number;
+  /** Velocity 0-1. */
+  velocity: number;
+  /** Optional rest marker; renderer skips this note when true. */
+  rest?: boolean;
+}
+
 export interface EmotionalArcStep {
   sectionName: string;
   primaryEmotion: string;          // e.g. "yearning", "triumphant", "melancholic"
@@ -122,6 +156,10 @@ export interface CompositionPlan {
     archetypeId: string;
     sections: SectionPlan[];
     motifs: MotifPlan[];
+    /** Pre-computed chorus/drop hook — replayed verbatim each occurrence. */
+    hookMelody?: StoredMelody;
+    /** Pre-computed verse melody — softer, complements hook by contrast. */
+    verseMelody?: StoredMelody;
     emotionalArc: EmotionalArcStep[];
     vocal: VocalPlan;
     mixTargets: MixTargets;

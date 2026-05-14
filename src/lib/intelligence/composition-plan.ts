@@ -10,6 +10,7 @@ import { matchGenreId, getGenre, getBalanceRules, pickBpm, pickModeForMood } fro
 import { pickProgression, getVoicingInKey } from "./chord-progression-bank";
 import { pickArchetypeId, buildSectionPlans, buildEmotionalArc } from "./emotional-arc-planner";
 import { inferContextFromDescription } from "../contextInference";
+import { buildHookMelody, buildVerseMelody } from "./local-synth/melody-builder";
 
 const KEYS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
@@ -86,7 +87,26 @@ export function buildCompositionPlan(brief: BriefInput): CompositionPlan {
   // 6. Motifs
   const motifs = planMotifs(genreId, !!brief.instrumentalOnly);
 
-  // 7. Emotional arc — uses the resolved mood (form > inference > default).
+  // 7. Pre-compute the hook + verse melodies so the sequencer plays them
+  // verbatim every time the section appears. This is what makes a song
+  // sound like a song instead of like procedural noise — the brain only
+  // latches onto a melody it hears more than once.
+  const beatsPerBar = timeSignature === "3/4" ? 3
+    : timeSignature === "6/8" ? 6
+    : timeSignature === "12/8" ? 12
+    : timeSignature === "5/4" ? 5
+    : timeSignature === "7/8" ? 7
+    : 4;
+  const hookRng = makeRng(seedStr + ":hook");
+  const verseRng = makeRng(seedStr + ":verse");
+  const hookMelody = buildHookMelody({
+    mode, bpm, beatsPerBar, rng: hookRng, octaveOffset: 1,
+  });
+  const verseMelody = buildVerseMelody({
+    mode, bpm, beatsPerBar, rng: verseRng, octaveOffset: 0,
+  });
+
+  // 8. Emotional arc — uses the resolved mood (form > inference > default).
   const emotionalArc = buildEmotionalArc({ mood: resolvedMood, genre: genreId }, sections);
 
   // 8. Vocal plan
@@ -158,6 +178,8 @@ export function buildCompositionPlan(brief: BriefInput): CompositionPlan {
       archetypeId,
       sections,
       motifs,
+      hookMelody,
+      verseMelody,
       emotionalArc,
       vocal,
       mixTargets,
@@ -182,6 +204,9 @@ export function buildCompositionPlan(brief: BriefInput): CompositionPlan {
 function clamp(x: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, x));
 }
+
+/** Alias for clarity at call sites inside this file. */
+function makeRng(seed: string) { return seededRng(seed); }
 
 function seededRng(seed: string): () => number {
   let h = 2166136261 >>> 0;

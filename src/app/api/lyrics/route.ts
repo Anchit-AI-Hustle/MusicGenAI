@@ -46,9 +46,12 @@ Format cleanly with an empty line between sections.
     const userMessage = `Write a song about: ${theme}`;
 
     const message = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20240620',
+      // claude-3-5-sonnet-20240620 was retired — calls return 404. Use the
+      // current GA Sonnet model. The override env var lets ops swap the
+      // model without a code deploy (useful when a newer Sonnet ships).
+      model: process.env.ANTHROPIC_LYRICS_MODEL || 'claude-sonnet-4-5',
       max_tokens: 1024,
-      temperature: 0.7,
+      temperature: 0.85,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
     });
