@@ -58,6 +58,7 @@ import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { AiToolbar as SharedAiToolbar } from '@/components/AiToolbar';
 import { Button } from '@/components/ui/button';
 import { nextGenerationNonce } from '@/lib/intelligence';
+import { useLocalSynth, downloadArrayBuffer } from '@/hooks/useLocalSynth';
 import { inferContextFromDescription } from '@/lib/contextInference';
 import { Wand2 } from 'lucide-react';
 import { ARTIST_NAMES } from '@/lib/musicData/artists';
@@ -149,6 +150,59 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
   const { createMusic, currentCreation, isCreating, aiSuggest, updateFormState, suggestionState, creations = [], setCurrentCreation } = useMusic();
   const player = usePlayer();
   const [mode, setMode] = useState<'song' | 'album'>('song');
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Emergency fallback: local-synth.
+  //
+  // Local synth is NEVER the primary path. It exists only as automatic
+  // backup when the AI/Replicate backend fails (missing keys, model error,
+  // rate-limited, network down). We watch `currentCreation.status` and
+  // when it transitions to 'failed', we transparently re-render the same
+  // brief via the on-device synth so the user still gets a track. The
+  // user sees a banner explaining the fallback was triggered.
+  // ──────────────────────────────────────────────────────────────────────
+  const emergencyLocalSynth = useLocalSynth();
+  const [fallbackBriefSnapshot, setFallbackBriefSnapshot] = useState<{
+    mood: string;
+    genre: string;
+    language?: string;
+    occasion?: string;
+    references?: string[];
+    durationSeconds: number;
+    seed: string;
+  } | null>(null);
+  const [fallbackReason, setFallbackReason] = useState<string | null>(null);
+  const lastFailedCreationIdRef = useRef<string | null>(null);
+
+  // Watch the active creation for transition into 'failed'. When that
+  // happens AND we have a snapshot of the brief (taken inside
+  // handleGenerate), automatically run the local synth as backup. The
+  // `lastFailedCreationIdRef` guard ensures we only trigger once per
+  // failed creation — even if React re-renders.
+  useEffect(() => {
+    if (!currentCreation || currentCreation.status !== 'failed') return;
+    if (!fallbackBriefSnapshot) return;
+    if (lastFailedCreationIdRef.current === currentCreation.id) return;
+    lastFailedCreationIdRef.current = currentCreation.id;
+
+    const reason = currentCreation.errorMessage || currentCreation.error_message || 'AI backend unavailable';
+    setFallbackReason(reason);
+    toast.error(`AI generation failed — running local synth fallback. (${reason})`);
+
+    void emergencyLocalSynth.generate({
+      mood: fallbackBriefSnapshot.mood,
+      genre: fallbackBriefSnapshot.genre,
+      language: fallbackBriefSnapshot.language,
+      occasion: fallbackBriefSnapshot.occasion,
+      references: fallbackBriefSnapshot.references,
+      durationSeconds: fallbackBriefSnapshot.durationSeconds,
+      instrumentalOnly: false,    // include vocoder vowel-singing
+      vocoderVoice: true,
+      seed: fallbackBriefSnapshot.seed,
+    }).catch((err) => {
+      toast.error(`Local-synth fallback also failed: ${err?.message ?? err}`);
+    });
+  }, [currentCreation, fallbackBriefSnapshot, emergencyLocalSynth]);
   
   // Album state
   const [albumName, setAlbumName] = useState('');
@@ -977,11 +1031,34 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
     }
 
     console.log("[Generate] Context being sent:", JSON.stringify(ctx, null, 2));
-    
+
     // Reset video state
     setVideoStatus("idle");
     setVideoUrl(null);
     setVideoError(null);
+
+    // Clear any prior emergency-fallback result so the new attempt starts
+    // clean. The fallback only re-fires if the new AI attempt also fails.
+    emergencyLocalSynth.reset();
+    setFallbackBriefSnapshot(null);
+    setFallbackReason(null);
+    lastFailedCreationIdRef.current = null;
+
+    // Take a snapshot of the brief for the emergency fallback. If
+    // currentCreation later transitions to 'failed', this snapshot is what
+    // the local synth uses to render a backup track.
+    const fallbackSeed = nextGenerationNonce('fallback');
+    if (mode === 'song') {
+      setFallbackBriefSnapshot({
+        mood: ctx.mood ?? 'Energetic',
+        genre: selectedGenres.length > 0 ? selectedGenres[0].label : (ctx.genre ?? 'Pop'),
+        language: ctx.vocalLanguage,
+        occasion: ctx.songDescription,
+        references: ctx.artistInspiration ? [ctx.artistInspiration] : undefined,
+        durationSeconds: ctx.duration ?? 180,
+        seed: fallbackSeed,
+      });
+    }
 
     if (mode === 'album') {
       await createMusic({
@@ -995,32 +1072,86 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
         albumTracks,
       });
     } else {
-      await createMusic({
-        type: 'song',
-        songTitle: ctx.title || 'Untitled Track',
-        title: ctx.title || 'Untitled Track',
-        songDescription: ctx.songDescription, 
-        genre: selectedGenres.length > 0 ? selectedGenres.map((item) => item.label).join(', ') : (ctx.genre || 'Pop'),
-        duration: ctx.duration, 
-        visualizerEnabled,
-        vocalLanguage: ctx.vocalLanguage,
-        lyricsText: ctx.lyricsText || undefined,
-        artistInspiration: ctx.artistInspiration || undefined,
-        videoStyle: visualizerEnabled ? ctx.videoStyle : undefined,
-        tempo: ctx.tempo, 
-        mood: ctx.mood || undefined,
-        subgenre: ctx.subgenre,
-        vocalsEnabled: ctx.vocalsEnabled,
-        vocalStyle: ctx.vocalStyle || undefined,
-        vocalArrangement: ctx.vocalArrangement || undefined,
-        vocalIntensity: ctx.vocalIntensity, 
-        vocalEffects: ctx.vocalEffects,
-        structureType: ctx.structureType || undefined,
-        lyricsTheme: ctx.lyricsTheme || undefined,
-        energyLevel: ctx.energyLevel,
-        instruments: ctx.instruments,
-        useAiAudio,
+      // Song mode — primary AI path. Wrap in try/catch so synchronous
+      // failures (auth error, key missing, network down before kickoff)
+      // also trigger the local-synth emergency fallback. Async polling
+      // failures are caught separately by the failure-watcher useEffect.
+      try {
+        const result = await createMusic({
+          type: 'song',
+          songTitle: ctx.title || 'Untitled Track',
+          title: ctx.title || 'Untitled Track',
+          songDescription: ctx.songDescription,
+          genre: selectedGenres.length > 0 ? selectedGenres.map((item) => item.label).join(', ') : (ctx.genre || 'Pop'),
+          duration: ctx.duration,
+          visualizerEnabled,
+          vocalLanguage: ctx.vocalLanguage,
+          lyricsText: ctx.lyricsText || undefined,
+          artistInspiration: ctx.artistInspiration || undefined,
+          videoStyle: visualizerEnabled ? ctx.videoStyle : undefined,
+          tempo: ctx.tempo,
+          mood: ctx.mood || undefined,
+          subgenre: ctx.subgenre,
+          vocalsEnabled: ctx.vocalsEnabled,
+          vocalStyle: ctx.vocalStyle || undefined,
+          vocalArrangement: ctx.vocalArrangement || undefined,
+          vocalIntensity: ctx.vocalIntensity,
+          vocalEffects: ctx.vocalEffects,
+          structureType: ctx.structureType || undefined,
+          lyricsTheme: ctx.lyricsTheme || undefined,
+          energyLevel: ctx.energyLevel,
+          instruments: ctx.instruments,
+          useAiAudio,
+        });
+        // createMusic returns null on synchronous failure paths (rate
+        // limit, missing keys, server 5xx). Trigger fallback directly.
+        if (!result) {
+          await runEmergencyFallback('AI backend declined the request');
+        }
+      } catch (err: any) {
+        await runEmergencyFallback(err?.message ?? 'AI backend threw an exception');
+      }
+    }
+  };
+
+  /**
+   * Run the emergency local-synth fallback with the snapshot brief taken
+   * inside handleGenerate. Used by both the kickoff try/catch and (via
+   * the failure-watcher useEffect) the async polling-failure path.
+   */
+  const runEmergencyFallback = async (reason: string) => {
+    if (!fallbackBriefSnapshot) {
+      // Reconstruct from current form state if snapshot wasn't taken
+      const ctx = contextRef.current;
+      const brief = {
+        mood: ctx.mood ?? 'Energetic',
+        genre: selectedGenres.length > 0 ? selectedGenres[0].label : (ctx.genre ?? 'Pop'),
+        language: ctx.vocalLanguage,
+        occasion: ctx.songDescription,
+        references: ctx.artistInspiration ? [ctx.artistInspiration] : undefined,
+        durationSeconds: ctx.duration ?? 180,
+        seed: nextGenerationNonce('fallback'),
+      };
+      setFallbackBriefSnapshot(brief);
+      setFallbackReason(reason);
+      toast.error(`AI generation failed — running local synth fallback. (${reason})`);
+      try {
+        await emergencyLocalSynth.generate({ ...brief, instrumentalOnly: false, vocoderVoice: true });
+      } catch (err: any) {
+        toast.error(`Local-synth fallback also failed: ${err?.message ?? err}`);
+      }
+      return;
+    }
+    setFallbackReason(reason);
+    toast.error(`AI generation failed — running local synth fallback. (${reason})`);
+    try {
+      await emergencyLocalSynth.generate({
+        ...fallbackBriefSnapshot,
+        instrumentalOnly: false,
+        vocoderVoice: true,
       });
+    } catch (err: any) {
+      toast.error(`Local-synth fallback also failed: ${err?.message ?? err}`);
     }
   };
 
@@ -1809,6 +1940,100 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
               )}
             </Button>
           </motion.div>
+
+          {/* Emergency Local-Synth Fallback Panel.
+             *
+             * Renders only when the AI/Replicate path failed AND the on-device
+             * local synth has either started rendering or finished. Acts as a
+             * safety net so the user is never left empty-handed when the
+             * remote model is down. Local synth is NEVER the primary path —
+             * it appears here only because something went wrong upstream.
+             */}
+          <AnimatePresence>
+            {(emergencyLocalSynth.loading || emergencyLocalSynth.result) && fallbackReason && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="glass-card rounded-xl p-4 sm:p-6 border-amber-500/40 bg-amber-500/5 space-y-3"
+              >
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-display text-base font-semibold text-amber-300 flex items-center gap-2">
+                      <Zap className="w-4 h-4" /> Emergency offline render
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      AI backend failed: <span className="font-mono">{fallbackReason}</span>. Generated locally with no model — instrumental + vocoder vowels.
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="bg-amber-500/20 text-amber-300">
+                    {emergencyLocalSynth.loading ? `Rendering ${Math.round(emergencyLocalSynth.progress * 100)}%` : 'Ready'}
+                  </Badge>
+                </div>
+
+                {emergencyLocalSynth.loading && (
+                  <div className="h-1 w-full bg-white/10 rounded overflow-hidden">
+                    <div
+                      className="h-full bg-amber-400 transition-all duration-300"
+                      style={{ width: `${Math.round(emergencyLocalSynth.progress * 100)}%` }}
+                    />
+                  </div>
+                )}
+
+                {emergencyLocalSynth.result && (
+                  <>
+                    <audio src={emergencyLocalSynth.result.wavUrl} controls className="w-full" />
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          downloadArrayBuffer(
+                            emergencyLocalSynth.result!.wavArrayBuffer,
+                            `fallback-${emergencyLocalSynth.result!.plan.resolved.genreId}-${Date.now()}.wav`,
+                            'audio/wav',
+                          )
+                        }
+                      >
+                        <Download className="w-4 h-4 mr-1" /> WAV
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          downloadArrayBuffer(
+                            emergencyLocalSynth.result!.midiArrayBuffer,
+                            `fallback-${emergencyLocalSynth.result!.plan.resolved.genreId}-${Date.now()}.mid`,
+                            'audio/midi',
+                          )
+                        }
+                      >
+                        <Download className="w-4 h-4 mr-1" /> MIDI
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          emergencyLocalSynth.reset();
+                          setFallbackReason(null);
+                          setFallbackBriefSnapshot(null);
+                          lastFailedCreationIdRef.current = null;
+                        }}
+                      >
+                        <X className="w-4 h-4 mr-1" /> Dismiss
+                      </Button>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Seed <span className="font-mono">{emergencyLocalSynth.result.seed}</span> &middot;
+                      LUFS <span className="font-mono">{emergencyLocalSynth.result.loudness.after.integratedLufs.toFixed(1)}</span> &middot;
+                      Quality <span className="font-mono">{emergencyLocalSynth.result.quality.score}/100</span> &middot;
+                      Render <span className="font-mono">{(emergencyLocalSynth.result.elapsedMs / 1000).toFixed(1)}s</span>
+                    </div>
+                  </>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Output Section with Pipeline Progress + Audio Player */}
           <AnimatePresence>

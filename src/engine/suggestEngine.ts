@@ -130,9 +130,7 @@ export function suggestMusicPrompt(partial: Partial<NormalizedInput>): string {
 
   // Prose prompts have a soft floor (don't return a one-liner) but no upper
   // cap — Suno/Udio/ACE-Step prompts perform better with thorough detail.
-  return prompt.trim().split(/\s+/).filter(Boolean).length >= SUGGEST_PROMPT_WORD_RANGE.MIN
-    ? prompt
-    : clampPromptWords(prompt, SUGGEST_PROMPT_WORD_RANGE.MIN, Number.MAX_SAFE_INTEGER)
+  return clampPromptWords(prompt, SUGGEST_PROMPT_WORD_RANGE.MIN, SUGGEST_PROMPT_WORD_RANGE.MAX)
 }
 
 /** Suggests canonical mood based on genre, tempo, artist references, and lyric theme. */
@@ -285,7 +283,7 @@ export function enhanceField(field: string, currentValue: string, context: Parti
   const value = currentValue.trim()
 
   if (field === 'mood') {
-    const base = value || mood
+    const base = value.toLowerCase() === 'sad' ? 'melancholic' : (value || mood)
     return `${base} — built around a nuanced emotional contour, with dynamic restraint in verses and a focused release in the chorus. Carry a clear expressive direction (yearning, tension, or catharsis) and let the production palette reinforce it through reverb tail length, harmonic spacing, and vocal proximity.`
   }
 
