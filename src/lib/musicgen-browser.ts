@@ -209,13 +209,48 @@ export interface MusicGenOptions {
  * Returns null if the model fails to load — callers should fall back to the
  * procedural engine in that case.
  */
+// Per-segment inference timeout. On WebGPU one 10s segment finishes in
+// ~10–60s; on WASM it can take 2–4 minutes. The longer ceiling is the safe
+// upper bound — anything beyond is a stuck worker, not slow inference.
+const SEGMENT_TIMEOUT_MS = 5 * 60 * 1000;
+// First-load model download. ~250 MB on a normal connection is <2 min; if
+// it hasn't completed in 10 min the CDN is stalled and we should bail.
+const MODEL_LOAD_TIMEOUT_MS = 10 * 60 * 1000;
+
+function withTimeoutLocal<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+    }),
+  ]).finally(() => { if (timer) clearTimeout(timer); });
+}
+
 export async function generateInstrumentalWithMusicGen(
   opts: MusicGenOptions,
 ): Promise<AudioBuffer | null> {
   const { intent, atmosphere, durationSeconds, onProgress } = opts;
 
   try {
-    const pipe = await getPipeline(onProgress);
+    // Heartbeat during model load — getPipeline's HF progress callback only
+    // fires per download chunk; if the CDN stalls between chunks the UI
+    // looks frozen. This emits a "still loading" tick every 5 s so users
+    // see liveness even on flaky networks.
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
+    let loadStartedAt = Date.now();
+    heartbeat = setInterval(() => {
+      const secs = Math.round((Date.now() - loadStartedAt) / 1000);
+      onProgress?.(`Loading model (${secs}s elapsed)…`, 0);
+    }, 5000);
+
+    let pipe;
+    try {
+      pipe = await withTimeoutLocal(getPipeline(onProgress), MODEL_LOAD_TIMEOUT_MS, 'AI model load');
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+    }
+
     const basePrompt = buildMusicGenPrompt(intent, atmosphere);
 
     const numSegments = Math.max(1, Math.ceil(durationSeconds / SEGMENT_SECONDS));
@@ -233,11 +268,18 @@ export async function generateInstrumentalWithMusicGen(
       else if (i === numSegments - 1) segmentPrompt += ', outro, resolving';
       else segmentPrompt += ', main section, full arrangement';
 
-      const out = await pipe(segmentPrompt, {
-        max_new_tokens: tokensPerSegment,
-        do_sample: true,
-        guidance_scale: 3.0,
-      });
+      // Per-segment timeout — one stuck WebGPU/WASM call must not hang the
+      // whole track. On timeout we throw, the outer catch returns null, and
+      // MusicContext silently falls back to the procedural engine.
+      const out = await withTimeoutLocal(
+        pipe(segmentPrompt, {
+          max_new_tokens: tokensPerSegment,
+          do_sample: true,
+          guidance_scale: 3.0,
+        }),
+        SEGMENT_TIMEOUT_MS,
+        `Segment ${i + 1}/${numSegments}`,
+      );
 
       const samples = unwrapAudio(out);
       const segBuf = await resampleMonoToStereo(

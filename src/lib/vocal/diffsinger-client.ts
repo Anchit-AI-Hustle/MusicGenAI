@@ -67,7 +67,10 @@ const DEFAULT_BASE_URL =
  */
 const HEALTH_TIMEOUT_MS = 2_500;
 const SUBMIT_TIMEOUT_MS = 10_000;
-const POLL_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour ceiling
+// 10-min ceiling — was 1 hour, which left the UI stuck on "Synthesizing
+// vocals" for an hour if the local Python sidecar accepted a job and died.
+// Real renders finish in <2 min; anything past 10 is stuck.
+const POLL_TIMEOUT_MS = 10 * 60 * 1000;
 const POLL_INTERVAL_MS = 1_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {

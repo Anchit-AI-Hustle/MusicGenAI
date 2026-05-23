@@ -1379,17 +1379,23 @@ export async function generateVocals(
   const vocalBuffer = await ctx.startRendering();
 
   const peak = measurePeak(vocalBuffer);
+  // Even a near-silent buffer is rescued by aggressive normalization rather
+  // than dropped. The previous `peak <= 0.0005 → return null` path was the
+  // dominant reason users heard "no vocals — just beats": when the procedural
+  // oscillator path produced a quiet take, the buffer was discarded entirely
+  // and mixVocalsIntoInstrumental never ran. Now we always boost to an audible
+  // level and let the mixer handle it.
   if (peak <= 0.0005) {
-    return null;
-  }
-
-  if (peak < 0.08) {
-    normalizeAudio(vocalBuffer, 0.34);
+    console.warn('[VocalEngine] Vocal buffer near-silent (peak=' + peak.toFixed(5) + ') — boosting aggressively rather than dropping.');
+    applyGain(vocalBuffer, 200);
+    normalizeAudio(vocalBuffer, 0.45);
+  } else if (peak < 0.08) {
+    normalizeAudio(vocalBuffer, 0.45);
   }
 
   const postNormalizePeak = measurePeak(vocalBuffer);
-  if (postNormalizePeak < 0.18) {
-    applyGain(vocalBuffer, Math.min(3.2, 0.24 / Math.max(postNormalizePeak, 0.001)));
+  if (postNormalizePeak < 0.25) {
+    applyGain(vocalBuffer, Math.min(4.0, 0.32 / Math.max(postNormalizePeak, 0.001)));
   }
 
   onProgress({ stage: 'mixing', progress: 1.0 });
@@ -1402,7 +1408,10 @@ export async function generateVocals(
 export function mixVocalsIntoInstrumental(
   instrumental: AudioBuffer,
   vocals: AudioBuffer,
-  vocalLevel: number = 1.12,
+  // Bumped from 1.12 → 1.6 because users reported vocals being inaudible
+  // under the instrumental mix. Combined with the more aggressive
+  // normalization in generateVocals above, vocals now sit clearly forward.
+  vocalLevel: number = 1.6,
 ): AudioBuffer {
   const sampleRate = instrumental.sampleRate;
   const numChannels = instrumental.numberOfChannels;

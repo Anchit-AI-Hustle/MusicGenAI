@@ -26,29 +26,29 @@ export function generateArrangement(
   const template = profile.structureTemplate;
   const n = template.length;
   
-  // Energy curves based on genre
+  // Energy curves with wider dynamic range for more dramatic builds and drops
   const energyCurves: Record<string, (i: number, n: number) => number> = {
     'build-drop': (i, n) => {
       const pos = i / (n - 1);
-      if (pos < 0.15) return 0.15 + pos * 2;
-      if (pos < 0.35) return 0.4 + (pos - 0.15) * 2.5;
-      if (pos < 0.5) return 0.9;
-      if (pos < 0.6) return 0.25;
-      if (pos < 0.8) return 0.6 + (pos - 0.6) * 2;
-      return 0.95 - (pos - 0.8) * 4;
+      if (pos < 0.12) return 0.1 + pos * 1.5;
+      if (pos < 0.3) return 0.3 + (pos - 0.12) * 3.5;
+      if (pos < 0.5) return 0.95;
+      if (pos < 0.6) return 0.15;
+      if (pos < 0.8) return 0.5 + (pos - 0.6) * 2.5;
+      return 1.0 - (pos - 0.8) * 4.5;
     },
     'verse-chorus': (i, n) => {
       const pos = i / (n - 1);
-      // Alternating low/high
-      return i % 2 === 0 ? 0.4 + pos * 0.2 : 0.7 + pos * 0.15;
+      // Stronger contrast between verse (low) and chorus (high)
+      return i % 2 === 0 ? 0.25 + pos * 0.15 : 0.75 + pos * 0.2;
     },
-    'through-composed': (i, n) => 0.3 + (i / (n - 1)) * 0.4 + rng() * 0.15,
+    'through-composed': (i, n) => 0.2 + (i / (n - 1)) * 0.55 + rng() * 0.15,
     'arc': (i, n) => {
       const pos = i / (n - 1);
-      return 0.2 + 0.8 * Math.sin(pos * Math.PI);
+      return 0.1 + 0.9 * Math.sin(pos * Math.PI);
     },
-    'plateau': (_i, _n) => 0.7 + rng() * 0.2,
-    'escalating': (i, n) => 0.2 + (i / (n - 1)) * 0.75,
+    'plateau': (_i, _n) => 0.7 + rng() * 0.25,
+    'escalating': (i, n) => 0.12 + (i / (n - 1)) * 0.85,
   };
 
   const getEnergy = energyCurves[profile.energyCurve] || energyCurves['build-drop'];

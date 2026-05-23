@@ -214,6 +214,10 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const realtimeChannelRef = useRef<any>(null);
   const abortControllersRef = useRef<Record<string, AbortController>>({});
   const trackLastUpdateRef = useRef<Record<string, number>>({});
+  // Re-entry guard for createMusic — prevents double-click from spawning
+  // a second music_creations row before the first generation orchestrator
+  // has even kicked off. Cleared in createMusic's finally block.
+  const createInFlightRef = useRef<boolean>(false);
 
   const updateFormState = useCallback((updates: Partial<FormState>) => {
     setFormState(prev => {
@@ -647,12 +651,25 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     scale: intent.mood.valence >= 6 ? 'major' : 'minor',
     mood: intent.mood.label,
     energy: intent.energy,
-    structure: intent.structure.segments.map((segment) => ({
-      name: segment.name,
-      duration: Math.max(4, Math.round(intent.meta.duration_seconds * segment.duration_ratio)),
-      energy: Math.max(0.1, Math.min(1, intent.energy / 10)),
-      description: `${segment.name} section`,
-    })),
+    structure: intent.structure.segments.map((segment, i, arr) => {
+      const segName = segment.name.toLowerCase();
+      const baseEnergy = intent.energy / 10;
+      // Differentiate energy per section type instead of flat value
+      let sectionEnergy: number;
+      if (segName.includes('intro')) sectionEnergy = baseEnergy * 0.3;
+      else if (segName.includes('verse')) sectionEnergy = baseEnergy * 0.55;
+      else if (segName.includes('pre') || segName.includes('build')) sectionEnergy = baseEnergy * 0.75;
+      else if (segName.includes('chorus') || segName.includes('hook') || segName.includes('drop')) sectionEnergy = Math.min(1, baseEnergy * 1.1);
+      else if (segName.includes('bridge') || segName.includes('break')) sectionEnergy = baseEnergy * 0.35;
+      else if (segName.includes('outro')) sectionEnergy = baseEnergy * 0.25;
+      else sectionEnergy = baseEnergy * 0.6;
+      return {
+        name: segment.name,
+        duration: Math.max(4, Math.round(intent.meta.duration_seconds * segment.duration_ratio)),
+        energy: Math.max(0.08, Math.min(1, sectionEnergy)),
+        description: `${segment.name} section`,
+      };
+    }),
     instruments: [...intent.audio_parameters.instrumentation],
     atmosphere: intent.generation_prompt,
     durationSeconds: intent.meta.duration_seconds,
@@ -706,24 +723,31 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         atmosphere: input.songDescription || baseIntent.atmosphere,
       };
 
-      // 3. Generate Instrumental Stems
+      // 3. Generate Instrumental Stems. 6-minute outer timeout — procedural
+      // engine normally completes in <30s, but Promise.all over workers can
+      // deadlock if one throws and the other waits forever. Without this
+      // cap, a worker hang freezes the whole track at 20–60% indefinitely.
       updateTrackLocal(creationId, trackId, { status: 'processing', currentStage: 'Generating arrangement', progress: 0.2 });
       const { generateTrack } = await import('@/lib/music-engine');
-      const instrumentalResult = await generateTrack(
-        intent,
-        (stage: string, progress: number) => {
-          // When AI Audio is on, the procedural buffer will be discarded —
-          // compress this phase into 0.20 → 0.35 so the AI render owns the
-          // larger 0.35 → 0.65 band and overall progress only moves forward.
-          // When AI is off, this phase keeps its original 0.20 → 0.60 span.
-          const proceduralCeiling = runtimeInput.useAiAudio ? 0.35 : 0.60;
-          const proceduralSpan = proceduralCeiling - 0.20;
-          updateTrackLocal(creationId, trackId, {
-            status: 'processing',
-            currentStage: stage,
-            progress: 0.20 + (progress * proceduralSpan),
-          });
-        }
+      const instrumentalResult = await withTimeout(
+        generateTrack(
+          intent,
+          (stage: string, progress: number) => {
+            // When AI Audio is on, the procedural buffer will be discarded —
+            // compress this phase into 0.20 → 0.35 so the AI render owns the
+            // larger 0.35 → 0.65 band and overall progress only moves forward.
+            // When AI is off, this phase keeps its original 0.20 → 0.60 span.
+            const proceduralCeiling = runtimeInput.useAiAudio ? 0.35 : 0.60;
+            const proceduralSpan = proceduralCeiling - 0.20;
+            updateTrackLocal(creationId, trackId, {
+              status: 'processing',
+              currentStage: stage,
+              progress: 0.20 + (progress * proceduralSpan),
+            });
+          }
+        ),
+        6 * 60 * 1000,
+        'Instrumental generation',
       );
 
       let finalBuffer = instrumentalResult.instrumentalBuffer;
@@ -772,13 +796,22 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           console.error('[AI Audio] generation error — falling back to procedural engine:', aiErr);
           toast.warning('AI audio failed — using built-in engine instead.');
         }
+        // Always nudge progress past the AI band after this phase ends, so
+        // the bar moves on even if AI fell back. Without this, a fallback
+        // can leave the UI sitting at whatever the last AI progress emit
+        // was (e.g. 50%) until vocals kick in.
+        updateTrackLocal(creationId, trackId, {
+          status: 'processing',
+          currentStage: 'AI phase complete',
+          progress: 0.65,
+        });
       }
 
       if (runtimeInput.vocalsEnabled && runtimeInput.lyricsText) {
         updateTrackLocal(creationId, trackId, { status: 'processing', currentStage: 'Synthesizing vocals', progress: 0.65 });
-        
+
         const { generateVocals, mixVocalsIntoInstrumental, inferVocalStyle } = await import('@/lib/vocal-engine');
-        
+
         const vocalConfig = {
           lyrics: runtimeInput.lyricsText,
           tempo: intent.tempo,
@@ -794,17 +827,34 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           language: runtimeInput.vocalLanguage || 'English'
         };
 
-        const vocalBuffer = await generateVocals(vocalConfig as any, (p) => {
-           updateTrackLocal(creationId, trackId, { 
-            status: 'processing', 
-            currentStage: `Vocals: ${p.stage}`, 
-            progress: 0.65 + (p.progress * 0.2) // 65% to 85%
-          });
-        }, rng);
+        // Wrap vocal synthesis in a 5-min outer timeout. OfflineAudioContext
+        // renders can stall on some browsers for long durations or many
+        // segments. Without this, a stuck render freezes the UI at 65–85%
+        // until the user gives up. On timeout we throw → outer catch marks
+        // the track failed cleanly.
+        const vocalBuffer = await withTimeout(
+          generateVocals(vocalConfig as any, (p) => {
+             updateTrackLocal(creationId, trackId, {
+              status: 'processing',
+              currentStage: `Vocals: ${p.stage}`,
+              progress: 0.65 + (p.progress * 0.2) // 65% to 85%
+            });
+          }, rng),
+          5 * 60 * 1000,
+          'Vocal synthesis',
+        ).catch((vocalErr) => {
+          // Vocal failure shouldn't kill the whole track — we still have a
+          // perfectly good instrumental. Log + toast + continue without vocals.
+          console.warn('[Vocals] Synthesis failed — shipping instrumental only:', vocalErr);
+          toast.warning('Vocal synthesis failed — your track is instrumental-only.');
+          return null;
+        });
 
         if (vocalBuffer) {
            updateTrackLocal(creationId, trackId, { status: 'processing', currentStage: 'Mixing master stems', progress: 0.9 });
-           finalBuffer = mixVocalsIntoInstrumental(finalBuffer, vocalBuffer, 1.15);
+           // Vocals should sit clearly forward over the instrumental bed.
+           // Previously 1.15 was too low and users reported "no vocals".
+           finalBuffer = mixVocalsIntoInstrumental(finalBuffer, vocalBuffer, 1.6);
         }
       }
 
@@ -812,6 +862,12 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       updateTrackLocal(creationId, trackId, { status: 'processing', currentStage: 'Finalizing & Mastering', progress: 0.95 });
       const { masterAudio } = await import('@/lib/audio-utils');
       const mastered = masterAudio(finalBuffer);
+      // Guard against silently uploading a 0-byte or near-empty WAV. If the
+      // buffer is shorter than ~25 ms there's nothing to play — fail loud
+      // instead of producing a broken "track" the user has to debug.
+      if (!mastered.blob || mastered.blob.size < 1024) {
+        throw new Error(`Mastered audio is empty (${mastered.blob?.size ?? 0} bytes) — generation produced no audible output.`);
+      }
 
       // 6. Persist audio to storage. If upload fails (CORS, bucket misconfig,
       //    network), fall back to a local blob: URL so the user STILL gets
@@ -955,6 +1011,18 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const createMusic = async (input: CreateMusicInput): Promise<MusicCreation | null> => {
     if (!user?.id) { toast.error('Please sign in to create music'); return null; }
+
+    // Guard against duplicate generations from rapid double-clicks. The
+    // existing `isCreating` flag flips false in the `finally` below — but
+    // that runs as soon as DB rows are inserted (the actual generation is
+    // fire-and-forget), so the button re-enables within ~200ms and a second
+    // click creates a second `music_creations` row. This ref blocks
+    // re-entry for the full duration of the orchestration.
+    if (createInFlightRef.current) {
+      toast.info('A generation is already in progress — please wait.');
+      return null;
+    }
+    createInFlightRef.current = true;
 
     setIsCreating(true);
     try {
@@ -1107,6 +1175,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return null;
     } finally {
       setIsCreating(false);
+      createInFlightRef.current = false;
     }
   };
 

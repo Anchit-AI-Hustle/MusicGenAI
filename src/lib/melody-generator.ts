@@ -109,7 +109,7 @@ function renderMotif(
     const noteIdx = Math.max(0, Math.min(notes.length - 1, startNote + motif.intervals[i]));
     const midi = notes[noteIdx];
     const dur = (motif.durations[i] || 1.0) * beatDur;
-    const vel = (motif.velocities[i] || 0.6) * (0.15 + energy * 0.35);
+    const vel = (motif.velocities[i] || 0.6) * (0.3 + energy * 0.5);
 
     events.push({ time: t, midi, duration: dur * 0.85, velocity: vel });
     t += dur;
@@ -201,7 +201,7 @@ export function generateMelody(
         for (let i = 0; i < passageLen && t < startTime + duration; i++) {
           const midi = notes[noteIdx % notes.length];
           const dur = sixteenth * (1 + rng() * 2);
-          events.push({ time: t, midi, duration: dur, velocity: 0.2 + energy * 0.3 });
+          events.push({ time: t, midi, duration: dur, velocity: 0.35 + energy * 0.45 });
           const move = rng();
           if (move < 0.35) noteIdx += 1;
           else if (move < 0.55) noteIdx -= 1;
@@ -223,7 +223,7 @@ export function generateMelody(
         if (rng() < 0.55 + energy * 0.3) {
           const midi = notes[noteIdx % notes.length];
           const dur = step * (0.5 + rng() * 1.0);
-          events.push({ time: t, midi, duration: dur, velocity: 0.2 + energy * 0.35 });
+          events.push({ time: t, midi, duration: dur, velocity: 0.35 + energy * 0.45 });
         }
         const move = rng();
         if (move < 0.35) noteIdx += 1;
@@ -246,7 +246,7 @@ export function generateMelody(
       while (t < startTime + duration) {
         const degree = pattern[patIdx % pattern.length];
         const midi = notes[(noteIdx + degree) % notes.length];
-        events.push({ time: t, midi, duration: step * 0.6, velocity: 0.15 + energy * 0.25 });
+        events.push({ time: t, midi, duration: step * 0.7, velocity: 0.3 + energy * 0.4 });
         patIdx++;
         if (patIdx % (pattern.length * 4) === 0 && rng() < 0.3) {
           noteIdx += rng() < 0.5 ? 1 : -1;
@@ -270,7 +270,7 @@ export function generateMelody(
       while (t < startTime + duration) {
         const midi = riffNotes[riffIdx % riffNotes.length];
         if (rng() < 0.8) {
-          events.push({ time: t, midi, duration: step * 0.7, velocity: 0.3 + energy * 0.4 });
+          events.push({ time: t, midi, duration: step * 0.75, velocity: 0.4 + energy * 0.45 });
         }
         riffIdx++;
         t += step;
@@ -281,7 +281,7 @@ export function generateMelody(
       while (t < startTime + duration) {
         const midi = notes[noteIdx % notes.length];
         const dur = beatDur * (2 + rng() * 6);
-        events.push({ time: t, midi, duration: Math.min(dur, startTime + duration - t), velocity: 0.08 + energy * 0.12 });
+        events.push({ time: t, midi, duration: Math.min(dur, startTime + duration - t), velocity: 0.18 + energy * 0.25 });
         noteIdx += rng() < 0.5 ? 1 : -1;
         noteIdx = Math.max(0, Math.min(notes.length - 2, noteIdx));
         t += dur * (0.7 + rng() * 0.3);
@@ -336,7 +336,7 @@ export function generateChords(
       if (rng() < 0.3) {
         midis.push(notes[(rootIdx + 6) % notes.length]);
       }
-      events.push({ time: t, midis, duration: dur, velocity: 0.1 + (1 - energy) * 0.2 });
+      events.push({ time: t, midis, duration: dur, velocity: 0.25 + (1 - energy) * 0.35 });
     }
     t += chordInterval;
     progIdx++;

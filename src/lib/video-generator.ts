@@ -68,85 +68,85 @@ const VIDEO_STYLES: Record<string, VideoStyle> = {
   'music visualizer': {
     name: 'Music Visualizer',
     colors: ['#00ff88', '#00ccff', '#ff00ff'],
-    particleCount: 80,
+    particleCount: 140,
     waveformStyle: 'bars',
-    bgGradient: ['#0a0a0a', '#1a1a2e'],
-    glowIntensity: 0.8,
+    bgGradient: ['#050510', '#0f1528'],
+    glowIntensity: 1.0,
     motionSpeed: 1.0,
     shapeGeometry: 'grid',
-    cameraMovement: 14,
+    cameraMovement: 16,
     backgroundAnimation: 'pulse',
   },
   'cyberpunk city': {
     name: 'Cyberpunk City',
     colors: ['#ff006e', '#00f5d4', '#fee440'],
-    particleCount: 120,
+    particleCount: 180,
     waveformStyle: 'line',
     bgGradient: ['#0d0221', '#150050'],
-    glowIntensity: 1.2,
-    motionSpeed: 0.8,
+    glowIntensity: 1.4,
+    motionSpeed: 0.85,
     shapeGeometry: 'shards',
-    cameraMovement: 24,
+    cameraMovement: 22,
     backgroundAnimation: 'drift',
   },
   'warehouse rave': {
     name: 'Warehouse Rave',
     colors: ['#ffffff', '#ff0000', '#ffaa00'],
-    particleCount: 60,
+    particleCount: 100,
     waveformStyle: 'bars',
-    bgGradient: ['#000000', '#0a0a0a'],
-    glowIntensity: 1.5,
-    motionSpeed: 1.5,
+    bgGradient: ['#000000', '#080808'],
+    glowIntensity: 1.6,
+    motionSpeed: 1.4,
     shapeGeometry: 'grid',
-    cameraMovement: 10,
+    cameraMovement: 12,
     backgroundAnimation: 'strobe',
   },
   'psychedelic abstract': {
     name: 'Psychedelic Abstract',
     colors: ['#ff00ff', '#00ffff', '#ffff00', '#ff6600'],
-    particleCount: 200,
+    particleCount: 250,
     waveformStyle: 'spiral',
-    bgGradient: ['#1a0033', '#003366'],
-    glowIntensity: 1.0,
-    motionSpeed: 0.6,
+    bgGradient: ['#12002a', '#002850'],
+    glowIntensity: 1.2,
+    motionSpeed: 0.65,
     shapeGeometry: 'orbs',
-    cameraMovement: 18,
+    cameraMovement: 20,
     backgroundAnimation: 'drift',
   },
   'dark techno industrial': {
     name: 'Dark Techno Industrial',
-    colors: ['#ff3300', '#cc0000', '#660000'],
-    particleCount: 40,
+    colors: ['#ff3300', '#cc0000', '#880000'],
+    particleCount: 80,
     waveformStyle: 'bars',
-    bgGradient: ['#000000', '#1a0000'],
-    glowIntensity: 0.6,
-    motionSpeed: 1.2,
+    bgGradient: ['#000000', '#140000'],
+    glowIntensity: 0.8,
+    motionSpeed: 1.3,
     shapeGeometry: 'shards',
-    cameraMovement: 12,
+    cameraMovement: 14,
     backgroundAnimation: 'strobe',
   },
   'space cinematic': {
     name: 'Space Cinematic',
     colors: ['#4400ff', '#0088ff', '#00ffcc'],
-    particleCount: 150,
+    particleCount: 200,
     waveformStyle: 'circle',
-    bgGradient: ['#000011', '#000033'],
-    glowIntensity: 0.9,
-    motionSpeed: 0.4,
+    bgGradient: ['#000008', '#000025'],
+    glowIntensity: 1.1,
+    motionSpeed: 0.45,
     shapeGeometry: 'rings',
-    cameraMovement: 20,
+    cameraMovement: 18,
     backgroundAnimation: 'drift',
   },
   'neon synthwave': {
     name: 'Neon Synthwave',
     colors: ['#ff00ff', '#00ffff', '#ff6600'],
-    particleCount: 100,
+    particleCount: 160,
     waveformStyle: 'line',
-    bgGradient: ['#0a001a', '#1a0033'],
-    glowIntensity: 1.3,
-    motionSpeed: 0.7,
+    bgGradient: ['#08001a', '#160030'],
+    glowIntensity: 1.5,
+    motionSpeed: 0.75,
     shapeGeometry: 'grid',
-    cameraMovement: 16,
+    cameraMovement: 18,
     backgroundAnimation: 'pulse',
   },
 };
@@ -505,7 +505,10 @@ async function transcodeToUniversalMp4Blob(
      // earlier `medium` preset was the dominant cost on long tracks.
     // CRF 26 keeps file size reasonable while staying near-transparent for
      // these flat-color/particle visuals.
-    await ffmpeg.exec([
+    // 8-min hard cap. WASM ffmpeg occasionally stalls or OOMs silently on
+    // long tracks. On timeout, the outer ensureUniversalMp4Blob catch falls
+    // back to the raw webm so the user still gets a video.
+    const transcodePromise = ffmpeg.exec([
       '-i', inputName,
       '-map', '0:v:0',
       '-map', '0:a:0?',
@@ -522,6 +525,13 @@ async function transcodeToUniversalMp4Blob(
       '-movflags', '+faststart',
       '-y',
       outputName,
+    ]);
+    const TRANSCODE_TIMEOUT_MS = 8 * 60 * 1000;
+    await Promise.race([
+      transcodePromise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`MP4 transcode timed out after ${TRANSCODE_TIMEOUT_MS / 1000}s`)), TRANSCODE_TIMEOUT_MS),
+      ),
     ]);
 
     const outputData = await ffmpeg.readFile(outputName);
@@ -703,13 +713,15 @@ export async function generateVideoFromAudio(
 
   // Pick best available capture format, then normalize to universal MP4 after recording
   const mimeOptions = [
-    'video/mp4;codecs=avc1,mp4a.40.2',
-    'video/mp4',
     'video/webm;codecs=vp9,opus',
     'video/webm;codecs=vp8,opus',
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
     'video/webm',
+    'video/mp4;codecs=avc1,mp4a.40.2',
+    'video/mp4',
   ];
-  let selectedMime = 'video/webm';
+  let selectedMime = '';
   for (const mime of mimeOptions) {
     if (MediaRecorder.isTypeSupported(mime)) {
       selectedMime = mime;
@@ -717,12 +729,20 @@ export async function generateVideoFromAudio(
     }
   }
 
-  const mediaRecorder = selectedMime
-    ? new MediaRecorder(stream, {
-        mimeType: selectedMime,
-        videoBitsPerSecond: 4_000_000,
-      })
-    : new MediaRecorder(stream);
+  let mediaRecorder: MediaRecorder;
+  try {
+    mediaRecorder = selectedMime
+      ? new MediaRecorder(stream, {
+          mimeType: selectedMime,
+          videoBitsPerSecond: 5_000_000,
+        })
+      : new MediaRecorder(stream);
+  } catch {
+    // Some browsers reject the bitrate option — retry without it
+    mediaRecorder = selectedMime
+      ? new MediaRecorder(stream, { mimeType: selectedMime })
+      : new MediaRecorder(stream);
+  }
 
   const chunks: Blob[] = [];
   mediaRecorder.ondataavailable = (e) => {
@@ -735,8 +755,8 @@ export async function generateVideoFromAudio(
     let tickerRef: { stop: () => void } | null = null;
     const cleanupStreams = () => {
       try { tickerRef?.stop(); } catch { /* worker already stopped */ }
-      stream.getTracks().forEach((track) => track.stop());
-      dest.stream.getTracks().forEach((track) => track.stop());
+      try { stream.getTracks().forEach((track) => track.stop()); } catch { /* already stopped */ }
+      try { dest.stream.getTracks().forEach((track) => track.stop()); } catch { /* already stopped */ }
       audioContext.close().catch(() => undefined);
     };
     mediaRecorder.onstop = async () => {
@@ -780,8 +800,23 @@ export async function generateVideoFromAudio(
       onProgress?.({ stage: 'rendering_video', progress: 0.98 });
     };
 
+    // Watchdog: if no frame has advanced for 30 s, something's wedged
+    // (canvas exception swallowed, ticker frozen, audio stalled). Reject
+    // so the outer Promise unblocks and the track fails cleanly instead
+    // of sitting at "Rendering visuals" indefinitely.
+    let lastFrameAt = Date.now();
+    const STALL_MS = 30_000;
+    const stallWatchdog = setInterval(() => {
+      if (Date.now() - lastFrameAt > STALL_MS && frame < totalFrames) {
+        clearInterval(stallWatchdog);
+        cleanupStreams();
+        reject(new Error(`Video render stalled — no frame advance for ${STALL_MS / 1000}s. Try again or disable video for this track.`));
+      }
+    }, 5_000);
+
     const renderFrame = () => {
       if (frame >= totalFrames) {
+        clearInterval(stallWatchdog);
         finishRender();
         return;
       }
@@ -815,25 +850,34 @@ export async function generateVideoFromAudio(
         nextMutationFrame = frame + mutationStride;
       }
 
-      // Draw visualization based on the (possibly just-mutated) style
-      drawVisualization(
-        ctx,
-        activeStyle,
-        width,
-        height,
-        t,
-        energy,
-        bass,
-        mid,
-        high,
-        beatStrength,
-        sectionTransition,
-        particles,
-        frame,
-        rng,
-        activeLyricCue?.text || '',
-        lyricFlash,
-      );
+      // Draw visualization — wrap in try/catch so a canvas exception (rare
+      // but possible on backgrounded tabs / weird DPRs) doesn't silently
+      // wedge the render. On error we bail loudly.
+      try {
+        drawVisualization(
+          ctx,
+          activeStyle,
+          width,
+          height,
+          t,
+          energy,
+          bass,
+          mid,
+          high,
+          beatStrength,
+          sectionTransition,
+          particles,
+          frame,
+          rng,
+          activeLyricCue?.text || '',
+          lyricFlash,
+        );
+      } catch (drawErr) {
+        clearInterval(stallWatchdog);
+        cleanupStreams();
+        reject(drawErr instanceof Error ? drawErr : new Error(String(drawErr)));
+        return;
+      }
 
       // Update progress every 30 frames
       if (frame % 30 === 0) {
@@ -841,6 +885,7 @@ export async function generateVideoFromAudio(
         onProgress?.({ stage: 'rendering_video', progress: vidProgress });
       }
 
+      lastFrameAt = Date.now();
       frame++;
       if (frame < totalFrames) {
         // Worker-driven tick — not throttled when tab is hidden.
@@ -873,198 +918,377 @@ function drawVisualization(
   const cx = w / 2;
   const cy = h / 2;
 
-  const grad = ctx.createLinearGradient(0, 0, w, h);
+  // ===== Background with animated gradient =====
+  const gradAngle = t * 0.3;
+  const gx = Math.cos(gradAngle) * w;
+  const gy = Math.sin(gradAngle) * h;
+  const grad = ctx.createLinearGradient(cx + gx * 0.3, cy + gy * 0.3, cx - gx * 0.3, cy - gy * 0.3);
   grad.addColorStop(0, style.bgGradient[0]);
   grad.addColorStop(1, style.bgGradient[1]);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
+  // ===== Background animation layer =====
   if (style.backgroundAnimation === 'pulse') {
-    ctx.fillStyle = `${style.colors[0]}${Math.floor((0.08 + beatStrength * 0.15) * 255).toString(16).padStart(2, '0')}`;
+    const pulseAlpha = Math.floor((0.06 + beatStrength * 0.2 + bass * 0.08) * 255);
+    ctx.fillStyle = `${style.colors[0]}${Math.min(255, pulseAlpha).toString(16).padStart(2, '0')}`;
     ctx.fillRect(0, 0, w, h);
+    // Radial pulse from center on beats
+    if (beatStrength > 0.5) {
+      const pRad = 100 + beatStrength * 400;
+      const pGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, pRad);
+      pGrad.addColorStop(0, `${style.colors[1 % style.colors.length]}30`);
+      pGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = pGrad;
+      ctx.fillRect(0, 0, w, h);
+    }
   } else if (style.backgroundAnimation === 'drift') {
-    ctx.fillStyle = `${style.colors[1 % style.colors.length]}22`;
-    ctx.beginPath();
-    ctx.ellipse(cx + Math.sin(t * Math.PI * 2) * w * 0.18, cy, w * 0.28, h * 0.22, t * Math.PI, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (sectionTransition || beatStrength > 0.72) {
-    ctx.fillStyle = `${style.colors[2 % style.colors.length]}18`;
+    // Multiple drifting orbs for depth
+    for (let d = 0; d < 3; d++) {
+      const dx = cx + Math.sin(t * Math.PI * (1.2 + d * 0.4)) * w * (0.2 + d * 0.08);
+      const dy = cy + Math.cos(t * Math.PI * (0.8 + d * 0.3)) * h * (0.15 + d * 0.06);
+      const dr = w * (0.15 + d * 0.06) + energy * 60;
+      const dGrad = ctx.createRadialGradient(dx, dy, 0, dx, dy, dr);
+      dGrad.addColorStop(0, `${style.colors[d % style.colors.length]}28`);
+      dGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = dGrad;
+      ctx.beginPath();
+      ctx.ellipse(dx, dy, dr, dr * 0.7, t * 0.5 + d, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (sectionTransition || beatStrength > 0.65) {
+    // Flash on transitions/big beats
+    const flashAlpha = Math.min(60, Math.floor(beatStrength * 80));
+    ctx.fillStyle = `${style.colors[2 % style.colors.length]}${flashAlpha.toString(16).padStart(2, '0')}`;
     ctx.fillRect(0, 0, w, h);
   }
 
+  // Lyric subtitle glow zone
   if (lyricFlash > 0) {
-    ctx.fillStyle = `${style.colors[0]}20`;
-    ctx.fillRect(0, h * 0.76, w, h * 0.24);
+    const lGrad = ctx.createLinearGradient(0, h * 0.78, 0, h);
+    lGrad.addColorStop(0, 'transparent');
+    lGrad.addColorStop(1, `${style.colors[0]}25`);
+    ctx.fillStyle = lGrad;
+    ctx.fillRect(0, h * 0.78, w, h * 0.22);
   }
 
   ctx.save();
-  const cameraOffsetX = Math.sin(frame * 0.03 * style.motionSpeed) * style.cameraMovement * (0.15 + beatStrength * 0.6);
-  const cameraOffsetY = Math.cos(frame * 0.024 * style.motionSpeed) * style.cameraMovement * 0.12;
-  const cameraScale = 1 + beatStrength * 0.03 + (sectionTransition ? 0.02 : 0);
-  ctx.translate(cameraOffsetX, cameraOffsetY);
+  // ===== Camera motion =====
+  const cameraOffsetX = Math.sin(frame * 0.025 * style.motionSpeed) * style.cameraMovement * (0.2 + beatStrength * 0.5);
+  const cameraOffsetY = Math.cos(frame * 0.02 * style.motionSpeed) * style.cameraMovement * 0.15;
+  const cameraScale = 1 + beatStrength * 0.04 + (sectionTransition ? 0.025 : 0);
+  const cameraRotation = Math.sin(frame * 0.008 * style.motionSpeed) * 0.01 * style.cameraMovement / 20;
   ctx.translate(cx, cy);
+  ctx.rotate(cameraRotation);
   ctx.scale(cameraScale, cameraScale);
-  ctx.translate(-cx, -cy);
+  ctx.translate(-cx + cameraOffsetX, -cy + cameraOffsetY);
 
+  // ===== Geometry layer (behind everything) =====
   if (style.shapeGeometry === 'rings') {
-    ctx.strokeStyle = `${style.colors[0]}33`;
-    ctx.lineWidth = 2;
-    for (let ring = 1; ring <= 3; ring++) {
+    for (let ring = 1; ring <= 5; ring++) {
+      const radius = ring * 70 + bass * 60 + energy * 20;
+      const alpha = Math.max(10, Math.floor((0.15 + beatStrength * 0.2 - ring * 0.02) * 255));
+      ctx.strokeStyle = `${style.colors[ring % style.colors.length]}${alpha.toString(16).padStart(2, '0')}`;
+      ctx.lineWidth = 1.5 + beatStrength * 2;
       ctx.beginPath();
-      ctx.arc(cx, cy, ring * 90 + bass * 55, 0, Math.PI * 2);
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.stroke();
+      // Inner glow
+      if (ring <= 2 && beatStrength > 0.4) {
+        ctx.shadowColor = style.colors[ring % style.colors.length];
+        ctx.shadowBlur = 15;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
     }
   } else if (style.shapeGeometry === 'grid') {
-    ctx.strokeStyle = `${style.colors[1 % style.colors.length]}20`;
-    for (let x = 0; x <= w; x += 80) {
+    const spacing = 60;
+    ctx.lineWidth = 0.8;
+    for (let x = 0; x <= w; x += spacing) {
+      const waveX = Math.sin(t * 4 + x * 0.015) * 15 * energy;
+      ctx.strokeStyle = `${style.colors[1 % style.colors.length]}${Math.floor(20 + bass * 30).toString(16).padStart(2, '0')}`;
       ctx.beginPath();
-      ctx.moveTo(x + Math.sin(t * 6 + x * 0.01) * 10 * energy, 0);
-      ctx.lineTo(x, h);
+      ctx.moveTo(x + waveX, 0);
+      ctx.lineTo(x - waveX * 0.5, h);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= h; y += spacing) {
+      const waveY = Math.cos(t * 3.5 + y * 0.012) * 12 * energy;
+      ctx.strokeStyle = `${style.colors[2 % style.colors.length]}${Math.floor(15 + mid * 25).toString(16).padStart(2, '0')}`;
+      ctx.beginPath();
+      ctx.moveTo(0, y + waveY);
+      ctx.lineTo(w, y - waveY * 0.5);
       ctx.stroke();
     }
   } else if (style.shapeGeometry === 'shards') {
-    ctx.fillStyle = `${style.colors[2 % style.colors.length]}18`;
-    for (let i = 0; i < 6; i++) {
-      const angle = t * Math.PI * 2 + i * (Math.PI / 3);
-      const radius = 120 + high * 140 + i * 30;
+    for (let i = 0; i < 8; i++) {
+      const angle = t * Math.PI * 1.5 + i * (Math.PI / 4);
+      const radius = 100 + high * 180 + i * 25 + beatStrength * 50;
+      const alpha = Math.floor((0.08 + beatStrength * 0.12) * 255);
+      ctx.fillStyle = `${style.colors[i % style.colors.length]}${alpha.toString(16).padStart(2, '0')}`;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
-      ctx.lineTo(cx + Math.cos(angle + 0.18) * (radius * 0.58), cy + Math.sin(angle + 0.18) * (radius * 0.58));
+      ctx.lineTo(cx + Math.cos(angle + 0.15) * (radius * 0.55), cy + Math.sin(angle + 0.15) * (radius * 0.55));
       ctx.closePath();
       ctx.fill();
     }
   } else {
-    ctx.fillStyle = `${style.colors[0]}10`;
-    for (let i = 0; i < 4; i++) {
+    // Orbs with glow
+    for (let i = 0; i < 5; i++) {
+      const ox = cx + Math.sin(t * (i + 1) * 2.3 + i) * (160 + i * 30);
+      const oy = cy + Math.cos(t * (i + 1) * 1.9 + i) * (100 + i * 20);
+      const or = 30 + energy * 60 + bass * 30;
+      const oGrad = ctx.createRadialGradient(ox, oy, 0, ox, oy, or);
+      oGrad.addColorStop(0, `${style.colors[i % style.colors.length]}30`);
+      oGrad.addColorStop(0.6, `${style.colors[i % style.colors.length]}10`);
+      oGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = oGrad;
       ctx.beginPath();
-      ctx.arc(
-        cx + Math.sin(t * (i + 1) * 3.1) * 180,
-        cy + Math.cos(t * (i + 1) * 2.7) * 120,
-        40 + energy * 70,
-        0,
-        Math.PI * 2,
-      );
+      ctx.arc(ox, oy, or, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
-  // Draw particles
+  // ===== Particles with trails and glow =====
   for (const p of particles) {
     p.life++;
     if (p.life > p.maxLife) {
       p.x = rng() * w;
       p.y = rng() * h;
       p.life = 0;
+      p.color = style.colors[Math.floor(rng() * style.colors.length)];
     }
 
-    p.vx += (rng() - 0.5) * (energy + beatStrength) * style.motionSpeed;
-    p.vy += (rng() - 0.5) * (energy + beatStrength) * style.motionSpeed;
+    p.vx += (rng() - 0.5) * (energy + beatStrength) * style.motionSpeed * 1.2;
+    p.vy += (rng() - 0.5) * (energy + beatStrength) * style.motionSpeed * 1.2;
     if (sectionTransition) {
-      p.vx += (p.x - cx) * -0.0009;
-      p.vy += (p.y - cy) * -0.0009;
+      p.vx += (cx - p.x) * 0.002;
+      p.vy += (cy - p.y) * 0.002;
     }
-    p.vx *= 0.98;
-    p.vy *= 0.98;
+    // Gentle gravity toward center on beats
+    if (beatStrength > 0.6) {
+      p.vx += (cx - p.x) * 0.0004 * beatStrength;
+      p.vy += (cy - p.y) * 0.0004 * beatStrength;
+    }
+    p.vx *= 0.97;
+    p.vy *= 0.97;
+    const prevX = p.x;
+    const prevY = p.y;
     p.x += p.vx;
     p.y += p.vy;
 
-    // Wrap around
     if (p.x < 0) p.x += w;
     if (p.x > w) p.x -= w;
     if (p.y < 0) p.y += h;
     if (p.y > h) p.y -= h;
 
-    const alpha = Math.min(1, (1 - p.life / p.maxLife) * (0.5 + energy + beatStrength));
-    const size = p.size * (1 + bass * 3 + beatStrength * 2);
+    const lifeRatio = 1 - p.life / p.maxLife;
+    const alpha = Math.min(1, lifeRatio * (0.6 + energy * 0.5 + beatStrength * 0.4));
+    const size = p.size * (1.2 + bass * 3.5 + beatStrength * 2.5);
+    const alphaHex = Math.floor(alpha * 255).toString(16).padStart(2, '0');
+
+    // Draw particle trail
+    if (Math.abs(p.x - prevX) < w * 0.5 && Math.abs(p.y - prevY) < h * 0.5) {
+      ctx.strokeStyle = p.color + Math.floor(alpha * 80).toString(16).padStart(2, '0');
+      ctx.lineWidth = size * 0.4;
+      ctx.beginPath();
+      ctx.moveTo(prevX, prevY);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    }
+
+    // Draw particle with glow
     ctx.beginPath();
     ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
-    ctx.fillStyle = p.color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+    ctx.fillStyle = p.color + alphaHex;
+    if (size > 3 && alpha > 0.3) {
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = size * 3;
+    }
     ctx.fill();
+    ctx.shadowBlur = 0;
   }
 
-  // Draw waveform
-  ctx.lineWidth = 2 + energy * 4;
-  ctx.strokeStyle = style.colors[0];
-  ctx.shadowColor = style.colors[0];
-  ctx.shadowBlur = style.glowIntensity * 20 * energy;
-
-  const barCount = 64;
+  // ===== Waveform visualization =====
+  const barCount = 80;
   const barWidth = w / barCount;
 
   if (style.waveformStyle === 'bars') {
     for (let i = 0; i < barCount; i++) {
-      const barEnergy = (i < barCount * 0.3 ? bass : i < barCount * 0.7 ? mid : high);
-      const barHeight = barEnergy * h * 0.4;
+      const frac = i / barCount;
+      const barEnergy = frac < 0.25 ? bass : frac < 0.65 ? mid : high;
+      const barHeight = barEnergy * h * 0.45 + beatStrength * 15;
       const x = i * barWidth;
-      const colorIdx = Math.floor(i / barCount * style.colors.length);
-      ctx.fillStyle = style.colors[colorIdx % style.colors.length];
-      ctx.fillRect(x + 2, cy - barHeight / 2, barWidth - 4, barHeight);
+      const colorIdx = Math.floor(frac * style.colors.length);
+      const barColor = style.colors[colorIdx % style.colors.length];
+
+      // Mirrored bars (top and bottom from center)
+      ctx.fillStyle = barColor;
+      ctx.shadowColor = barColor;
+      ctx.shadowBlur = style.glowIntensity * 12;
+      ctx.fillRect(x + 1, cy - barHeight / 2, barWidth - 2, barHeight);
+
+      // Reflection (dimmer)
+      ctx.globalAlpha = 0.2;
+      ctx.fillRect(x + 1, cy + barHeight / 2, barWidth - 2, barHeight * 0.3);
+      ctx.globalAlpha = 1;
     }
+    ctx.shadowBlur = 0;
   } else if (style.waveformStyle === 'circle') {
-    const radius = Math.min(w, h) * 0.2;
+    const radius = Math.min(w, h) * 0.18;
+    // Draw filled glow circle behind
+    const circGlow = ctx.createRadialGradient(cx, cy, radius * 0.5, cx, cy, radius * 2.5);
+    circGlow.addColorStop(0, `${style.colors[0]}15`);
+    circGlow.addColorStop(1, 'transparent');
+    ctx.fillStyle = circGlow;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.lineWidth = 2.5 + energy * 3;
+    ctx.shadowColor = style.colors[0];
+    ctx.shadowBlur = style.glowIntensity * 25;
+    ctx.strokeStyle = style.colors[0];
     ctx.beginPath();
     for (let i = 0; i <= barCount; i++) {
       const angle = (i / barCount) * Math.PI * 2;
-      const barEnergy = (i < barCount * 0.3 ? bass : i < barCount * 0.7 ? mid : high);
-      const r = radius + barEnergy * radius * 2;
-      const x = cx + Math.cos(angle + t * Math.PI * 2 * style.motionSpeed) * r;
-      const y = cy + Math.sin(angle + t * Math.PI * 2 * style.motionSpeed) * r;
+      const frac = i / barCount;
+      const barEnergy = frac < 0.3 ? bass : frac < 0.7 ? mid : high;
+      const r = radius + barEnergy * radius * 2.2 + beatStrength * 20;
+      const x = cx + Math.cos(angle + t * Math.PI * 2 * style.motionSpeed * 0.5) * r;
+      const y = cy + Math.sin(angle + t * Math.PI * 2 * style.motionSpeed * 0.5) * r;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
     ctx.closePath();
     ctx.stroke();
+
+    // Inner circle
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    for (let i = 0; i <= barCount; i++) {
+      const angle = (i / barCount) * Math.PI * 2;
+      const frac = i / barCount;
+      const barEnergy = frac < 0.3 ? bass : frac < 0.7 ? mid : high;
+      const r = radius * 0.6 + barEnergy * radius * 1.0;
+      const x = cx + Math.cos(angle - t * Math.PI * style.motionSpeed * 0.3) * r;
+      const y = cy + Math.sin(angle - t * Math.PI * style.motionSpeed * 0.3) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = style.colors[1 % style.colors.length];
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
   } else if (style.waveformStyle === 'line') {
+    ctx.lineWidth = 2.5 + energy * 3;
+    ctx.shadowColor = style.colors[0];
+    ctx.shadowBlur = style.glowIntensity * 20;
+    // Top line
+    ctx.strokeStyle = style.colors[0];
     ctx.beginPath();
     for (let i = 0; i < barCount; i++) {
       const x = (i / barCount) * w;
-      const barEnergy = (i < barCount * 0.3 ? bass : i < barCount * 0.7 ? mid : high);
-      const y = cy + Math.sin(i * 0.3 + frame * 0.05 * style.motionSpeed) * barEnergy * h * 0.3;
+      const frac = i / barCount;
+      const barEnergy = frac < 0.3 ? bass : frac < 0.7 ? mid : high;
+      const y = cy - 30 + Math.sin(i * 0.25 + frame * 0.04 * style.motionSpeed) * barEnergy * h * 0.28;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
     ctx.stroke();
-  } else if (style.waveformStyle === 'spiral') {
+    // Mirrored bottom line
+    ctx.strokeStyle = style.colors[1 % style.colors.length];
+    ctx.globalAlpha = 0.5;
     ctx.beginPath();
-    for (let i = 0; i < 360; i++) {
-      const angle = (i / 180) * Math.PI + t * Math.PI * 2 * style.motionSpeed;
-      const barEnergy = (i < 120 ? bass : i < 240 ? mid : high);
-      const r = (i / 360) * Math.min(w, h) * 0.35 + barEnergy * 100;
+    for (let i = 0; i < barCount; i++) {
+      const x = (i / barCount) * w;
+      const frac = i / barCount;
+      const barEnergy = frac < 0.3 ? bass : frac < 0.7 ? mid : high;
+      const y = cy + 30 - Math.sin(i * 0.25 + frame * 0.04 * style.motionSpeed) * barEnergy * h * 0.2;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+  } else if (style.waveformStyle === 'spiral') {
+    ctx.lineWidth = 2 + energy * 2;
+    ctx.shadowColor = style.colors[0];
+    ctx.shadowBlur = style.glowIntensity * 18;
+    ctx.beginPath();
+    for (let i = 0; i < 400; i++) {
+      const angle = (i / 200) * Math.PI + t * Math.PI * 2 * style.motionSpeed * 0.4;
+      const frac = i / 400;
+      const barEnergy = frac < 0.3 ? bass : frac < 0.65 ? mid : high;
+      const r = (i / 400) * Math.min(w, h) * 0.38 + barEnergy * 120 + beatStrength * 25;
       const x = cx + Math.cos(angle) * r;
       const y = cy + Math.sin(angle) * r;
-      const colorIdx = Math.floor(i / 360 * style.colors.length);
-      ctx.strokeStyle = style.colors[colorIdx % style.colors.length];
       if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      else {
+        const colorIdx = Math.floor(frac * style.colors.length);
+        ctx.strokeStyle = style.colors[colorIdx % style.colors.length];
+        ctx.lineTo(x, y);
+      }
     }
     ctx.stroke();
+    ctx.shadowBlur = 0;
   }
 
-  // Central energy pulse
-  const pulseRadius = 50 + bass * 150 + beatStrength * 60;
+  // ===== Central energy pulse with multiple layers =====
+  const pulseRadius = 60 + bass * 180 + beatStrength * 80;
   const pulseGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, pulseRadius);
-  pulseGrad.addColorStop(0, style.colors[0] + '40');
-  pulseGrad.addColorStop(0.5, style.colors[1 % style.colors.length] + '20');
+  pulseGrad.addColorStop(0, style.colors[0] + '50');
+  pulseGrad.addColorStop(0.3, style.colors[1 % style.colors.length] + '25');
+  pulseGrad.addColorStop(0.7, style.colors[2 % style.colors.length] + '10');
   pulseGrad.addColorStop(1, 'transparent');
   ctx.fillStyle = pulseGrad;
   ctx.beginPath();
   ctx.arc(cx, cy, pulseRadius, 0, Math.PI * 2);
   ctx.fill();
 
+  // Secondary pulse ring on beats
+  if (beatStrength > 0.5) {
+    const ringRadius = pulseRadius * 1.3;
+    ctx.strokeStyle = `${style.colors[0]}${Math.floor(beatStrength * 60).toString(16).padStart(2, '0')}`;
+    ctx.lineWidth = 2 + beatStrength * 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // ===== Lyrics rendering with better styling =====
   if (activeLyricText) {
     const caption = activeLyricText.length > 72 ? `${activeLyricText.slice(0, 72)}...` : activeLyricText;
     ctx.save();
     ctx.textAlign = 'center';
-    ctx.font = '600 30px serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.shadowColor = 'rgba(0,0,0,0.6)';
-    ctx.shadowBlur = 18;
-    ctx.fillText(caption, cx, h - 72);
+    ctx.font = '700 34px "Segoe UI", system-ui, -apple-system, sans-serif';
+
+    // Text shadow layers for depth
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 24;
+    ctx.shadowOffsetY = 3;
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.fillText(caption, cx, h - 65);
+
+    // Subtle colored glow matching the style
+    ctx.shadowColor = style.colors[0];
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 0;
+    ctx.globalAlpha = 0.3;
+    ctx.fillText(caption, cx, h - 65);
+    ctx.globalAlpha = 1;
+
     ctx.restore();
   }
 
-  // Reset shadow
+  // ===== Vignette overlay for cinematic depth =====
+  const vignette = ctx.createRadialGradient(cx, cy, w * 0.25, cx, cy, w * 0.7);
+  vignette.addColorStop(0, 'transparent');
+  vignette.addColorStop(1, 'rgba(0,0,0,0.35)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, w, h);
+
   ctx.shadowBlur = 0;
   ctx.restore();
 }
