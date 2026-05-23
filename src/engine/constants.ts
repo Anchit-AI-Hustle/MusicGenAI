@@ -34,7 +34,7 @@ export const GENERATION_PROMPT_WORD_RANGE = { MIN: 80, MAX: 150 } as const;
 // hint only — the local fallback now skips the truncation step entirely
 // for prose fields (see suggestEngine.suggestMusicPrompt). Edge-function
 // LLM responses also have no upper word cap.
-export const SUGGEST_PROMPT_WORD_RANGE = { MIN: 30, MAX: 80 } as const;
+export const SUGGEST_PROMPT_WORD_RANGE = { MIN: 60, MAX: 300 } as const;
 export const MOOD_VALENCE_CONFLICT_THRESHOLD = 3 as const;
 export const ALBUM_MIN_TEMPO_SPREAD = 20 as const;
 

@@ -1369,9 +1369,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         title: effectiveContext.title,
         musicPrompt: effectiveContext.songDescription || effectiveContext.prompt,
         genres: parseList(effectiveContext.genre),
+        subgenres: parseList(effectiveContext.subgenre),
         durationSeconds: Number(effectiveContext.duration ?? 180),
         vocalLanguages: parseList(effectiveContext.vocalLanguage),
         lyrics: effectiveContext.lyricsText || effectiveContext.lyricsTheme,
+        lyricTheme: effectiveContext.lyricsTheme,
         artistInspiration: effectiveContext.artistInspiration,
         tempoBpm: Number(effectiveContext.tempo ?? 120),
         mood: effectiveContext.mood,
@@ -1384,6 +1386,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           : parseList(effectiveContext.vocalEffects),
         songStructure: effectiveContext.structureType,
         energy: String(effectiveContext.energyLevel ?? ''),
+        instruments: (suggestionContext.genre_profile?.instrumentation ?? []).slice(0, 8).join(', '),
+        rhythmPattern: suggestionContext.genre_profile?.rhythm_pattern ?? '',
+        inferredMood: inferredMood,
+        inferredTempo: String(inferredTempo),
+        instrumentalOnly: !!effectiveContext.instrumentalOnly,
       };
 
       let edgeResult: AiSuggestionResult | null = null;

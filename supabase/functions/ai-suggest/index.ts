@@ -96,40 +96,40 @@ const FIELD_PROMPTS: Record<string, string> = {
   albumName: "Suggest a short, evocative album title (2-5 words max). Be creative and memorable. Return ONLY the title, no descriptions or explanations.",
   albumVibe: "Write a thorough, Suno/Udio-grade album-wide vibe description. No upper word limit — be as detailed as the album warrants (minimum 8 sentences). Cover the overarching sonic palette, the specific genres/subgenres each track set could explore, recurring instruments and textures across the album, the production aesthetic (warm tape vs glossy digital vs gritty lo-fi etc.), the emotional arc from opener to closer, the listener scene the album should evoke, and reference artists per track set. Be vivid and specific — name real instruments, real production techniques, and real reference artists.",
   trackName: "Suggest a creative, evocative track name for a music piece. Return ONLY the title (2-5 words). No descriptions.",
-  prompt: "Write a thorough, Suno/Udio-grade music generation prompt. No upper word limit — be as detailed as the brief warrants (minimum 8 sentences). Be specific and dense. Cover: (1) precise genre + subgenre, (2) concrete tempo in BPM and key/scale, (3) every relevant named instrument and sound design element with its role in the mix, (4) full vocal description (gender, register, technique, language, intensity, phrasing) OR explicit instrumental note, (5) production adjectives covering low/mid/high end, stereo image, reverb/delay sizing, and saturation/compression character, (6) 2-3 reference artists, (7) a vivid scene or emotional arc the track should evoke, (8) the dynamic arc across sections (intro/verse/pre/chorus/bridge/outro). No generic adjectives alone — every claim should be concrete.",
-  genres: "Suggest 2-4 fitting music genres from any style worldwide. Return as comma-separated list.",
-  lyrics: "Suggest lyrical themes, storylines, or actual lyrics. Be poetic and emotionally resonant.",
-  artistInspiration: "Suggest 2-3 artists whose style would complement this track. Include diverse influences.",
-  vocalLanguage: "Suggest vocal language(s) that would best fit this track's genre and mood.",
-  videoStyle: "Suggest a visual style for a music video. Be specific about colors, movements, and aesthetic.",
+  prompt: "Write a thorough, Suno/Udio-grade music generation prompt. No upper word limit — be as detailed as the brief warrants (minimum 10 sentences). Be specific and dense. Cover ALL of these in this exact order: (1) precise genre + subgenre (e.g. 'Punjabi drill with UK garage swing', not just 'pop'), (2) concrete tempo in BPM and musical key/scale (e.g. '142 BPM in F# minor, Dorian mode'), (3) time signature and groove feel (e.g. '4/4 with swung 16th-note hi-hats'), (4) chord progression in roman numerals with voicing hints (e.g. 'i – bVI – bIII – bVII, voiced with add9 extensions'), (5) 5-8 specific named instruments with their stereo position and frequency role (e.g. 'distorted electric guitar panned L60/R60 occupying 2-5kHz', 'sub bass mono center at 40-55Hz'), (6) rhythmic pattern description (kick/snare/hat placement, swing amount, ghost notes), (7) full vocal description: gender, register, technique, language, intensity 1-10, phrasing style, processing chain (compression ratio, reverb type/decay, delay timing, EQ boosts) — OR explicit 'INSTRUMENTAL: no vocals, lead melody carried by [instrument]', (8) production palette: specific adjectives for low end, mid range, high end, stereo image width percentage, reverb/delay sizing in ms, saturation/compression character, (9) 2-3 reference artists with WHAT SPECIFICALLY to take from each (e.g. 'Travis Scott's layered ad-lib technique, Radiohead's textural guitar processing'), (10) a vivid 2-3 sentence scene the listener should physically feel (temperature, light, texture, emotion), (11) the full dynamic arc across all sections with energy percentages and arrangement changes per section (intro 30% → verse 55% → pre-chorus 75% → chorus 100% → bridge 40% → final chorus 110% → outro 25%), (12) mix targets: LUFS, true peak, stereo width, mono bass cutoff, reverb tail timing relative to BPM. Every adjective must be paired with a specific instrument, technique, or measurable value — no generic words alone.",
+  genres: "Suggest 2-4 fitting music genres from any style worldwide, with at least one specific subgenre. Return as comma-separated list (e.g. 'Lo-fi Hip Hop, Neo-Soul, Jazzy Boom Bap').",
+  lyrics: "Suggest lyrical themes, storylines, or actual lyrics. Be poetic and emotionally resonant. Include: central narrative conflict, key imagery/metaphors, suggested rhyme scheme per section, and syllable density guidance for the tempo.",
+  artistInspiration: "Suggest 2-3 artists whose style would complement this track. For each artist, specify WHAT to take from them (e.g. 'Billie Eilish — whispered vocal intimacy and bass-heavy minimal production'). Include diverse influences across eras/regions.",
+  vocalLanguage: "Suggest vocal language(s) that would best fit this track's genre, mood, and cultural context. If multilingual, specify which language for which section.",
+  videoStyle: "Suggest a detailed visual style for a music video. Cover: color grading/LUT (specific palette), camera movement types per section (tracking/handheld/drone), edit rhythm synced to BPM, lighting style, recurring visual motifs, aspect ratio, and post-production textures (grain, lens effects). Minimum 4 sentences.",
   tempoBpm: "Suggest a BPM value (60-200) that fits the genre, mood, and energy of this track. Return ONLY a number.",
   duration: "Suggest a duration in seconds (30-600) that fits the genre and structure. Return ONLY a number.",
-  vocalStructure: "Suggest a vocal structure for this song using section names separated by ' – '. Consider lyrics length, genre, and mood.",
-  vocalStyle: "Suggest a vocal style that fits the genre and lyrics. Return a short description like 'Female Vocal', 'Rap Vocal', 'Ethereal Choir', etc.",
+  vocalStructure: "Suggest a vocal structure for this song using section names separated by ' – '. Consider lyrics length, genre, and mood. Include vocal arrangement details per section (e.g. 'Verse 1 (solo lead) – Pre-Chorus (lead + harmony 3rd above) – Chorus (doubled lead + choir)').",
+  vocalStyle: "Suggest a specific vocal style that fits the genre and emotional context. Return a descriptive phrase (e.g. 'Breathy female alto with melismatic R&B runs', 'Aggressive male baritone rap with double-time flow').",
   vocalIntensity: "Suggest a vocal intensity level from 1-10 based on the track's energy. Return ONLY a number.",
-  vocalEffects: "Suggest vocal effects as a comma-separated list. Choose from or create effects like Reverb, Delay, Chorus, Distortion, Autotune, Vocoder, or other creative effects that fit the genre.",
-  mood: "Suggest a mood/atmosphere description that fits the genre and context. Be evocative and specific.",
-  songStructure: "Suggest a song structure using section names connected by ' → '. Be creative and genre-appropriate.",
+  vocalEffects: "Suggest a specific vocal processing chain as a comma-separated list. Include real effect types with parameters where relevant (e.g. 'Plate Reverb (2s decay), 1/4-note Stereo Delay, Gentle LA-2A Compression, De-esser at 7kHz, +2dB Presence at 3.5kHz').",
+  mood: "Suggest a mood/atmosphere description that fits the genre and context. Be vivid and specific — describe the emotional contour across sections (not just a single adjective), the production choices that reinforce the mood (reverb size, harmonic spacing, rhythmic density), and the scene the listener should inhabit. Minimum 3 sentences.",
+  songStructure: "Suggest a song structure using section names connected by ' → '. Include bar counts and energy levels per section (e.g. 'Intro (8 bars, 30%) → Verse 1 (16 bars, 55%) → Pre-Chorus (8 bars, 75%) → Chorus (16 bars, 100%) → Bridge (8 bars, 40%) → Final Chorus (16 bars, 110%) → Outro (8 bars, 25%)').",
 };
 
 const ENHANCE_PROMPTS: Record<string, string> = {
   albumName: "Take this album name and make it more evocative and memorable. Return ONLY the improved title (2-5 words), no descriptions.",
   albumVibe: "Expand this album vibe into a thorough, Suno/Udio-grade prompt. No upper word limit — be as detailed as the brief warrants (minimum 8 sentences). Preserve the user's core idea, then layer in: specific subgenres for each track set, named instruments and textures, production aesthetic adjectives, emotional arc opener-to-closer, listener scene, and reference artists per set. Replace any generic word with a concrete one — every adjective must be paired with a specific instrument, technique, or reference.",
   trackName: "Take this track name and make it more evocative, unique, and memorable. Return ONLY the improved title (2-5 words), no descriptions.",
-  prompt: "Expand this prompt into a thorough, Suno/Udio-grade music generation prompt. No upper word limit — be as detailed as the brief warrants (minimum 8 sentences). Preserve the user's core intent. Add precise BPM + key, every relevant named instrument with its mix role, full vocal description (or instrumental note), production adjectives covering low/mid/high end + stereo image + reverb/delay + saturation, 2-3 reference artists, a vivid scene/emotional arc, and the dynamic arc across sections. Replace every generic adjective with a concrete claim.",
-  genres: "Refine these genre selections — suggest more specific sub-genres or complementary genres. Return as comma-separated list.",
-  lyrics: "Enhance these lyrics/themes — add more poetic depth, stronger imagery, better flow. Keep the core meaning.",
-  artistInspiration: "Expand on these artist inspirations — add complementary artists for a richer sonic palette.",
-  vocalLanguage: "Refine the language selection — suggest languages that add unique character while fitting the genre.",
-  videoStyle: "Enhance this video style — add specific visual techniques, color palettes, camera movements.",
+  prompt: "Expand this prompt into a thorough, Suno/Udio-grade music generation prompt. No upper word limit — minimum 10 sentences. Preserve the user's core intent as the creative anchor. Then add ALL of these missing details: (1) precise BPM + musical key + scale/mode, (2) time signature + groove feel, (3) chord progression in roman numerals, (4) 5-8 named instruments with stereo position and frequency role, (5) rhythmic pattern details (kick/snare/hat placement), (6) full vocal chain: technique, register, processing (compression, reverb type/decay in seconds, delay timing synced to BPM, EQ boosts at specific frequencies), (7) production palette with measurable values (stereo width %, reverb decay in seconds, saturation amount), (8) 2-3 reference artists with what SPECIFICALLY to take from each, (9) vivid 2-sentence scene with sensory detail, (10) full section-by-section dynamic arc with energy percentages, (11) mix targets (LUFS, true peak, mono bass cutoff Hz). Replace every generic adjective with a concrete, measurable claim.",
+  genres: "Refine these genre selections — suggest more specific sub-genres or complementary genres that add texture. Return as comma-separated list.",
+  lyrics: "Enhance these lyrics/themes — add more poetic depth, stronger sensory imagery, better rhythmic flow. Preserve the core meaning while adding: specific metaphors, suggested rhyme scheme (ABAB/AABB), syllable density guidance for the tempo, and emotional arc across sections.",
+  artistInspiration: "Expand on these artist inspirations — for each artist, specify WHAT to take from them (production technique, vocal style, arrangement approach). Add 1-2 complementary artists from different eras or regions for contrast.",
+  vocalLanguage: "Refine the language selection — suggest languages that add unique character while fitting the genre. If multilingual, specify which language for which section (e.g. 'Hindi verses, English chorus').",
+  videoStyle: "Enhance this video style with specific production details: color grading/LUT name, camera movement types per song section, edit rhythm synced to BPM (cuts per bar), lighting style, recurring visual motifs, and post-production textures. Minimum 4 sentences.",
   tempoBpm: "Adjust this BPM slightly to improve musical fit. Return ONLY a number between 60-200.",
   duration: "Adjust this duration to better fit the genre and structure. Return ONLY a number in seconds between 30-600.",
-  vocalStructure: "Refine this vocal structure with additional sections. Return section names separated by ' – '.",
-  vocalStyle: "Refine this vocal style to be more specific and nuanced. Add descriptive modifiers.",
+  vocalStructure: "Refine this vocal structure with per-section vocal arrangement details (solo lead, doubled, harmony stack, choir, ad-libs). Return section names separated by ' – '.",
+  vocalStyle: "Refine this vocal style to be more specific — include register (soprano/alto/tenor/baritone/bass), technique (belt/mixed/falsetto/rap/whisper), and genre-specific nuance. Return a descriptive phrase.",
   vocalIntensity: "Adjust this intensity value based on the genre and energy context. Return ONLY a number between 1-10.",
-  vocalEffects: "Refine these vocal effects — add complementary effects or replace with better-fitting ones. Return as comma-separated list.",
-  mood: "Enhance this mood description — make it more vivid, specific, and evocative.",
-  songStructure: "Refine this song structure — add or adjust sections for better dynamics. Return sections connected by ' → '.",
+  vocalEffects: "Refine these vocal effects into a complete processing chain with parameters — include compression (ratio, GR), reverb (type, decay in seconds), delay (timing synced to BPM), EQ (frequency, gain), and any genre-specific processing. Return as comma-separated list.",
+  mood: "Enhance this mood description — describe the emotional contour across sections (not just one adjective), the specific production choices that reinforce it (reverb size = intimacy vs. epic, harmonic spacing = warmth vs. tension, rhythmic density = urgency vs. contemplation), and the physical scene the listener should inhabit. Minimum 3 sentences.",
+  songStructure: "Refine this song structure — include bar counts and energy levels per section (e.g. 'Intro (8 bars, 30%) → Verse (16 bars, 55%)'). Ensure the dynamic arc has clear build, climax, and resolution. Return sections connected by ' → '.",
 };
 
 const NEW_PROMPTS: Record<string, string> = {
@@ -156,21 +156,29 @@ function buildContext(context: any): string {
   if (!context) return "";
   const parts: string[] = [];
   if (context.title) parts.push(`Track Name: ${context.title}`);
-  if (context.musicPrompt) parts.push(`Prompt: ${context.musicPrompt}`);
-  if (context.genres?.length) parts.push(`Genres: ${context.genres.join(", ")}`);
-  if (context.durationSeconds) parts.push(`Duration: ${Math.floor(context.durationSeconds / 60)}m ${context.durationSeconds % 60}s`);
-  if (context.vocalLanguages?.length) parts.push(`Languages: ${context.vocalLanguages.join(", ")}`);
-  if (context.lyrics) parts.push(`Lyrics/Theme: ${context.lyrics}`);
-  if (context.artistInspiration) parts.push(`Artist Inspiration: ${context.artistInspiration}`);
-  if (context.tempoBpm) parts.push(`Tempo: ${context.tempoBpm} BPM`);
-  if (context.mood) parts.push(`Mood: ${context.mood}`);
-  if (context.musicalKey) parts.push(`Key: ${context.musicalKey}`);
-  if (context.vocalStructure) parts.push(`Vocal Structure: ${context.vocalStructure}`);
-  if (context.vocalStyle) parts.push(`Vocal Style: ${context.vocalStyle}`);
+  if (context.musicPrompt) parts.push(`Music Prompt/Description: ${context.musicPrompt}`);
+  if (context.genres?.length) parts.push(`Primary Genres: ${context.genres.join(", ")}`);
+  if (context.subgenres?.length) parts.push(`Subgenres: ${context.subgenres.join(", ")}`);
+  if (context.durationSeconds) parts.push(`Duration: ${Math.floor(context.durationSeconds / 60)}m ${context.durationSeconds % 60}s (${context.durationSeconds} seconds total)`);
+  if (context.vocalLanguages?.length) parts.push(`Vocal Languages: ${context.vocalLanguages.join(", ")}`);
+  if (context.lyrics) parts.push(`Lyrics/Lyric Content: ${context.lyrics}`);
+  if (context.lyricTheme) parts.push(`Lyric Theme Direction: ${context.lyricTheme}`);
+  if (context.artistInspiration) parts.push(`Artist/Producer Inspiration: ${context.artistInspiration}`);
+  if (context.tempoBpm) parts.push(`Tempo: ${context.tempoBpm} BPM (quarter-note = ${Math.round(60000 / context.tempoBpm)}ms)`);
+  if (context.mood) parts.push(`Mood/Atmosphere: ${context.mood}`);
+  if (context.inferredMood && context.inferredMood !== context.mood) parts.push(`Inferred Mood (from genre/tempo analysis): ${context.inferredMood}`);
+  if (context.musicalKey) parts.push(`Musical Key: ${context.musicalKey}`);
+  if (context.vocalStructure) parts.push(`Vocal Arrangement Structure: ${context.vocalStructure}`);
+  if (context.vocalStyle) parts.push(`Vocal Style/Technique: ${context.vocalStyle}`);
   if (context.vocalIntensity) parts.push(`Vocal Intensity: ${context.vocalIntensity}/10`);
-  if (context.vocalEffects?.length) parts.push(`Vocal Effects: ${context.vocalEffects.join(", ")}`);
-  if (context.songStructure) parts.push(`Song Structure: ${context.songStructure}`);
-  return parts.length > 0 ? `\n\nContext from other fields:\n${parts.join("\n")}` : "";
+  if (context.vocalEffects?.length) parts.push(`Vocal Processing Chain: ${context.vocalEffects.join(", ")}`);
+  if (context.songStructure) parts.push(`Song Structure/Arrangement: ${context.songStructure}`);
+  if (context.energy) parts.push(`Energy Level: ${context.energy}/10`);
+  if (context.instruments) parts.push(`Instruments/Sound Design: ${context.instruments}`);
+  if (context.rhythmPattern) parts.push(`Rhythm Pattern: ${context.rhythmPattern}`);
+  if (context.inferredTempo && context.inferredTempo !== String(context.tempoBpm)) parts.push(`Inferred Tempo (from genre analysis): ${context.inferredTempo} BPM`);
+  if (context.instrumentalOnly) parts.push(`Mode: INSTRUMENTAL ONLY (no vocals)`);
+  return parts.length > 0 ? `\n\nFull creative context from user's filled fields (use ALL of these to inform your suggestion — the more fields filled, the more specific and tailored your response should be):\n${parts.join("\n")}` : "";
 }
 
 function buildEntropyDirective(seed: number, previousSuggestions: string[], requestNonce?: string): string {
