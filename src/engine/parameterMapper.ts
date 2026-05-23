@@ -100,14 +100,71 @@ function clampPromptLength(prompt: string): string {
 }
 
 function buildGenerationPrompt(input: NormalizedInput, audio: AudioParameters, visual: VisualProfile): string {
-  const instrumentation = sanitizeList(audio.instrumentation, 'balanced instrumentation').join(', ')
+  const instrumentation = sanitizeList(audio.instrumentation, 'balanced instrumentation')
   const vocalLanguages = sanitizeList(input.vocal.languages, 'Instrumental').join(', ')
   const vocalEffects = sanitizeList(input.vocal.effects, 'none').join(', ')
-  const artists = sanitizeList(input.style_reference.map((entry) => entry.artist), 'Unknown reference').join(', ')
+  const artists = input.style_reference.filter(e => e.artist !== 'Unknown')
+  const artistStr = artists.length > 0
+    ? artists.map(a => `${a.artist} (${a.production_style || 'production style'})`).join(', ')
+    : 'contemporary production aesthetic'
   const theme = input.lyrics.theme || 'open narrative'
   const musicPrompt = input.music_prompt || `${input.mood.label} ${input.genre_profile.primary} composition`
+  const secondary = input.genre_profile.secondary
+  const secondaryStr = secondary.length > 0 ? ` fused with ${secondary.slice(0, 2).join(' and ')}` : ''
+  const genre = input.genre_profile.primary
 
-  const prompt = `${input.track_name || 'Untitled'} — ${input.mood.label} ${input.genre_profile.primary} track. ${musicPrompt}. Instrumentation: ${instrumentation}. Structure: ${audio.structure.raw}. Tempo: ${audio.tempo_bpm} BPM. Vocal: ${input.vocal.arrangement} ${input.vocal.style || 'mixed voice'} in ${vocalLanguages}, intensity ${input.vocal.intensity}/10, effects: ${vocalEffects}. Mood: valence ${input.mood.valence}/10, arousal ${input.mood.arousal}/10, tension ${input.mood.tension}/10. Style references: ${artists}. Mixing: ${audio.mixing_style}. Theme: ${theme}. Visual: ${visual.style ?? 'none'} ${visual.visual_direction ?? ''}.`
+  const mixingPalette: Record<string, string> = {
+    edm: 'sub bass mono below 120Hz, sidechain compression 6dB on pads to kick, wide supersaw stereo field, limiter at -0.5dB TP, -10 LUFS integrated',
+    classical: 'natural concert hall reverb (RT60 2.5s), Decca tree stereo imaging, no bus compression, dynamic range preserved (peak-to-RMS < 12dB), -18 LUFS integrated',
+    'hip-hop': '808 sub fundamental 40-55Hz mono center, vocal at -3dB relative to bed, sidechained pads, glossy hi-hat presence at 12kHz, warm tape saturation, -12 LUFS integrated',
+    pop: 'vocal-forward mix at -3dB to -6dB above bed, punchy kick with 3-5kHz click, stereo width 75%, master bus glue compression 2dB GR, -14 LUFS integrated',
+    rock: 'guitar crunch occupying 1-4kHz, room mic blended 20%, bass guitar locked to kick, 2-bus compression 2-3dB GR, -12 LUFS integrated',
+    metal: 'high-gain guitars panned L80/R80, triggered kick at 60Hz, bass drop-tuned following root, wall of sound density, -10 LUFS integrated',
+    jazz: 'warm tape 15ips, intimate room 1.2s plate reverb, gentle compression 1.5:1, brushed drums with room spill, -16 LUFS integrated',
+    rnb: 'smooth sub bass -8dB below kick, stacked vocal harmonies wide stereo, Wurlitzer/Rhodes with chorus, warm tape saturation, -14 LUFS integrated',
+    ambient: 'algorithmic reverb 6s+ decay, slow attack pads 200ms+, stereo width 100%, no hard transients, soft tube saturation, -20 LUFS integrated',
+    folk: 'ribbon mic warmth on acoustic guitar, intimate room IR, gentle 2-bus compression 1.5:1, natural upright bass resonance, -16 LUFS integrated',
+    trap: '808 sub with pitch slides, trap hi-hat triplet rolls velocity-varied, clap layered with noise transient, dark wide pads, -10 LUFS integrated',
+    house: '909-style four-on-the-floor kick, offbeat open hi-hat, warm Moog filter sweeps, detuned pad ±7 cents L/R, classic dub delay, -12 LUFS integrated',
+  }
+  const detailedMix = mixingPalette[genre] ?? `balanced mix, mono bass below 120Hz, stereo width 70%, master bus compression 2dB GR, -14 LUFS integrated`
+
+  const vocalDesc = input.vocal.arrangement === 'none'
+    ? 'Fully instrumental — no vocals. Lead melody carried by primary instrument with counter-melodies for harmonic interest.'
+    : `${input.vocal.arrangement} ${input.vocal.style || 'mixed voice'} vocal in ${vocalLanguages} at intensity ${input.vocal.intensity}/10. Processing: ${vocalEffects}. Phrasing locked to ${audio.tempo_bpm} BPM groove with breath placement on beats 4 and 8.`
+
+  const instrumentDetails = instrumentation.map((inst, i) => {
+    const pos = i === 0 ? 'center' : i % 2 === 1 ? 'left' : 'right'
+    return `${inst} (${pos})`
+  }).join('; ')
+
+  const sections = audio.structure.raw.split(/[-–→]/).map(s => s.trim()).filter(Boolean)
+  const sectionArc = sections.map((s, i) => {
+    const energy = Math.round(30 + (i / Math.max(1, sections.length - 1)) * 70)
+    const isChorus = /chorus|drop|hook|climax/i.test(s)
+    const isBridge = /bridge|break/i.test(s)
+    const isIntro = /intro/i.test(s)
+    const isOutro = /outro/i.test(s)
+    const e = isChorus ? '100%' : isBridge ? '40%' : isIntro ? '30%' : isOutro ? '25%' : `${energy}%`
+    return `${s} (${e} energy)`
+  }).join(' → ')
+
+  const delayMs = Math.round(60000 / audio.tempo_bpm)
+
+  const prompt = [
+    `"${input.track_name || 'Untitled'}" — ${input.mood.label} ${genre} track${secondaryStr}.`,
+    musicPrompt !== `${input.mood.label} ${genre} composition` ? `Creative direction: ${musicPrompt}.` : '',
+    `${audio.tempo_bpm} BPM, ${audio.rhythm_pattern}. Energy level: ${audio.energy}/10.`,
+    `Arrangement: ${instrumentDetails}. Each element in a distinct frequency pocket and stereo position.`,
+    `${vocalDesc}`,
+    `Lyrical direction: ${theme}. Rhyme scheme: ABAB on verses, AABB on chorus, free on bridge.`,
+    `Production and mix: ${detailedMix}. Sound design: ${audio.sound_design_style}.`,
+    `Reference artists: ${artistStr}.`,
+    `Dynamic arc: ${sectionArc}.`,
+    `Mix targets: mono bass below 120Hz, reverb/delay tails timed to tempo (1/4 note = ${delayMs}ms), vocal-instrumental separation, defined drum transients at 3-5kHz, stereo width on pads and FX, master brickwall limiter at -1dB true peak.`,
+    `Mood profile: valence ${input.mood.valence}/10, arousal ${input.mood.arousal}/10, tension ${input.mood.tension}/10.`,
+    visual.enabled ? `Visual direction: ${visual.style ?? 'cinematic'}, ${visual.color_palette ?? 'genre-matched palette'}, ${visual.motion_style ?? 'beat-synced'}.` : '',
+  ].filter(Boolean).join(' ')
 
   return clampPromptLength(prompt)
 }

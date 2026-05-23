@@ -29,7 +29,7 @@ export const VOCAL_INTENSITY_RANGE = { MIN: 1, MAX: 10 } as const;
 export const DURATION_RANGE = { MIN: 30, MAX: 600 } as const;
 export const ALBUM_SONG_COUNT_RANGE = { MIN: 2, MAX: 20 } as const;
 export const MAX_INSTRUMENTATION_COUNT = 10 as const;
-export const GENERATION_PROMPT_WORD_RANGE = { MIN: 80, MAX: 150 } as const;
+export const GENERATION_PROMPT_WORD_RANGE = { MIN: 100, MAX: 350 } as const;
 // Suno/Udio-grade prompts. Floor (MIN) prevents one-liners; MAX is a soft
 // hint only — the local fallback now skips the truncation step entirely
 // for prose fields (see suggestEngine.suggestMusicPrompt). Edge-function
