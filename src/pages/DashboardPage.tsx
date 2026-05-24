@@ -358,6 +358,24 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
 
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
 
+  /** Fetch a URL with automatic fallback to the download proxy for cross-origin resources. */
+  const fetchWithProxy = async (url: string, filename: string): Promise<Blob> => {
+    // blob: and data: URLs are always same-origin
+    if (url.startsWith('blob:') || url.startsWith('data:')) {
+      const res = await fetch(url);
+      return res.blob();
+    }
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.blob();
+    } catch {
+      const proxyRes = await fetch(`/api/download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`);
+      if (!proxyRes.ok) throw new Error(`Proxy failed: ${proxyRes.status}`);
+      return proxyRes.blob();
+    }
+  };
+
   const handleDownloadAll = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (completedTracks.length === 0) return;
@@ -366,21 +384,20 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
       toast.loading('Preparing download...', { id: 'download' });
       const zip = new JSZip();
       await Promise.all(completedTracks.map(async (track) => {
+        const safeName = (track.title || 'track').replace(/[^a-zA-Z0-9_\- ]/g, '').trim() || 'track';
         if (track.audioUrl) {
           try {
-            const res = await fetch(track.audioUrl);
-            const blob = await res.blob();
-            zip.file(`${track.title}.wav`, blob);
+            const blob = await fetchWithProxy(track.audioUrl, `${safeName}.wav`);
+            zip.file(`${safeName}.wav`, blob);
           } catch (err) {
             console.warn(`Failed to fetch audio for "${track.title}"`, err);
           }
         }
         if (track.videoUrl) {
           try {
-            const res = await fetch(track.videoUrl);
-            const blob = await res.blob();
+            const blob = await fetchWithProxy(track.videoUrl, `${safeName}.mp4`);
             const universalMp4 = await ensureUniversalMp4Blob(blob);
-            zip.file(`${track.title}.mp4`, universalMp4);
+            zip.file(`${safeName}.mp4`, universalMp4);
           } catch (err) {
             console.warn(`Failed to fetch video for "${track.title}"`, err);
           }
@@ -390,12 +407,12 @@ const CreationCard: React.FC<CreationCardProps> = ({ creation, index, formatDura
       const blobUrl = URL.createObjectURL(content);
       const a = document.createElement('a');
       a.href = blobUrl;
-      a.download = `${creation.title}.zip`;
+      a.download = `${creation.title || 'album'}.zip`;
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
       toast.success('Download started', { id: 'download' });
     } catch {
       toast.error('Download failed', { id: 'download' });

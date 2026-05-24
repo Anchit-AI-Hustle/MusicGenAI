@@ -639,7 +639,10 @@ export async function generateVideoFromAudio(
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Canvas 2D context creation failed — video rendering is not supported in this environment.');
+  }
 
   // Decode audio for analysis. Fetch can hang silently when the audio URL
   // is unreachable (Supabase Storage CORS misconfigured, blob: URL lost
@@ -648,7 +651,12 @@ export async function generateVideoFromAudio(
   // Emit progress before AND after the fetch so the UI shows liveness, and
   // bail loudly if the fetch never resolves.
   onProgress?.({ stage: 'analyzing_beat_structure', progress: 0.04 });
-  const audioContext = new AudioContext();
+  let audioContext: AudioContext;
+  try {
+    audioContext = new AudioContext();
+  } catch (acErr) {
+    throw new Error(`AudioContext creation failed — video cannot proceed. ${acErr instanceof Error ? acErr.message : 'Browser may be in restricted mode.'}`);
+  }
   const FETCH_TIMEOUT_MS = 45_000;
   const isBlobUrl = audioUrl.startsWith('blob:');
 

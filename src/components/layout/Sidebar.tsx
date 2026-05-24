@@ -44,14 +44,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
   const showLabels = !isCollapsed || isMobile;
 
   const MobileMenuButton = () => (
-    <button onClick={() => setIsMobileOpen(true)} className="fixed top-4 left-4 z-40 p-3 rounded-2xl bg-black/40 backdrop-blur-xl border border-white/10 lg:hidden shadow-2xl">
+    <button onClick={() => setIsMobileOpen(true)} className="fixed top-[env(safe-area-inset-top,16px)] left-4 z-40 p-3 mt-3 rounded-2xl bg-black/60 backdrop-blur-xl border border-white/10 lg:hidden shadow-2xl">
       <Menu className="w-5 h-5 text-white" />
     </button>
   );
 
   const sidebarContent = (
     <aside
-      style={{ position: 'fixed', top: 0, left: 0, bottom: 0 }}
+      style={{ position: 'fixed', top: 'env(safe-area-inset-top, 0px)', left: 0, bottom: 0 }}
       className={cn(
         // Sidebar is anchored to the viewport (position: fixed, inset-y-0)
         // and clips its own content (overflow-hidden). Page scroll never

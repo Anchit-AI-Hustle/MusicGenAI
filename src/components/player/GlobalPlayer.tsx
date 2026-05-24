@@ -248,8 +248,20 @@ export const GlobalPlayer: React.FC<GlobalPlayerProps> = ({ sidebarOffsetClass =
 
   const triggerDownload = useCallback(async (url: string, filename: string) => {
     try {
-      const response = await fetch(url);
-      const blob = await response.blob();
+      // Try direct fetch first, fall back to download proxy for cross-origin
+      let blob: Blob;
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`${response.status}`);
+        blob = await response.blob();
+      } catch {
+        // blob: and data: URLs should never reach the proxy
+        if (url.startsWith('blob:') || url.startsWith('data:')) throw new Error('Local URL fetch failed');
+        const proxyResponse = await fetch(`/api/download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`);
+        if (!proxyResponse.ok) throw new Error(`Proxy: ${proxyResponse.status}`);
+        blob = await proxyResponse.blob();
+      }
+
       let blobToDownload = blob;
       let finalFilename = filename;
       const isVideoFile = blob.type.startsWith('video/') || /\.(mp4|webm)$/i.test(filename);
@@ -268,7 +280,7 @@ export const GlobalPlayer: React.FC<GlobalPlayerProps> = ({ sidebarOffsetClass =
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
     } catch {
       window.open(url, '_blank');
     }

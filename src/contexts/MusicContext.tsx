@@ -920,11 +920,31 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (audioDbErr) console.error('[tracks] audio finalize', trackId, audioDbErr.message);
       }
 
-      // 7. Handle Video. Works with both Supabase public URLs and local
+      // 7. Generate lyric cues for video subtitles (if we have lyrics)
+      let lyricCues: LyricCue[] = [];
+      if (runtimeInput.lyricsText) {
+        try {
+          lyricCues = generateLyricCues(
+            runtimeInput.lyricsText,
+            instrumentalResult.compositionGraph.songStructure,
+            intent.durationSeconds,
+            {
+              tempo: intent.tempo,
+              vocalStyle: inferVocalStyle(intent.genres || [intent.genre], runtimeInput.vocalStyle),
+              vocalIntensity: runtimeInput.vocalIntensity || 5,
+              language: runtimeInput.vocalLanguage || 'English',
+            },
+          );
+        } catch (cueErr) {
+          console.warn('[LyricCues] Generation failed — video will have no subtitles:', cueErr);
+        }
+      }
+
+      // 8. Handle Video. Works with both Supabase public URLs and local
       // blob: URLs — the video generator fetches from whatever URL we have,
       // and blob: URLs are valid for same-tab fetch() calls.
       if (runtimeInput.videoStyle) {
-        runAsyncVideoRender(trackId, creationId, runtimeInput, trackTitle, publicAudioUrl, dna, []).catch(console.warn);
+        runAsyncVideoRender(trackId, creationId, runtimeInput, trackTitle, publicAudioUrl, dna, lyricCues).catch(console.warn);
       }
 
       return 'completed';

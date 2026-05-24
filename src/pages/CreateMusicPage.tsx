@@ -1183,68 +1183,81 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
 
   const handleDownload = async (audioUrl?: string, trackTitle?: string) => {
     if (!audioUrl) return;
+    const safeName = (trackTitle || 'track').replace(/[^a-zA-Z0-9_\- ]/g, '').trim() || 'track';
 
     try {
       toast.loading('Preparing download...', { id: 'download-audio' });
-      
-      if (audioUrl.startsWith("data:")) {
+
+      // data: and blob: URLs can be downloaded directly in-browser
+      if (audioUrl.startsWith("data:") || audioUrl.startsWith("blob:")) {
         const response = await fetch(audioUrl);
         const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        triggerDownload(url, `musevibe-${trackTitle}.mp3`);
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        const ext = blob.type.includes('wav') ? 'wav' : blob.type.includes('ogg') ? 'ogg' : 'mp3';
+        const objectUrl = URL.createObjectURL(blob);
+        triggerDownload(objectUrl, `musevibe-${safeName}.${ext}`);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
         toast.success('Download started', { id: 'download-audio' });
         return;
       }
 
-      if (audioUrl.startsWith("blob:")) {
-        triggerDownload(audioUrl, `musevibe-${trackTitle}.wav`);
-        toast.success('Download started', { id: 'download-audio' });
-        return;
+      // HTTPS URLs: try direct fetch first (works for same-origin and CORS-enabled),
+      // fall back to the download proxy for cross-origin Supabase/CDN URLs
+      const filename = `musevibe-${safeName}.wav`;
+      let blob: Blob;
+      try {
+        const directResponse = await fetch(audioUrl);
+        if (!directResponse.ok) throw new Error(`${directResponse.status}`);
+        blob = await directResponse.blob();
+      } catch {
+        const proxyResponse = await fetch(`/api/download?url=${encodeURIComponent(audioUrl)}&filename=${encodeURIComponent(filename)}`);
+        if (!proxyResponse.ok) throw new Error(`Download proxy failed: ${proxyResponse.status}`);
+        blob = await proxyResponse.blob();
       }
-
-      const response = await fetch(`/api/download?url=${encodeURIComponent(audioUrl)}`);
-      if (!response.ok) throw new Error("Download fetch failed");
-      const blob = await response.blob();
-      const contentType = response.headers.get("content-type") ?? "audio/mpeg";
-      const ext = contentType.includes("wav") ? "wav" : "mp3";
       const objectUrl = URL.createObjectURL(blob);
-      triggerDownload(objectUrl, `musevibe-${trackTitle}.${ext}`);
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+      triggerDownload(objectUrl, filename);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
       toast.success('Download started', { id: 'download-audio' });
     } catch (err) {
       console.error("Download failed:", err);
-      toast.error('Download failed', { id: 'download-audio' });
+      toast.error('Download failed — try right-clicking the player and "Save As"', { id: 'download-audio' });
     }
   };
 
   const handleDownloadVideo = async (videoUrl?: string, trackTitle?: string) => {
     if (!videoUrl) return;
-    
+    const safeName = (trackTitle || 'track').replace(/[^a-zA-Z0-9_\- ]/g, '').trim() || 'track';
+
     try {
       toast.loading('Preparing video download...', { id: 'download-video' });
-      
-      let response;
-      if (videoUrl.startsWith('http')) {
-        response = await fetch(videoUrl);
-      } else {
-        response = await fetch(`/api/download?url=${encodeURIComponent(videoUrl)}`);
+
+      // blob: URLs are already local — fetch directly
+      if (videoUrl.startsWith('blob:')) {
+        const response = await fetch(videoUrl);
+        const blob = await response.blob();
+        const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+        const objectUrl = URL.createObjectURL(blob);
+        triggerDownload(objectUrl, `musevibe-${safeName}-video.${ext}`);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+        toast.success('Video download started', { id: 'download-video' });
+        return;
       }
-      
-      if (!response.ok) throw new Error('Failed to fetch video');
-      
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${trackTitle || 'musevibe'}-video.mp4`;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+      // HTTPS URLs: try direct, fall back to proxy
+      const ext = videoUrl.includes('.webm') ? 'webm' : 'mp4';
+      const filename = `musevibe-${safeName}-video.${ext}`;
+      let blob: Blob;
+      try {
+        const directResponse = await fetch(videoUrl);
+        if (!directResponse.ok) throw new Error(`${directResponse.status}`);
+        blob = await directResponse.blob();
+      } catch {
+        const proxyResponse = await fetch(`/api/download?url=${encodeURIComponent(videoUrl)}&filename=${encodeURIComponent(filename)}`);
+        if (!proxyResponse.ok) throw new Error(`Video proxy failed: ${proxyResponse.status}`);
+        blob = await proxyResponse.blob();
+      }
+      const objectUrl = URL.createObjectURL(blob);
+      triggerDownload(objectUrl, filename);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
       toast.success('Video download started', { id: 'download-video' });
     } catch (err) {
       console.error('Video download failed:', err);

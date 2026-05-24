@@ -85,7 +85,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const loadUser = async () => {
       try {
-        await ensureDefaultAccountExists();
+        await ensureDefaultAccountExists().catch(() => {
+          // Non-critical — don't block session restore if seeding fails
+        });
 
         const savedUserId = localStorage.getItem(AUTH_USER_ID_KEY);
         if (!savedUserId) return;
@@ -96,7 +98,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           .eq('id', savedUserId)
           .maybeSingle();
 
-        if (error || !data) {
+        if (error) {
+          // Network/transient errors should NOT clear the saved session.
+          // Only clear if we successfully queried and the user doesn't exist.
+          console.warn('[Auth] Profile fetch error — keeping session:', error.message);
+          return;
+        }
+
+        if (!data) {
+          // User was deleted from the DB — clear the stale session
           localStorage.removeItem(AUTH_USER_ID_KEY);
           return;
         }
