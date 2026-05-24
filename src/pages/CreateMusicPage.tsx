@@ -231,23 +231,23 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
   const [artistInspiration, setArtistInspiration] = useState('');
   const [isFillingFromPrompt, setIsFillingFromPrompt] = useState(false);
   const [isFillingAlbum, setIsFillingAlbum] = useState(false);
-  const [visualizerEnabled, setGenerateVideo] = useState(false);
+  const [visualizerEnabled, setGenerateVideo] = useState(true);
   const [videoStyle, setVideoStyle] = useState('Cinematic');
   const [tempo, setTempo] = useState(120);
   const [mood, setMood] = useState('Energetic');
-  
+
   const [vocalsEnabled, setVocalsEnabled] = useState(true);
   const [vocalArrangement, setVocalArrangement] = useState('solo');
   const [vocalStyle, setVocalStyle] = useState('Pop Singing');
   const [vocalGender, setVocalGender] = useState<'male' | 'female' | 'neutral'>('neutral');
-  const [vocalIntensity, setVocalIntensity] = useState(5);
+  const [vocalIntensity, setVocalIntensity] = useState(7);
   const [selectedVocalEffects, setSelectedVocalEffects] = useState<string[]>([]);
   const [showVocalEffectsDropdown, setShowVocalEffectsDropdown] = useState(false);
   const [structureType, setStructureType] = useState('Verse-Chorus-Bridge');
   const [lyricsTheme, setLyricsTheme] = useState('');
-  const [energyLevel, setEnergyLevel] = useState(5);
-  const [instruments, setInstruments] = useState<string[]>([]);
-  const [useAiAudio, setUseAiAudio] = useState(false);
+  const [energyLevel, setEnergyLevel] = useState(7);
+  const [instruments, setInstruments] = useState<string[]>(['Piano', 'Drums', 'Synth', 'Bass']);
+  const [useAiAudio, setUseAiAudio] = useState(true);
 
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoStatus, setVideoStatus] = useState<"idle" | "generating" | "polling" | "succeeded" | "failed">("idle");
@@ -297,6 +297,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
     setMood(next.mood);
     setTempo(next.tempo);
     setDuration(next.duration);
+    // Keep HMS fields in sync whenever duration changes through any path
+    setHours(Math.floor(next.duration / 3600));
+    setMinutes(Math.floor((next.duration % 3600) / 60));
+    setSeconds(next.duration % 60);
     setVocalsEnabled(next.vocalsEnabled);
     setVocalStyle(next.vocalStyle);
     setVocalGender(next.vocalGender);
@@ -984,6 +988,88 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
+  /**
+   * Per-field recommendation engine. Returns an optimal value for a given
+   * field based on the current genre + mood, or null if the field is already
+   * at the recommended value. Used to show inline "Recommended: X" badges
+   * so the user sees smart suggestions without having to click auto-fill.
+   */
+  const getRecommendation = useCallback((field: string): { label: string; value: string | number | string[] } | null => {
+    const inferred = inferContextFromDescription(
+      songDescription || `${genre} ${mood}`,
+      'rec-' + genre + '-' + mood,
+    );
+    switch (field) {
+      case 'tempo': {
+        const rec = inferred.tempo ? Math.max(60, Math.min(200, inferred.tempo)) : null;
+        if (!rec || Math.abs(rec - tempo) < 5) return null;
+        return { label: `${rec} BPM`, value: rec };
+      }
+      case 'duration': {
+        const rec = inferDurationFromGenre(genre);
+        if (Math.abs(rec - duration) < 10) return null;
+        return { label: formatDuration(rec), value: rec };
+      }
+      case 'energyLevel': {
+        const rec = inferred.energyLevel ?? 7;
+        if (rec === energyLevel) return null;
+        return { label: `${rec}/10`, value: rec };
+      }
+      case 'instruments': {
+        const rec = parseInstrumentation(inferred.instrumentation);
+        if (rec.length === 0 || JSON.stringify(rec.sort()) === JSON.stringify([...instruments].sort())) return null;
+        return { label: rec.slice(0, 3).join(', ') + (rec.length > 3 ? '…' : ''), value: rec };
+      }
+      case 'vocalStyle': {
+        const rec = inferred.vocalStyle;
+        if (!rec || rec === vocalStyle) return null;
+        return { label: rec, value: rec };
+      }
+      case 'structureType': {
+        const rec = inferred.structureType;
+        if (!rec || rec === structureType) return null;
+        return { label: rec, value: rec };
+      }
+      case 'videoStyle': {
+        const rec = inferred.videoStyle;
+        if (!rec || rec === videoStyle) return null;
+        return { label: rec, value: rec };
+      }
+      default:
+        return null;
+    }
+  }, [songDescription, genre, mood, tempo, duration, energyLevel, instruments, vocalStyle, structureType, videoStyle]);
+
+  /** Inline recommendation chip shown next to fields. Clicking applies the value. */
+  const RecommendationBadge: React.FC<{ field: string }> = ({ field }) => {
+    const rec = getRecommendation(field);
+    if (!rec) return null;
+    const handleApply = () => {
+      if (field === 'instruments' && Array.isArray(rec.value)) {
+        updateSongPrompt({ instruments: rec.value as string[] });
+      } else if (field === 'tempo') {
+        updateSongPrompt({ tempo: rec.value as number });
+      } else if (field === 'duration') {
+        updateSongPrompt({ duration: rec.value as number });
+      } else if (field === 'energyLevel') {
+        updateSongPrompt({ energyLevel: rec.value as number });
+      } else {
+        applyToField(field, String(rec.value));
+      }
+      toast.success(`Applied: ${rec.label}`);
+    };
+    return (
+      <button
+        onClick={handleApply}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 text-[11px] font-semibold text-primary/80 hover:bg-primary/20 hover:text-primary transition-all cursor-pointer"
+        title={`Click to apply recommended value`}
+      >
+        <Sparkles className="w-3 h-3" />
+        Rec: {rec.label}
+      </button>
+    );
+  };
+
   const contextRef = useRef(getFormContext());
   // getFormContext is a fresh closure on every render; listing it would cause
   // an infinite loop. The state deps below cover everything it reads.
@@ -1590,7 +1676,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
                       </div>
                       <Label className="text-white font-bold text-lg tracking-tight">Tempo</Label>
                     </div>
-                    <AiToolbar field="tempo" />
+                    <div className="flex items-center gap-2">
+                      <RecommendationBadge field="tempo" />
+                      <AiToolbar field="tempo" />
+                    </div>
                   </div>
                   <div className="mb-6 flex items-baseline gap-2">
                     <span className="text-4xl font-black text-white tracking-tighter">{tempo}</span>
@@ -1610,7 +1699,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
                       </div>
                       <Label className="text-white font-bold text-lg tracking-tight">Length</Label>
                     </div>
-                    <AiToolbar field="duration" />
+                    <div className="flex items-center gap-2">
+                      <RecommendationBadge field="duration" />
+                      <AiToolbar field="duration" />
+                    </div>
                   </div>
                   <div className="mb-6 flex items-baseline gap-2">
                     <span className="text-4xl font-black text-white tracking-tighter">{formatDuration(duration)}</span>
@@ -1633,7 +1725,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
                       </div>
                       <Label className="text-white font-bold text-lg tracking-tight">Energy</Label>
                     </div>
-                    <AiToolbar field="energyLevel" />
+                    <div className="flex items-center gap-2">
+                      <RecommendationBadge field="energyLevel" />
+                      <AiToolbar field="energyLevel" />
+                    </div>
                   </div>
                   <div className="mb-6 flex items-baseline gap-2">
                     <span className="text-4xl font-black text-white tracking-tighter">{energyLevel}</span>
@@ -1653,7 +1748,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
                       </div>
                       <Label className="text-white font-bold text-lg tracking-tight">Orchestra</Label>
                     </div>
-                    <AiToolbar field="instruments" />
+                    <div className="flex items-center gap-2">
+                      <RecommendationBadge field="instruments" />
+                      <AiToolbar field="instruments" />
+                    </div>
                   </div>
                   <SmartSearchInput
                     value={instruments}
@@ -1700,7 +1798,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
                     </div>
                     <Label className="text-white font-bold text-lg tracking-tight">Song Structure</Label>
                   </div>
-                  <AiToolbar field="structureType" />
+                  <div className="flex items-center gap-2">
+                    <RecommendationBadge field="structureType" />
+                    <AiToolbar field="structureType" />
+                  </div>
                 </div>
                 <SmartSearchInput
                   value={structureType}
@@ -1781,7 +1882,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
                            <div className="space-y-3">
                              <div className="flex items-center justify-between">
                                <Label className="text-xs font-black uppercase tracking-widest text-white/40">Vocal Style</Label>
-                               <AiToolbar field="vocalStyle" />
+                               <div className="flex items-center gap-2">
+                                 <RecommendationBadge field="vocalStyle" />
+                                 <AiToolbar field="vocalStyle" />
+                               </div>
                              </div>
                              <SmartSearchInput
                                value={vocalStyle}
@@ -1878,12 +1982,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
                     <Sparkles className="w-6 h-6 text-black" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-black text-white tracking-tight">AI Audio Mode <span className="text-[10px] font-bold text-primary ml-2 align-middle">BETA · FREE</span></h3>
+                    <h3 className="text-xl font-black text-white tracking-tight">AI Audio Mode <span className="text-[10px] font-bold text-primary ml-2 align-middle">BEST QUALITY · FREE</span></h3>
                     <p className="text-xs font-bold text-white/30 uppercase tracking-widest">Open-source MusicGen · runs in your browser</p>
                     <p className="text-[11px] text-white/40 mt-2 max-w-[480px]">
-                      <strong className="text-white/60">OFF (default):</strong> Uses the built-in procedural synthesizer — fast, works everywhere, lower fidelity.
+                      <strong className="text-white/60">ON (recommended):</strong> Uses Meta's MusicGen AI model to generate realistic instrumentals directly in your browser. First run downloads ~250 MB (cached after). Best with Chrome/Edge + WebGPU. Falls back to built-in engine if your device can't run it.
                       <br />
-                      <strong className="text-white/60">ON:</strong> Uses Meta's MusicGen AI model to generate realistic instrumentals directly in your browser. First run downloads ~250 MB (cached after). Best with Chrome/Edge + WebGPU. Falls back to built-in engine if your device can't run it.
+                      <strong className="text-white/60">OFF:</strong> Uses the built-in procedural synthesizer — fast, works everywhere, lower fidelity.
                     </p>
                   </div>
                 </div>
@@ -1923,7 +2027,10 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
                          <div className="space-y-3">
                            <div className="flex items-center justify-between">
                              <Label className="text-xs font-black uppercase tracking-widest text-white/40">Visual Aesthetic</Label>
-                             <AiToolbar field="videoStyle" />
+                             <div className="flex items-center gap-2">
+                               <RecommendationBadge field="videoStyle" />
+                               <AiToolbar field="videoStyle" />
+                             </div>
                            </div>
                            <SmartSearchInput
                              value={videoStyle}
