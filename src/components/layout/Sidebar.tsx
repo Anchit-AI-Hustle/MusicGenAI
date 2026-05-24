@@ -57,8 +57,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, onAut
         // and clips its own content (overflow-hidden). Page scroll never
         // moves it. The profile section is absolutely pinned to the bottom
         // so it is always visible in the first viewport.
-        "h-screen bg-black/40 backdrop-blur-3xl border-r border-white/10 flex flex-col z-50 shadow-[4px_0_24px_rgba(0,0,0,0.5)] overflow-hidden",
-        isMobile ? "w-72 transition-transform duration-300 ease-out" : cn(isCollapsed ? "w-20" : "w-64", "transition-all duration-300 ease-in-out"),
+        "fixed inset-y-0 left-0 h-screen bg-black/40 backdrop-blur-3xl border-r border-white/10 flex flex-col z-50 shadow-[4px_0_24px_rgba(0,0,0,0.5)] overflow-hidden",
+        isMobile ? "w-72 transition-transform duration-300 ease-out" : cn(isCollapsed ? "w-20" : "w-64", "transition-[width] duration-300 ease-in-out"),
         isMobile && !isMobileOpen && "-translate-x-full",
         isMobile && isMobileOpen && "translate-x-0",
       )}

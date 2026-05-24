@@ -84,7 +84,6 @@
     @apply bg-background text-foreground antialiased;
     font-family: 'Outfit', system-ui, sans-serif;
     background-attachment: fixed;
-    perspective: 1000px;
     background-image: 
       radial-gradient(ellipse at 20% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 50%),
       radial-gradient(ellipse at 80% 20%, rgba(168, 85, 247, 0.1) 0%, transparent 50%),
