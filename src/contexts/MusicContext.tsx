@@ -807,13 +807,26 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         });
       }
 
-      if (runtimeInput.vocalsEnabled && runtimeInput.lyricsText) {
+      // Resolve lyrics early so both vocal synthesis AND lyric cues can use them.
+      // If user didn't provide lyrics but vocals are enabled, auto-generate them.
+      let resolvedLyrics = (runtimeInput.lyricsText || '').trim();
+      if (!resolvedLyrics && runtimeInput.vocalsEnabled) {
+        resolvedLyrics = generateDefaultLyrics(
+          runtimeInput.songDescription || runtimeInput.songTitle || intent.genre,
+          intent.genres || [intent.genre],
+          intent.mood,
+          instrumentalResult.compositionGraph.songStructure,
+          { language: runtimeInput.vocalLanguage || 'English' },
+        );
+      }
+
+      if (runtimeInput.vocalsEnabled && resolvedLyrics) {
         updateTrackLocal(creationId, trackId, { status: 'processing', currentStage: 'Synthesizing vocals', progress: 0.65 });
 
         const { generateVocals, mixVocalsIntoInstrumental, inferVocalStyle } = await import('@/lib/vocal-engine');
 
         const vocalConfig = {
-          lyrics: runtimeInput.lyricsText,
+          lyrics: resolvedLyrics,
           tempo: intent.tempo,
           key: intent.key,
           scale: intent.scale,
@@ -922,10 +935,10 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       // 7. Generate lyric cues for video subtitles (if we have lyrics)
       let lyricCues: LyricCue[] = [];
-      if (runtimeInput.lyricsText) {
+      if (resolvedLyrics) {
         try {
           lyricCues = generateLyricCues(
-            runtimeInput.lyricsText,
+            resolvedLyrics,
             instrumentalResult.compositionGraph.songStructure,
             intent.durationSeconds,
             {
