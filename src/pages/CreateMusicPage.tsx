@@ -247,7 +247,8 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
   const [lyricsTheme, setLyricsTheme] = useState('');
   const [energyLevel, setEnergyLevel] = useState(7);
   const [instruments, setInstruments] = useState<string[]>(['Piano', 'Drums', 'Synth', 'Bass']);
-  const [useAiAudio, setUseAiAudio] = useState(true);
+  // AI Audio always enabled — no user toggle
+  const useAiAudio = true;
 
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoStatus, setVideoStatus] = useState<"idle" | "generating" | "polling" | "succeeded" | "failed">("idle");
@@ -1978,29 +1979,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
                 </div>
               </div>
 
-            {/* AI Audio Mode (free, in-browser open-source MusicGen) */}
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.45 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-primary/30 transition-all">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/20">
-                    <Sparkles className="w-6 h-6 text-black" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-white tracking-tight">AI Audio Mode <span className="text-[10px] font-bold text-primary ml-2 align-middle">BEST QUALITY · FREE</span></h3>
-                    <p className="text-xs font-bold text-white/30 uppercase tracking-widest">Open-source MusicGen · runs in your browser</p>
-                    <p className="text-[11px] text-white/40 mt-2 max-w-[480px]">
-                      <strong className="text-white/60">ON (recommended):</strong> Uses Meta's MusicGen AI model to generate realistic instrumentals directly in your browser. First run downloads ~250 MB (cached after). Best with Chrome/Edge + WebGPU. Falls back to built-in engine if your device can't run it.
-                      <br />
-                      <strong className="text-white/60">OFF:</strong> Uses the built-in procedural synthesizer — fast, works everywhere, lower fidelity.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/5 border border-white/10">
-                  <span className="text-[10px] font-black uppercase text-white/40">AI</span>
-                  <Switch checked={useAiAudio} onCheckedChange={setUseAiAudio} />
-                </div>
-              </div>
-            </motion.div>
+            {/* AI Audio Mode always ON — no user toggle needed */}
 
             {/* Visualizer Cluster */}
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 }} className="glass-card rounded-[32px] p-8 border-white/5 hover:border-accent/30 transition-all">
