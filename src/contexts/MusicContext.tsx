@@ -920,12 +920,11 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (audioDbErr) console.error('[tracks] audio finalize', trackId, audioDbErr.message);
       }
 
-      // 7. Handle Video (uses stable HTTPS URL). Skip if upload failed,
-      // since the video pipeline needs a publicly fetchable audio URL.
-      if (runtimeInput.videoStyle && uploadSucceeded) {
+      // 7. Handle Video. Works with both Supabase public URLs and local
+      // blob: URLs — the video generator fetches from whatever URL we have,
+      // and blob: URLs are valid for same-tab fetch() calls.
+      if (runtimeInput.videoStyle) {
         runAsyncVideoRender(trackId, creationId, runtimeInput, trackTitle, publicAudioUrl, dna, []).catch(console.warn);
-      } else if (runtimeInput.videoStyle && !uploadSucceeded) {
-        console.warn(`[${trackId}] Skipping video render — needs a public audio URL, but upload failed.`);
       }
 
       return 'completed';

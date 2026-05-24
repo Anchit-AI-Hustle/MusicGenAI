@@ -29,12 +29,11 @@ export const VOCAL_INTENSITY_RANGE = { MIN: 1, MAX: 10 } as const;
 export const DURATION_RANGE = { MIN: 30, MAX: 600 } as const;
 export const ALBUM_SONG_COUNT_RANGE = { MIN: 2, MAX: 20 } as const;
 export const MAX_INSTRUMENTATION_COUNT = 10 as const;
-export const GENERATION_PROMPT_WORD_RANGE = { MIN: 100, MAX: 350 } as const;
-// Suno/Udio-grade prompts. Floor (MIN) prevents one-liners; MAX is a soft
-// hint only — the local fallback now skips the truncation step entirely
-// for prose fields (see suggestEngine.suggestMusicPrompt). Edge-function
-// LLM responses also have no upper word cap.
-export const SUGGEST_PROMPT_WORD_RANGE = { MIN: 60, MAX: 300 } as const;
+export const GENERATION_PROMPT_WORD_RANGE = { MIN: 100, MAX: 500 } as const;
+// Suno/Udio-grade prompts. Floor (MIN) prevents one-liners; MAX caps the
+// local fallback via clampPromptWords. Edge-function LLM responses have
+// no upper word cap (max_tokens controls their ceiling instead).
+export const SUGGEST_PROMPT_WORD_RANGE = { MIN: 100, MAX: 500 } as const;
 export const MOOD_VALENCE_CONFLICT_THRESHOLD = 3 as const;
 export const ALBUM_MIN_TEMPO_SPREAD = 20 as const;
 

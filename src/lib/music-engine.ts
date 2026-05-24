@@ -527,18 +527,18 @@ function renderBassNote(
   time: number, freq: number, duration: number, velocity: number,
   waveform: OscillatorType = 'sawtooth'
 ) {
-  // Layer 1: Main oscillator with filter envelope
+  // Layer 1: Main oscillator with filter envelope — boosted gain
   const osc = ctx.createOscillator();
   osc.type = waveform;
   osc.frequency.value = freq;
   const filter = ctx.createBiquadFilter();
   filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(1200, time);
-  filter.frequency.exponentialRampToValueAtTime(300, time + duration * 0.7);
-  filter.Q.value = 5;
+  filter.frequency.setValueAtTime(1400, time);
+  filter.frequency.exponentialRampToValueAtTime(350, time + duration * 0.7);
+  filter.Q.value = 4;
   const gain = ctx.createGain();
-  gain.gain.setValueAtTime(velocity * 0.5, time);
-  gain.gain.setValueAtTime(velocity * 0.45, time + duration * 0.1);
+  gain.gain.setValueAtTime(velocity * 0.62, time);
+  gain.gain.setValueAtTime(velocity * 0.56, time + duration * 0.1);
   gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
   osc.connect(filter).connect(gain).connect(dest);
   osc.start(time);
@@ -549,8 +549,8 @@ function renderBassNote(
   sub.type = 'sine';
   sub.frequency.value = freq / 2;
   const subGain = ctx.createGain();
-  subGain.gain.setValueAtTime(velocity * 0.3, time);
-  subGain.gain.setValueAtTime(velocity * 0.28, time + duration * 0.15);
+  subGain.gain.setValueAtTime(velocity * 0.40, time);
+  subGain.gain.setValueAtTime(velocity * 0.36, time + duration * 0.15);
   subGain.gain.exponentialRampToValueAtTime(0.001, time + duration * 0.9);
   sub.connect(subGain).connect(dest);
   sub.start(time);
@@ -563,9 +563,9 @@ function renderBassNote(
   det.detune.value = 8 + renderRandom() * 6;
   const detFilter = ctx.createBiquadFilter();
   detFilter.type = 'lowpass';
-  detFilter.frequency.value = 600;
+  detFilter.frequency.value = 700;
   const detGain = ctx.createGain();
-  detGain.gain.setValueAtTime(velocity * 0.15, time);
+  detGain.gain.setValueAtTime(velocity * 0.22, time);
   detGain.gain.exponentialRampToValueAtTime(0.001, time + duration * 0.85);
   det.connect(detFilter).connect(detGain).connect(dest);
   det.start(time);
@@ -581,19 +581,19 @@ function renderLeadNote(
   const sustain = duration * 0.6;
   const release = Math.min(0.15, duration * 0.3);
 
-  // Layer 1: Main oscillator
+  // Layer 1: Main oscillator — boosted gain for presence
   const osc1 = ctx.createOscillator();
   osc1.type = waveform;
   osc1.frequency.value = freq;
   const filter1 = ctx.createBiquadFilter();
   filter1.type = 'lowpass';
   filter1.frequency.setValueAtTime(freq * 6, time);
-  filter1.frequency.exponentialRampToValueAtTime(freq * 2, time + duration * 0.5);
-  filter1.Q.value = 6;
+  filter1.frequency.exponentialRampToValueAtTime(freq * 2.5, time + duration * 0.5);
+  filter1.Q.value = 5;
   const gain1 = ctx.createGain();
   gain1.gain.setValueAtTime(0.001, time);
-  gain1.gain.linearRampToValueAtTime(velocity * 0.25, time + attack);
-  gain1.gain.setValueAtTime(velocity * 0.22, time + attack + sustain);
+  gain1.gain.linearRampToValueAtTime(velocity * 0.42, time + attack);
+  gain1.gain.setValueAtTime(velocity * 0.38, time + attack + sustain);
   gain1.gain.exponentialRampToValueAtTime(0.001, time + duration);
   osc1.connect(filter1).connect(gain1).connect(dest);
   osc1.start(time);
@@ -609,7 +609,7 @@ function renderLeadNote(
   filter2.frequency.value = freq * 4;
   const gain2 = ctx.createGain();
   gain2.gain.setValueAtTime(0.001, time);
-  gain2.gain.linearRampToValueAtTime(velocity * 0.12, time + attack * 1.5);
+  gain2.gain.linearRampToValueAtTime(velocity * 0.22, time + attack * 1.5);
   gain2.gain.exponentialRampToValueAtTime(0.001, time + duration);
   osc2.connect(filter2).connect(gain2).connect(dest);
   osc2.start(time);
@@ -622,24 +622,38 @@ function renderLeadNote(
   osc3.detune.value = -(10 + renderRandom() * 8);
   const gain3 = ctx.createGain();
   gain3.gain.setValueAtTime(0.001, time);
-  gain3.gain.linearRampToValueAtTime(velocity * 0.1, time + attack * 1.5);
+  gain3.gain.linearRampToValueAtTime(velocity * 0.18, time + attack * 1.5);
   gain3.gain.exponentialRampToValueAtTime(0.001, time + duration);
   osc3.connect(gain3).connect(dest);
   osc3.start(time);
   osc3.stop(time + duration + 0.02);
 
-  // Layer 4: Octave-up harmonic for brightness (low volume)
-  if (velocity > 0.3 && freq < 2000) {
+  // Layer 4: Octave-up harmonic for brightness
+  if (velocity > 0.25 && freq < 2000) {
     const osc4 = ctx.createOscillator();
     osc4.type = 'sine';
     osc4.frequency.value = freq * 2;
     const gain4 = ctx.createGain();
     gain4.gain.setValueAtTime(0.001, time);
-    gain4.gain.linearRampToValueAtTime(velocity * 0.06, time + attack);
+    gain4.gain.linearRampToValueAtTime(velocity * 0.10, time + attack);
     gain4.gain.exponentialRampToValueAtTime(0.001, time + duration * 0.6);
     osc4.connect(gain4).connect(dest);
     osc4.start(time);
     osc4.stop(time + duration + 0.02);
+  }
+
+  // Layer 5: Sub-octave sine for fullness on lower notes
+  if (freq < 800) {
+    const osc5 = ctx.createOscillator();
+    osc5.type = 'sine';
+    osc5.frequency.value = freq / 2;
+    const gain5 = ctx.createGain();
+    gain5.gain.setValueAtTime(0.001, time);
+    gain5.gain.linearRampToValueAtTime(velocity * 0.08, time + attack * 2);
+    gain5.gain.exponentialRampToValueAtTime(0.001, time + duration * 0.8);
+    osc5.connect(gain5).connect(dest);
+    osc5.start(time);
+    osc5.stop(time + duration + 0.02);
   }
 }
 
@@ -649,10 +663,10 @@ function renderPadChord(
 ) {
   const attack = Math.min(1.2, duration * 0.2);
   const release = Math.min(2.0, duration * 0.35);
-  const sustainLevel = velocity * 0.12;
+  const sustainLevel = velocity * 0.20;
 
   for (const freq of freqs) {
-    // Layer 1: Main pad voice (triangle)
+    // Layer 1: Main pad voice (triangle) — boosted sustain
     const osc1 = ctx.createOscillator();
     osc1.type = 'triangle';
     osc1.frequency.value = freq;
@@ -673,7 +687,7 @@ function renderPadChord(
     osc2.detune.value = 7 + renderRandom() * 5;
     const gain2 = ctx.createGain();
     gain2.gain.setValueAtTime(0.001, time);
-    gain2.gain.linearRampToValueAtTime(sustainLevel * 0.6, time + attack * 1.2);
+    gain2.gain.linearRampToValueAtTime(sustainLevel * 0.65, time + attack * 1.2);
     gain2.gain.linearRampToValueAtTime(0.001, time + duration);
     osc2.connect(gain2).connect(dest);
     osc2.start(time);
@@ -686,13 +700,13 @@ function renderPadChord(
     osc3.detune.value = -(6 + renderRandom() * 5);
     const gain3 = ctx.createGain();
     gain3.gain.setValueAtTime(0.001, time);
-    gain3.gain.linearRampToValueAtTime(sustainLevel * 0.5, time + attack * 1.3);
+    gain3.gain.linearRampToValueAtTime(sustainLevel * 0.55, time + attack * 1.3);
     gain3.gain.linearRampToValueAtTime(0.001, time + duration);
     osc3.connect(gain3).connect(dest);
     osc3.start(time);
     osc3.stop(time + duration + 0.05);
 
-    // Layer 4: Filtered sawtooth for shimmer (very quiet)
+    // Layer 4: Filtered sawtooth for shimmer
     if (freq < 1500) {
       const osc4 = ctx.createOscillator();
       osc4.type = 'sawtooth';
@@ -704,7 +718,7 @@ function renderPadChord(
       lpf.Q.value = 1;
       const gain4 = ctx.createGain();
       gain4.gain.setValueAtTime(0.001, time);
-      gain4.gain.linearRampToValueAtTime(sustainLevel * 0.25, time + attack * 1.5);
+      gain4.gain.linearRampToValueAtTime(sustainLevel * 0.30, time + attack * 1.5);
       gain4.gain.linearRampToValueAtTime(0.001, time + duration);
       osc4.connect(lpf).connect(gain4).connect(dest);
       osc4.start(time);
@@ -1240,6 +1254,40 @@ export async function generateTrack(
   };
 }
 
+/**
+ * Generate a synthetic impulse response for ConvolverNode.
+ * Creates a realistic-sounding algorithmic reverb tail.
+ */
+function generateReverbIR(
+  ctx: OfflineAudioContext,
+  decaySeconds: number,
+  preDelayMs: number = 12,
+  brightness: number = 0.7,
+): AudioBuffer {
+  const sampleRate = ctx.sampleRate;
+  const length = Math.ceil(sampleRate * decaySeconds);
+  const numChannels = 2;
+  const ir = ctx.createBuffer(numChannels, length, sampleRate);
+  const preDelaySamples = Math.floor(preDelayMs * sampleRate / 1000);
+
+  for (let ch = 0; ch < numChannels; ch++) {
+    const data = ir.getChannelData(ch);
+    for (let i = preDelaySamples; i < length; i++) {
+      const t = (i - preDelaySamples) / (length - preDelaySamples);
+      // Exponential decay with early reflection bumps
+      const envelope = Math.exp(-t * 5) * (1 - t);
+      // Filtered noise with channel decorrelation
+      const noise = (Math.random() * 2 - 1);
+      // Early reflections: sparse strong taps in first 50ms
+      const earlyWindow = i < sampleRate * 0.05 ? 2.5 : 1;
+      // High-frequency roll-off over time (darker as it decays)
+      const hfRolloff = 1 - t * (1 - brightness);
+      data[i] = noise * envelope * earlyWindow * hfRolloff;
+    }
+  }
+  return ir;
+}
+
 async function mixStemsLocally(stems: AudioStems): Promise<AudioBuffer> {
   const { drums, bass, melody, pads, fx } = stems;
   const sampleRate = drums.sampleRate;
@@ -1250,7 +1298,7 @@ async function mixStemsLocally(stems: AudioStems): Promise<AudioBuffer> {
 
   // ===== Master bus with EQ and compression =====
   const masterBus = ctx.createGain();
-  masterBus.gain.value = 0.85;
+  masterBus.gain.value = 0.92;
 
   // Low-cut to remove mud
   const lowCut = ctx.createBiquadFilter();
@@ -1258,28 +1306,74 @@ async function mixStemsLocally(stems: AudioStems): Promise<AudioBuffer> {
   lowCut.frequency.value = 30;
   lowCut.Q.value = 0.7;
 
+  // Low-mid warmth boost (adds body)
+  const warmthEQ = ctx.createBiquadFilter();
+  warmthEQ.type = 'peaking';
+  warmthEQ.frequency.value = 250;
+  warmthEQ.gain.value = 1.5;
+  warmthEQ.Q.value = 0.8;
+
   // Presence boost
   const presenceEQ = ctx.createBiquadFilter();
   presenceEQ.type = 'peaking';
   presenceEQ.frequency.value = 3000;
-  presenceEQ.gain.value = 1.5;
+  presenceEQ.gain.value = 2.0;
   presenceEQ.Q.value = 1.0;
 
   // Air/sparkle
   const airEQ = ctx.createBiquadFilter();
   airEQ.type = 'highshelf';
   airEQ.frequency.value = 10000;
-  airEQ.gain.value = 2.0;
+  airEQ.gain.value = 2.5;
+
+  // Master bus glue compressor
+  const glueComp = ctx.createDynamicsCompressor();
+  glueComp.threshold.value = -12;
+  glueComp.knee.value = 6;
+  glueComp.ratio.value = 3;
+  glueComp.attack.value = 0.01;
+  glueComp.release.value = 0.2;
 
   // Master limiter
   const limiter = ctx.createDynamicsCompressor();
-  limiter.threshold.value = -3.0;
-  limiter.knee.value = 3;
-  limiter.ratio.value = 12;
-  limiter.attack.value = 0.002;
-  limiter.release.value = 0.15;
+  limiter.threshold.value = -2.0;
+  limiter.knee.value = 2;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.001;
+  limiter.release.value = 0.1;
 
-  masterBus.connect(lowCut).connect(presenceEQ).connect(airEQ).connect(limiter).connect(ctx.destination);
+  masterBus.connect(lowCut).connect(warmthEQ).connect(presenceEQ).connect(airEQ).connect(glueComp).connect(limiter).connect(ctx.destination);
+
+  // ===== Reverb send (shared reverb bus for spatial cohesion) =====
+  const reverbSend = ctx.createGain();
+  reverbSend.gain.value = 1.0;
+  const reverbConvolver = ctx.createConvolver();
+  reverbConvolver.buffer = generateReverbIR(ctx, 1.8, 15, 0.65);
+  const reverbReturn = ctx.createGain();
+  reverbReturn.gain.value = 0.28; // wet level — enough to add space without washing out
+  // Pre-filter on reverb return: cut low-end rumble from the reverb tail
+  const reverbHPF = ctx.createBiquadFilter();
+  reverbHPF.type = 'highpass';
+  reverbHPF.frequency.value = 200;
+  reverbHPF.Q.value = 0.5;
+
+  reverbSend.connect(reverbConvolver).connect(reverbHPF).connect(reverbReturn).connect(masterBus);
+
+  // ===== Delay send (tempo-synced feel) =====
+  const delaySend = ctx.createGain();
+  delaySend.gain.value = 1.0;
+  const delayNode = ctx.createDelay(2.0);
+  delayNode.delayTime.value = 0.35; // ~quarter note at 120 BPM
+  const delayFeedback = ctx.createGain();
+  delayFeedback.gain.value = 0.3;
+  const delayReturn = ctx.createGain();
+  delayReturn.gain.value = 0.18;
+  const delayFilter = ctx.createBiquadFilter();
+  delayFilter.type = 'lowpass';
+  delayFilter.frequency.value = 3000; // darken repeats
+
+  delaySend.connect(delayNode).connect(delayFilter).connect(delayReturn).connect(masterBus);
+  delayFilter.connect(delayFeedback).connect(delayNode); // feedback loop
 
   // ===== Stem sources with improved gain staging =====
   const drumNode = ctx.createBufferSource(); drumNode.buffer = drums;
@@ -1288,33 +1382,44 @@ async function mixStemsLocally(stems: AudioStems): Promise<AudioBuffer> {
   const padNode = ctx.createBufferSource(); padNode.buffer = pads;
   const fxNode = ctx.createBufferSource(); fxNode.buffer = fx;
 
-  const drumGain = ctx.createGain(); drumGain.gain.value = 0.82;
-  const bassGain = ctx.createGain(); bassGain.gain.value = 0.72;
-  const melodyGain = ctx.createGain(); melodyGain.gain.value = 0.55;
-  const padGain = ctx.createGain(); padGain.gain.value = 0.42;
-  const fxGain = ctx.createGain(); fxGain.gain.value = 0.45;
+  // Boosted gain levels — previous values were too conservative
+  const drumGain = ctx.createGain(); drumGain.gain.value = 0.88;
+  const bassGain = ctx.createGain(); bassGain.gain.value = 0.78;
+  const melodyGain = ctx.createGain(); melodyGain.gain.value = 0.68;
+  const padGain = ctx.createGain(); padGain.gain.value = 0.52;
+  const fxGain = ctx.createGain(); fxGain.gain.value = 0.50;
+
+  // Per-stem reverb sends (different amounts per stem)
+  const drumReverbSendGain = ctx.createGain(); drumReverbSendGain.gain.value = 0.15; // light room
+  const melodyReverbSendGain = ctx.createGain(); melodyReverbSendGain.gain.value = 0.35; // lead needs space
+  const padReverbSendGain = ctx.createGain(); padReverbSendGain.gain.value = 0.50; // pads swim in reverb
+  const fxReverbSendGain = ctx.createGain(); fxReverbSendGain.gain.value = 0.40;
+
+  // Per-stem delay sends
+  const melodyDelaySendGain = ctx.createGain(); melodyDelaySendGain.gain.value = 0.25;
+  const fxDelaySendGain = ctx.createGain(); fxDelaySendGain.gain.value = 0.20;
 
   // ===== Per-stem EQ for frequency separation =====
-  // Bass: cut highs to keep it focused
+  // Bass: cut highs to keep it focused but allow some harmonics through
   const bassEQ = ctx.createBiquadFilter();
   bassEQ.type = 'lowpass';
-  bassEQ.frequency.value = 500;
-  bassEQ.Q.value = 0.7;
+  bassEQ.frequency.value = 800;
+  bassEQ.Q.value = 0.5;
 
   // Melody: cut low-end to avoid clashing with bass
   const melodyEQ = ctx.createBiquadFilter();
   melodyEQ.type = 'highpass';
-  melodyEQ.frequency.value = 200;
+  melodyEQ.frequency.value = 180;
   melodyEQ.Q.value = 0.5;
 
   // Pads: bandpass to sit in the mid-range pocket
   const padEQ = ctx.createBiquadFilter();
   padEQ.type = 'highpass';
-  padEQ.frequency.value = 250;
+  padEQ.frequency.value = 220;
   padEQ.Q.value = 0.5;
   const padLP = ctx.createBiquadFilter();
   padLP.type = 'lowpass';
-  padLP.frequency.value = 4000;
+  padLP.frequency.value = 5000;
   padLP.Q.value = 0.5;
 
   // ===== Bus compressor on drums for glue =====
@@ -1325,11 +1430,27 @@ async function mixStemsLocally(stems: AudioStems): Promise<AudioBuffer> {
   drumComp.attack.value = 0.005;
   drumComp.release.value = 0.08;
 
+  // ===== Routing =====
+  // Drums → compressor → master + reverb send
   drumNode.connect(drumGain).connect(drumComp).connect(masterBus);
+  drumGain.connect(drumReverbSendGain).connect(reverbSend);
+
+  // Bass → EQ → master (NO reverb on bass — keep it tight)
   bassNode.connect(bassGain).connect(bassEQ).connect(masterBus);
+
+  // Melody → EQ → master + reverb send + delay send
   melodyNode.connect(melodyGain).connect(melodyEQ).connect(masterBus);
+  melodyGain.connect(melodyReverbSendGain).connect(reverbSend);
+  melodyGain.connect(melodyDelaySendGain).connect(delaySend);
+
+  // Pads → EQ → master + heavy reverb send
   padNode.connect(padGain).connect(padEQ).connect(padLP).connect(masterBus);
+  padGain.connect(padReverbSendGain).connect(reverbSend);
+
+  // FX → master + reverb + delay
   fxNode.connect(fxGain).connect(masterBus);
+  fxGain.connect(fxReverbSendGain).connect(reverbSend);
+  fxGain.connect(fxDelaySendGain).connect(delaySend);
 
   drumNode.start(0);
   bassNode.start(0);
@@ -1359,32 +1480,72 @@ export async function mixStems(
 
   // ===== Master bus with professional mastering chain =====
   const masterBus = ctx.createGain();
-  masterBus.gain.value = 0.82;
+  masterBus.gain.value = 0.90;
 
   const lowCut = ctx.createBiquadFilter();
   lowCut.type = 'highpass';
   lowCut.frequency.value = 30;
   lowCut.Q.value = 0.7;
 
+  const warmthEQ = ctx.createBiquadFilter();
+  warmthEQ.type = 'peaking';
+  warmthEQ.frequency.value = 250;
+  warmthEQ.gain.value = 1.5;
+  warmthEQ.Q.value = 0.8;
+
   const presenceEQ = ctx.createBiquadFilter();
   presenceEQ.type = 'peaking';
   presenceEQ.frequency.value = 3000;
-  presenceEQ.gain.value = 1.5;
+  presenceEQ.gain.value = 2.0;
   presenceEQ.Q.value = 1.0;
 
   const airEQ = ctx.createBiquadFilter();
   airEQ.type = 'highshelf';
   airEQ.frequency.value = 10000;
-  airEQ.gain.value = 2.0;
+  airEQ.gain.value = 2.5;
+
+  const glueComp = ctx.createDynamicsCompressor();
+  glueComp.threshold.value = -12;
+  glueComp.knee.value = 6;
+  glueComp.ratio.value = 3;
+  glueComp.attack.value = 0.01;
+  glueComp.release.value = 0.2;
 
   const limiter = ctx.createDynamicsCompressor();
   limiter.threshold.value = -2.0;
   limiter.knee.value = 2;
-  limiter.ratio.value = 16;
+  limiter.ratio.value = 20;
   limiter.attack.value = 0.001;
-  limiter.release.value = 0.12;
+  limiter.release.value = 0.1;
 
-  masterBus.connect(lowCut).connect(presenceEQ).connect(airEQ).connect(limiter).connect(ctx.destination);
+  masterBus.connect(lowCut).connect(warmthEQ).connect(presenceEQ).connect(airEQ).connect(glueComp).connect(limiter).connect(ctx.destination);
+
+  // ===== Reverb send (shared for spatial cohesion) =====
+  const reverbSend = ctx.createGain();
+  reverbSend.gain.value = 1.0;
+  const reverbConvolver = ctx.createConvolver();
+  reverbConvolver.buffer = generateReverbIR(ctx, 1.6, 12, 0.6);
+  const reverbReturn = ctx.createGain();
+  reverbReturn.gain.value = 0.24;
+  const reverbHPF = ctx.createBiquadFilter();
+  reverbHPF.type = 'highpass';
+  reverbHPF.frequency.value = 200;
+  reverbSend.connect(reverbConvolver).connect(reverbHPF).connect(reverbReturn).connect(masterBus);
+
+  // ===== Delay send =====
+  const delaySend = ctx.createGain();
+  delaySend.gain.value = 1.0;
+  const delayNode = ctx.createDelay(2.0);
+  delayNode.delayTime.value = 0.35;
+  const delayFeedback = ctx.createGain();
+  delayFeedback.gain.value = 0.25;
+  const delayReturn = ctx.createGain();
+  delayReturn.gain.value = 0.15;
+  const delayFilter = ctx.createBiquadFilter();
+  delayFilter.type = 'lowpass';
+  delayFilter.frequency.value = 3000;
+  delaySend.connect(delayNode).connect(delayFilter).connect(delayReturn).connect(masterBus);
+  delayFilter.connect(delayFeedback).connect(delayNode);
 
   // ===== Stem sources =====
   const drumNode = ctx.createBufferSource(); drumNode.buffer = drums;
@@ -1393,30 +1554,37 @@ export async function mixStems(
   const padNode = ctx.createBufferSource(); padNode.buffer = pads;
   const fxNode = ctx.createBufferSource(); fxNode.buffer = fx;
 
-  const drumGain = ctx.createGain(); drumGain.gain.value = 0.82;
-  const bassGain = ctx.createGain(); bassGain.gain.value = 0.72;
-  const melodyGain = ctx.createGain(); melodyGain.gain.value = 0.55;
-  const padGain = ctx.createGain(); padGain.gain.value = 0.42;
-  const fxGain = ctx.createGain(); fxGain.gain.value = 0.45;
+  const drumGain = ctx.createGain(); drumGain.gain.value = 0.85;
+  const bassGain = ctx.createGain(); bassGain.gain.value = 0.75;
+  const melodyGain = ctx.createGain(); melodyGain.gain.value = 0.62;
+  const padGain = ctx.createGain(); padGain.gain.value = 0.48;
+  const fxGain = ctx.createGain(); fxGain.gain.value = 0.48;
+
+  // Per-stem reverb sends
+  const drumReverbSendGain = ctx.createGain(); drumReverbSendGain.gain.value = 0.12;
+  const melodyReverbSendGain = ctx.createGain(); melodyReverbSendGain.gain.value = 0.30;
+  const padReverbSendGain = ctx.createGain(); padReverbSendGain.gain.value = 0.45;
+  const fxReverbSendGain = ctx.createGain(); fxReverbSendGain.gain.value = 0.35;
+  const melodyDelaySendGain = ctx.createGain(); melodyDelaySendGain.gain.value = 0.20;
 
   // ===== Per-stem EQ for frequency separation =====
   const bassEQ = ctx.createBiquadFilter();
   bassEQ.type = 'lowpass';
-  bassEQ.frequency.value = 500;
-  bassEQ.Q.value = 0.7;
+  bassEQ.frequency.value = 800;
+  bassEQ.Q.value = 0.5;
 
   const melodyEQ = ctx.createBiquadFilter();
   melodyEQ.type = 'highpass';
-  melodyEQ.frequency.value = 200;
+  melodyEQ.frequency.value = 180;
   melodyEQ.Q.value = 0.5;
 
   const padEQ = ctx.createBiquadFilter();
   padEQ.type = 'highpass';
-  padEQ.frequency.value = 250;
+  padEQ.frequency.value = 220;
   padEQ.Q.value = 0.5;
   const padLP = ctx.createBiquadFilter();
   padLP.type = 'lowpass';
-  padLP.frequency.value = 4000;
+  padLP.frequency.value = 5000;
   padLP.Q.value = 0.5;
 
   // Drum bus compressor
@@ -1427,11 +1595,17 @@ export async function mixStems(
   drumComp.attack.value = 0.005;
   drumComp.release.value = 0.08;
 
+  // Routing with reverb/delay sends
   drumNode.connect(drumGain).connect(drumComp).connect(masterBus);
+  drumGain.connect(drumReverbSendGain).connect(reverbSend);
   bassNode.connect(bassGain).connect(bassEQ).connect(masterBus);
   melodyNode.connect(melodyGain).connect(melodyEQ).connect(masterBus);
+  melodyGain.connect(melodyReverbSendGain).connect(reverbSend);
+  melodyGain.connect(melodyDelaySendGain).connect(delaySend);
   padNode.connect(padGain).connect(padEQ).connect(padLP).connect(masterBus);
+  padGain.connect(padReverbSendGain).connect(reverbSend);
   fxNode.connect(fxGain).connect(masterBus);
+  fxGain.connect(fxReverbSendGain).connect(reverbSend);
 
   if (vocalStem) {
     const vocalNode = ctx.createBufferSource();

@@ -1868,7 +1868,9 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
                     <h3 className="text-xl font-black text-white tracking-tight">AI Audio Mode <span className="text-[10px] font-bold text-primary ml-2 align-middle">BETA · FREE</span></h3>
                     <p className="text-xs font-bold text-white/30 uppercase tracking-widest">Open-source MusicGen · runs in your browser</p>
                     <p className="text-[11px] text-white/40 mt-2 max-w-[480px]">
-                      Replaces the procedural engine with neural instrumental synthesis. First run downloads ~250 MB once, then audio generates on your device — no servers, no cost. Falls back to the built-in engine if your browser can't run the model.
+                      <strong className="text-white/60">OFF (default):</strong> Uses the built-in procedural synthesizer — fast, works everywhere, lower fidelity.
+                      <br />
+                      <strong className="text-white/60">ON:</strong> Uses Meta's MusicGen AI model to generate realistic instrumentals directly in your browser. First run downloads ~250 MB (cached after). Best with Chrome/Edge + WebGPU. Falls back to built-in engine if your device can't run it.
                     </p>
                   </div>
                 </div>

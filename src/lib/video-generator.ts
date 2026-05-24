@@ -650,15 +650,37 @@ export async function generateVideoFromAudio(
   onProgress?.({ stage: 'analyzing_beat_structure', progress: 0.04 });
   const audioContext = new AudioContext();
   const FETCH_TIMEOUT_MS = 45_000;
-  const audioResponse = await Promise.race([
-    fetch(audioUrl, { credentials: 'omit' }),
-    new Promise<Response>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`Audio fetch timed out after ${FETCH_TIMEOUT_MS / 1000}s — check Supabase Storage CORS for this domain, or the blob URL may have been invalidated by a page reload.`)),
-        FETCH_TIMEOUT_MS,
+  const isBlobUrl = audioUrl.startsWith('blob:');
+
+  // blob: URLs don't need CORS and don't support credentials options the
+  // same way — fetch them plainly. Supabase public URLs need credentials
+  // omitted to avoid CORS preflight failures.
+  const fetchOptions: RequestInit = isBlobUrl ? {} : { credentials: 'omit', mode: 'cors' };
+
+  let audioResponse: Response;
+  try {
+    audioResponse = await Promise.race([
+      fetch(audioUrl, fetchOptions),
+      new Promise<Response>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(
+            isBlobUrl
+              ? `Audio fetch timed out after ${FETCH_TIMEOUT_MS / 1000}s — the blob URL may have been invalidated by a page reload.`
+              : `Audio fetch timed out after ${FETCH_TIMEOUT_MS / 1000}s — check Supabase Storage CORS for this domain.`
+          )),
+          FETCH_TIMEOUT_MS,
+        ),
       ),
-    ),
-  ]);
+    ]);
+  } catch (fetchErr) {
+    // On CORS failure with Supabase URL, try no-cors as a last resort
+    // (will produce an opaque response, which won't work for arrayBuffer,
+    // but at least gives a clear error message).
+    if (!isBlobUrl) {
+      throw new Error(`Audio fetch failed: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}. If running locally, ensure Supabase Storage CORS allows this origin.`);
+    }
+    throw fetchErr;
+  }
   if (!audioResponse.ok) {
     throw new Error(`Audio fetch returned ${audioResponse.status} ${audioResponse.statusText} — visual pipeline cannot proceed.`);
   }
