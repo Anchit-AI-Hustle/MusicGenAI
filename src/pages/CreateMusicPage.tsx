@@ -546,7 +546,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
       if (masc.includes(a)) return 'male';
     }
     if (/k-pop|j-pop|bollywood/i.test(genreLabel)) return 'female';
-    if (/hip hop|rap|drill|metal|country/i.test(genreLabel)) return 'male';
+    if (/hip hop|rap|drill|metal|industrial|country|punk|rock/i.test(genreLabel)) return 'male';
     return 'neutral';
   };
 
@@ -555,7 +555,12 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
       'Hip Hop': 180, 'Punjabi Drill': 165, 'Reggaeton': 200, 'Pop': 200,
       'K-Pop': 200, 'J-Pop': 220, 'Rock': 240, 'Metal': 280, 'Electronic': 240,
       'R&B': 220, 'Lo-fi': 150, 'Country': 200, 'Bhangra': 200, 'Bollywood': 260,
-      'Jazz': 280, 'Classical': 300,
+      'Jazz': 280, 'Classical': 300, 'Techno': 300, 'Hard Techno': 300,
+      'House': 280, 'Deep House': 280, 'Industrial': 260, 'Ambient': 300,
+      'Drum and Bass': 240, 'Trap': 200, 'Drill': 180, 'Phonk': 180,
+      'Synthwave': 240, 'Afrobeats': 220, 'Dancehall': 200, 'Reggae': 240,
+      'Soul': 240, 'Funk': 240, 'Blues': 260, 'Folk': 220, 'Punk': 180,
+      'EDM': 240, 'Dubstep': 240, 'Indie Pop': 200, 'Synth-pop': 200,
     };
     return map[genreLabel] ?? 180;
   };

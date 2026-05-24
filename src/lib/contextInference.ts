@@ -470,22 +470,36 @@ function inferContextLocally(description: string, seed: string) {
   const vocalIntensity = vocalIntensityMap[mood] ?? 7;
 
   // ─── STRUCTURE (depends on genre) ─────────────────────────────────────
+  // Values MUST match SONG_STRUCTURE_PRESETS in src/data/form-presets.ts
   const structureMap: Record<string, string> = {
-    'Hip Hop': 'Verse-Chorus-Verse', 'Trap': 'Verse-Chorus-Verse',
-    'Punjabi Drill': 'Verse-Chorus-Verse', 'Drill': 'Verse-Chorus-Verse',
-    'Pop': 'Verse-Chorus-Bridge', 'K-Pop': 'Verse-Chorus-Bridge',
-    'J-Pop': 'Verse-Chorus-Bridge', 'R&B': 'Verse-Chorus-Bridge',
-    'Country': 'Verse-Chorus-Bridge', 'Folk': 'Verse-Chorus-Bridge',
-    'Rock': 'Verse-Chorus-Solo', 'Metal': 'Verse-Chorus-Breakdown',
-    'Electronic': 'Build-Drop-Break', 'EDM': 'Build-Drop-Break',
-    'Techno': 'Build-Drop-Break', 'Hard Techno': 'Build-Drop-Break', 'Industrial': 'Build-Drop-Break',
-    'House': 'Build-Drop-Break', 'Drum and Bass': 'Build-Drop-Break',
-    'Reggaeton': 'Verse-Chorus-Drop',
-    'Classical': 'Movement', 'Jazz': 'Head-Solo-Head',
-    'Lo-fi': 'Loop-Variation', 'Ambient': 'Loop-Variation',
-    'Bhangra': 'Verse-Hook-Verse', 'Bollywood': 'Antara-Mukhda-Antara',
+    'Hip Hop': 'Intro → Verse → Hook → Verse → Hook → Outro',
+    'Trap': 'Intro → Verse → Hook → Verse → Hook → Outro',
+    'Punjabi Drill': 'Intro → Verse → Hook → Verse → Hook → Outro',
+    'Drill': 'Intro → Verse → Hook → Verse → Hook → Outro',
+    'Pop': 'Intro → Verse → Chorus → Verse → Chorus → Bridge → Chorus → Outro',
+    'K-Pop': 'Intro → Verse → Chorus → Verse → Chorus → Bridge → Chorus → Outro',
+    'J-Pop': 'Intro → Verse → Chorus → Verse → Chorus → Bridge → Chorus → Outro',
+    'R&B': 'Intro → Verse → Chorus → Verse → Chorus → Bridge → Chorus → Outro',
+    'Country': 'Intro → Verse → Chorus → Verse → Chorus → Bridge → Chorus → Outro',
+    'Folk': 'Intro → Verse → Chorus → Verse → Chorus → Bridge → Chorus → Outro',
+    'Rock': 'Intro → Verse → Chorus → Verse → Chorus → Bridge → Chorus → Outro',
+    'Metal': 'Intro → Verse → Chorus → Verse → Chorus → Bridge → Chorus → Outro',
+    'Electronic': 'Intro → Build → Drop → Breakdown → Drop → Outro',
+    'EDM': 'Intro → Build → Drop → Breakdown → Drop → Outro',
+    'Techno': 'Intro → Build → Drop → Breakdown → Drop → Outro',
+    'Hard Techno': 'Intro → Build → Drop → Breakdown → Drop → Outro',
+    'Industrial': 'Intro → Build → Drop → Breakdown → Drop → Outro',
+    'House': 'Intro → Build → Drop → Breakdown → Drop → Outro',
+    'Drum and Bass': 'Intro → Build → Drop → Breakdown → Drop → Outro',
+    'Reggaeton': 'Intro → Verse → Chorus → Verse → Chorus → Bridge → Chorus → Outro',
+    'Classical': 'Exposition → Development → Recapitulation → Coda',
+    'Jazz': 'Intro → Theme → Solo → Theme → Outro',
+    'Lo-fi': 'Intro → Build → Climax → Resolution → Outro',
+    'Ambient': 'Intro → Build → Climax → Resolution → Outro',
+    'Bhangra': 'Intro → Verse → Hook → Verse → Hook → Outro',
+    'Bollywood': 'Intro → Verse → Chorus → Verse → Chorus → Bridge → Chorus → Outro',
   };
-  const structureType = structureMap[genre] || 'Verse-Chorus-Bridge';
+  const structureType = structureMap[genre] || 'Intro → Verse → Chorus → Verse → Chorus → Bridge → Chorus → Outro';
 
   // ─── VOCAL EFFECTS (depends on genre) ─────────────────────────────────
   const effectsMap: Record<string, string[]> = {

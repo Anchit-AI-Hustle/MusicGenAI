@@ -18,7 +18,7 @@ export const GENRES = [
   "Vaporwave", "Future Funk",
   "Electro", "Electro House", "Complextro",
   "Downtempo", "Chillout", "Lo-fi Electronic",
-  "Electroclash", "EBM",
+  "Electroclash", "EBM", "Industrial",
   "UK Bass", "Grime",
   "Footwork", "Juke",
 
