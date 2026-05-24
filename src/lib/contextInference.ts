@@ -95,24 +95,38 @@ const GENRE_KEYWORD_DB: GenreKeywordEntry[] = [
   { genre: 'Classical', keywords: ['classical', 'orchestral', 'symphony', 'orchestra'] },
   { genre: 'Lo-fi', keywords: ['lofi', 'lo-fi'] },
   { genre: 'R&B', keywords: ['r&b', 'rnb'] },
-  { genre: 'Pop', keywords: ['pop', 'mainstream'] },
+  { genre: 'Pop', keywords: ['pop', 'pop fusion', 'mainstream'] },
+  { genre: 'Industrial', keywords: ['industrial'] },
   { genre: 'Country', keywords: ['country', 'nashville'] },
   { genre: 'Folk', keywords: ['folk', 'acoustic folk'] },
 ];
 
 /**
+ * Test whether `keyword` appears in `text` as a whole word/phrase —
+ * NOT as a substring inside another word. Uses word-boundary regex
+ * so "rap" matches "rap" and "rap vocal" but NOT "wrapping" or "trapped".
+ * Similarly "metal" matches "metal" but NOT "metallic".
+ */
+function matchesWholeWord(text: string, keyword: string): boolean {
+  // Escape regex special chars in keyword, then wrap with \b
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`\\b${escaped}\\b`, 'i');
+  return re.test(text);
+}
+
+/**
  * Score all genres against the prompt. Returns all matching genres sorted
  * by relevance (longest keyword match wins). Multi-word keyword matches
- * score higher than single-word ones.
+ * score higher than single-word ones. Uses whole-word matching to avoid
+ * false positives (e.g. "metallic" ≠ "metal", "wrapping" ≠ "rap").
  */
 function scoreGenres(text: string): { genre: string; score: number }[] {
-  const lower = text.toLowerCase();
   const scored: { genre: string; score: number }[] = [];
 
   for (const entry of GENRE_KEYWORD_DB) {
     let bestScore = 0;
     for (const kw of entry.keywords) {
-      if (lower.includes(kw)) {
+      if (matchesWholeWord(text, kw)) {
         // Score = keyword length (longer = more specific = higher score)
         const kwScore = kw.length;
         if (kwScore > bestScore) bestScore = kwScore;
@@ -164,7 +178,7 @@ function inferContextLocally(description: string, seed: string) {
     'Techno': 'Energetic', 'Hard Techno': 'Aggressive', 'Acid Techno': 'Dark',
     'House': 'Euphoric', 'Deep House': 'Chill', 'Tech House': 'Energetic',
     'Ambient': 'Atmospheric', 'Lo-fi': 'Chill', 'EDM': 'Euphoric',
-    'Metal': 'Aggressive', 'Punk': 'Aggressive', 'Blues': 'Melancholic',
+    'Metal': 'Aggressive', 'Industrial': 'Aggressive', 'Punk': 'Aggressive', 'Blues': 'Melancholic',
     'Jazz': 'Chill', 'Classical': 'Epic', 'Rock': 'Energetic',
     'Hip Hop': 'Dark', 'Trap': 'Dark', 'Drill': 'Aggressive',
     'UK Drill': 'Aggressive', 'Phonk': 'Dark', 'R&B': 'Romantic',
@@ -178,7 +192,7 @@ function inferContextLocally(description: string, seed: string) {
 
   let mood = '';
   for (const [m, kws] of Object.entries(moodKeywords)) {
-    if (kws.some(k => text.includes(k))) { mood = m; break; }
+    if (kws.some(k => matchesWholeWord(text, k))) { mood = m; break; }
   }
   if (!mood) {
     mood = genreMoodDefaults[genre] || 'Energetic';
@@ -206,9 +220,9 @@ function inferContextLocally(description: string, seed: string) {
     tempo = primaryDef?.bpmTypical ?? 120;
   }
 
-  // Apply speed modifiers from prompt
-  const isSlow = text.includes('slow') || text.includes('ballad');
-  const isFast = text.includes('fast') || text.includes('rave') || text.includes('hard');
+  // Apply speed modifiers from prompt (whole-word match to avoid false positives)
+  const isSlow = matchesWholeWord(text, 'slow') || matchesWholeWord(text, 'ballad');
+  const isFast = matchesWholeWord(text, 'fast') || matchesWholeWord(text, 'rave') || matchesWholeWord(text, 'hard');
   if (isSlow && primaryDef) {
     tempo = primaryDef.bpmMin;
   } else if (isFast && primaryDef) {
@@ -248,7 +262,7 @@ function inferContextLocally(description: string, seed: string) {
   // Collect ALL matching languages (user may say "punjabi and english")
   const matchedLanguages: string[] = [];
   for (const [l, kws] of Object.entries(langKeywords)) {
-    if (kws.some(k => text.includes(k))) { matchedLanguages.push(l); }
+    if (kws.some(k => matchesWholeWord(text, k))) { matchedLanguages.push(l); }
   }
   // Also add genre-implied languages for secondary genres
   if (matchedLanguages.length === 0) {
@@ -289,7 +303,7 @@ function inferContextLocally(description: string, seed: string) {
     ['Amelie Lens', ['amelie lens']],
   ];
   for (const [artist, triggers] of artistPatterns) {
-    if (triggers.some(t => text.includes(t))) { matchedArtists.push(artist); }
+    if (triggers.some(t => matchesWholeWord(text, t))) { matchedArtists.push(artist); }
   }
   const artistInspiration = matchedArtists.join(', ');
 
@@ -307,7 +321,7 @@ function inferContextLocally(description: string, seed: string) {
     'R&B': 'Soulful Diva', 'Bollywood': 'Soulful Diva',
     'Lo-fi': 'Whisper Vocal', 'Ambient': 'Whisper Vocal',
     'Electronic': 'Robotic Vocal', 'EDM': 'Robotic Vocal',
-    'Techno': 'Robotic Vocal', 'Hard Techno': 'Robotic Vocal',
+    'Techno': 'Robotic Vocal', 'Hard Techno': 'Robotic Vocal', 'Industrial': 'Aggressive Growl',
     'House': 'Soulful Diva', 'Deep House': 'Soulful Diva',
     'Reggaeton': 'Male Vocal', 'Dancehall': 'Male Vocal',
     'Bhangra': 'Male Vocal', 'Country': 'Male Vocal', 'Folk': 'Male Vocal',
@@ -323,6 +337,7 @@ function inferContextLocally(description: string, seed: string) {
     'Electronic': ['Synths', 'Drum Machine', 'Bass Synth', 'Pad'],
     'Techno': ['Kick', 'Hi-Hats', 'Acid Bass', 'Synth Stabs', 'Clap'],
     'Hard Techno': ['Distorted Kick', 'Industrial Synth', 'Acid 303', 'Clap', 'Noise'],
+    'Industrial': ['Distorted Kick', 'Industrial Synth', 'Metal Percussion', 'Noise', 'Clap'],
     'House': ['Piano', '909 Drums', 'Bass', 'Organ', 'Vocal Chops'],
     'Deep House': ['Piano', 'Warm Bass', 'Soft Drums', 'Pad', 'Vocal Chops'],
     'Tech House': ['Kick', 'Hi-Hats', 'Bass', 'Synth Stabs', 'Percussion'],
@@ -397,7 +412,7 @@ function inferContextLocally(description: string, seed: string) {
   // Labels MUST match PRESET_VIDEO_STYLES.
   const videoStyleMap: Record<string, string> = {
     'Electronic': 'Neon Cityscapes', 'Techno': 'Neon Cityscapes',
-    'Hard Techno': 'Glitch Art', 'House': 'Neon Cityscapes',
+    'Hard Techno': 'Glitch Art', 'Industrial': 'Glitch Art', 'House': 'Neon Cityscapes',
     'EDM': 'Neon Cityscapes', 'Ambient': 'Cosmic Nebula',
     'Hip Hop': 'Urban Street Art', 'Trap': 'Urban Street Art',
     'Drill': 'Urban Street Art', 'UK Drill': 'Urban Street Art',
@@ -463,7 +478,7 @@ function inferContextLocally(description: string, seed: string) {
     'Country': 'Verse-Chorus-Bridge', 'Folk': 'Verse-Chorus-Bridge',
     'Rock': 'Verse-Chorus-Solo', 'Metal': 'Verse-Chorus-Breakdown',
     'Electronic': 'Build-Drop-Break', 'EDM': 'Build-Drop-Break',
-    'Techno': 'Build-Drop-Break', 'Hard Techno': 'Build-Drop-Break',
+    'Techno': 'Build-Drop-Break', 'Hard Techno': 'Build-Drop-Break', 'Industrial': 'Build-Drop-Break',
     'House': 'Build-Drop-Break', 'Drum and Bass': 'Build-Drop-Break',
     'Reggaeton': 'Verse-Chorus-Drop',
     'Classical': 'Movement', 'Jazz': 'Head-Solo-Head',
@@ -528,7 +543,7 @@ function inferContextLocally(description: string, seed: string) {
     lyrics: "",
     prompt: description,
     lyricTheme,
-    instrumental: text.includes('instrumental') || text.includes('no vocals'),
+    instrumental: matchesWholeWord(text, 'instrumental') || matchesWholeWord(text, 'no vocals'),
     vocalStyle,
     instrumentation,
     videoStyle,
