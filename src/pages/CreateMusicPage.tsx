@@ -238,7 +238,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
 
   const [vocalsEnabled, setVocalsEnabled] = useState(true);
   const [vocalArrangement, setVocalArrangement] = useState('solo');
-  const [vocalStyle, setVocalStyle] = useState('Pop Singing');
+  const [vocalStyle, setVocalStyle] = useState('Female Vocal');
   const [vocalGender, setVocalGender] = useState<'male' | 'female' | 'neutral'>('neutral');
   const [vocalIntensity, setVocalIntensity] = useState(7);
   const [selectedVocalEffects, setSelectedVocalEffects] = useState<string[]>([]);
@@ -487,12 +487,16 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
     const moodNouns: Record<string, string[]> = {
       Aggressive: ['Riot', 'Reckoning', 'Empire', 'Knife', 'Cage'],
       Energetic: ['Pulse', 'Rush', 'Skyline', 'Ascent', 'Sprint'],
+      Euphoric: ['Rush', 'Skyline', 'Bliss', 'Ascent', 'Lift'],
       Melancholic: ['Lament', 'Ghost', 'Rain', 'Fade', 'Letter'],
       Romantic: ['Velvet', 'Promise', 'Hymn', 'Heart', 'Bloom'],
-      Calm: ['Tide', 'Whisper', 'Shore', 'Drift', 'Lull'],
+      Chill: ['Tide', 'Whisper', 'Shore', 'Drift', 'Lull'],
       Epic: ['Empire', 'Ascent', 'Horizon', 'Cathedral', 'Crown'],
       Dark: ['Shadow', 'Static', 'Hollow', 'Phantom', 'Vault'],
-      Tense: ['Edge', 'Pressure', 'Cage', 'Fault', 'Brink'],
+      Atmospheric: ['Edge', 'Pressure', 'Haze', 'Drift', 'Fog'],
+      Cinematic: ['Empire', 'Horizon', 'Cathedral', 'Crown', 'Ascent'],
+      Dreamy: ['Tide', 'Cloud', 'Shore', 'Drift', 'Bloom'],
+      Mysterious: ['Phantom', 'Vault', 'Riddle', 'Cipher', 'Veil'],
       Uplifting: ['Sunrise', 'Dawn', 'Bloom', 'Lift', 'Ascent'],
       Nostalgic: ['Letter', 'Memory', 'Polaroid', 'Echo', 'Yesterday'],
     };

@@ -64,18 +64,23 @@ function inferContextLocally(description: string, seed: string) {
     if (kws.some(k => text.includes(k))) { genre = g; break; }
   }
 
-  // MOOD - Based on emotional keywords
+  // MOOD - Based on emotional keywords. Labels MUST match PRESET_MOODS in
+  // src/data/form-presets.ts so auto-fill values show as valid selections.
   const moodKeywords: Record<string, string[]> = {
-    'Aggressive': ['aggressive', 'intense', 'dark', 'anger', 'rage', 'fight', 'hard'],
-    'Calm': ['calm', 'peaceful', 'chill', 'relax', 'soft'],
+    'Aggressive': ['aggressive', 'intense', 'anger', 'rage', 'fight', 'hard'],
+    'Chill': ['calm', 'peaceful', 'chill', 'relax', 'soft', 'gentle'],
     'Melancholic': ['sad', 'melancholic', 'heartbreak', 'pain', 'tears'],
     'Romantic': ['love', 'romantic', 'heart', 'kiss', 'baby'],
     'Uplifting': ['happy', 'uplifting', 'joy', 'celebrate', 'good'],
     'Energetic': ['energetic', 'dance', 'party', 'energy', 'fast'],
     'Nostalgic': ['nostalgic', 'memory', 'remember', 'past', 'old'],
-    'Epic': ['epic', 'cinematic', 'hero', 'mountains'],
-    'Tense': ['tense', 'suspense', 'fear', 'scary'],
-    'Dark': ['dark', 'night', 'shadow', 'evil'],
+    'Epic': ['epic', 'hero', 'mountains', 'grand', 'majestic'],
+    'Dark': ['dark', 'night', 'shadow', 'evil', 'tense', 'suspense', 'fear', 'scary'],
+    'Atmospheric': ['atmospheric', 'ambient', 'dreamy', 'ethereal', 'spacey'],
+    'Cinematic': ['cinematic', 'film', 'movie', 'score', 'soundtrack'],
+    'Dreamy': ['dreamy', 'floating', 'hazy', 'surreal'],
+    'Euphoric': ['euphoric', 'ecstatic', 'bliss', 'rush', 'high'],
+    'Mysterious': ['mysterious', 'enigma', 'unknown', 'wonder'],
   };
 
   let mood = 'Energetic';
@@ -136,26 +141,27 @@ function inferContextLocally(description: string, seed: string) {
   else if (artistLower.includes('beyonce')) artistInspiration = 'Beyoncé';
   else if (artistLower.includes('dua lipa')) artistInspiration = 'Dua Lipa';
 
-  // VOCAL STYLE - Based on genre. Covers every entry in `genreKeywords`.
+  // VOCAL STYLE - Based on genre. Labels MUST match PRESET_VOCAL_STYLES in
+  // src/data/form-presets.ts so auto-fill values show as valid selections.
   const vocalStyleMap: Record<string, string> = {
-    'Hip Hop': 'Rapped',
-    'Rock': 'Gritty',
-    'Jazz': 'Smooth',
-    'Classical': 'Operatic',
-    'Pop': 'Contemporary',
-    'R&B': 'Breathless',
-    'Metal': 'Screamed',
-    'Lo-fi': 'Whispers',
-    'Electronic': 'Auto-tuned',
-    'Punjabi Drill': 'Aggressive male rap',
-    'Reggaeton': 'Latin Pop',
-    'Bhangra': 'Folk Punjabi vocals',
-    'Bollywood': 'Filmi playback',
-    'K-Pop': 'Polished group harmony',
-    'J-Pop': 'Bright lead vocal',
-    'Country': 'Storytelling drawl',
+    'Hip Hop': 'Rap Vocal',
+    'Rock': 'Gravely Rock',
+    'Jazz': 'Sultry Jazz',
+    'Classical': 'Opera Tenor',
+    'Pop': 'Female Vocal',
+    'R&B': 'Soulful Diva',
+    'Metal': 'Aggressive Growl',
+    'Lo-fi': 'Whisper Vocal',
+    'Electronic': 'Robotic Vocal',
+    'Punjabi Drill': 'Rap Vocal',
+    'Reggaeton': 'Male Vocal',
+    'Bhangra': 'Male Vocal',
+    'Bollywood': 'Soulful Diva',
+    'K-Pop': 'Choir Vocal',
+    'J-Pop': 'Female Vocal',
+    'Country': 'Male Vocal',
   };
-  const vocalStyle = vocalStyleMap[genre] || 'Contemporary';
+  const vocalStyle = vocalStyleMap[genre] || 'Male Vocal';
 
   // INSTRUMENTATION - Based on genre
   const instMap: Record<string, string> = {
@@ -181,7 +187,7 @@ function inferContextLocally(description: string, seed: string) {
   // LYRIC THEME - Based on mood
   const themeMap: Record<string, string> = {
     'Aggressive': 'Fight or Fall',
-    'Calm': 'Peace Within',
+    'Chill': 'Peace Within',
     'Melancholic': 'Lost Love',
     'Romantic': 'Heart Beats',
     'Uplifting': 'Rise Up',
@@ -189,28 +195,33 @@ function inferContextLocally(description: string, seed: string) {
     'Nostalgic': 'Remember When',
     'Epic': 'Hero Journey',
     'Dark': 'Shadows',
-    'Tense': 'Edge of Dawn',
+    'Atmospheric': 'Edge of Dawn',
+    'Cinematic': 'The Final Act',
+    'Dreamy': 'Floating Away',
+    'Euphoric': 'Limitless',
+    'Mysterious': 'Hidden Truths',
   };
   const lyricTheme = themeMap[mood] || 'Story of Us';
 
-  // VIDEO STYLE - Based on mood + genre
+  // VIDEO STYLE - Based on genre. Labels MUST match PRESET_VIDEO_STYLES in
+  // src/data/form-presets.ts so auto-fill values show as valid selections.
   const videoStyleMap: Record<string, string> = {
-    'Electronic': 'Neon City Night',
-    'Hip Hop': 'Urban Street',
-    'Rock': 'Concert Performance',
-    'Jazz': 'Vintage Film',
-    'Classical': 'Nature Documentary',
-    'Pop': 'Romantic Sunset',
-    'R&B': 'Neon City Night',
-    'Metal': 'Concert Performance',
-    'Lo-fi': 'Vintage Film',
-    'Punjabi Drill': 'Cinematic Night City',
-    'Reggaeton': 'Beach Party',
-    'Bhangra': 'Punjabi Wedding Festival',
-    'Bollywood': 'Bollywood Cinematic',
-    'K-Pop': 'Choreographed Stage',
-    'J-Pop': 'Anime Aesthetic',
-    'Country': 'Open Road',
+    'Electronic': 'Neon Cityscapes',
+    'Hip Hop': 'Urban Street Art',
+    'Rock': 'Glitch Art',
+    'Jazz': 'Minimalist Lines',
+    'Classical': 'Nature & Landscapes',
+    'Pop': 'Fluid Liquid Motion',
+    'R&B': 'Neon Cityscapes',
+    'Metal': 'Glitch Art',
+    'Lo-fi': 'Vaporwave Retro',
+    'Punjabi Drill': 'Neon Cityscapes',
+    'Reggaeton': 'Fluid Liquid Motion',
+    'Bhangra': 'Fluid Liquid Motion',
+    'Bollywood': 'Cosmic Nebula',
+    'K-Pop': 'Neon Cityscapes',
+    'J-Pop': 'Vaporwave Retro',
+    'Country': 'Nature & Landscapes',
   };
   const videoStyle = videoStyleMap[genre] || 'Abstract Geometric';
 
@@ -238,32 +249,40 @@ function inferContextLocally(description: string, seed: string) {
   // ENERGY (1-10) - mood-driven so the slider reflects intent.
   const energyMap: Record<string, number> = {
     Aggressive: 9,
+    Euphoric: 9,
     Energetic: 8,
     Epic: 8,
     Uplifting: 7,
-    Tense: 7,
+    Cinematic: 7,
     Dark: 6,
+    Mysterious: 6,
     Romantic: 5,
+    Atmospheric: 4,
     Nostalgic: 4,
+    Dreamy: 3,
     Melancholic: 3,
-    Calm: 2,
+    Chill: 2,
   };
-  const energyLevel = energyMap[mood] ?? 5;
+  const energyLevel = energyMap[mood] ?? 7;
 
   // VOCAL INTENSITY (1-10) - mood-driven, slightly higher than energy.
   const vocalIntensityMap: Record<string, number> = {
     Aggressive: 9,
+    Euphoric: 9,
     Energetic: 8,
     Epic: 8,
     Uplifting: 7,
+    Cinematic: 7,
     Romantic: 6,
-    Tense: 6,
     Dark: 6,
+    Mysterious: 5,
+    Atmospheric: 4,
     Nostalgic: 4,
+    Dreamy: 3,
     Melancholic: 3,
-    Calm: 2,
+    Chill: 2,
   };
-  const vocalIntensity = vocalIntensityMap[mood] ?? 5;
+  const vocalIntensity = vocalIntensityMap[mood] ?? 7;
 
   // STRUCTURE - genre-aware template defaults.
   const structureMap: Record<string, string> = {
