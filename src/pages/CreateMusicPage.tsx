@@ -354,7 +354,13 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
 
   useEffect(() => {
     if (!genre) return;
-    setSelectedGenres(normalizeGenreOptions([genre]));
+    // Only sync if selectedGenres doesn't already contain the current genre.
+    // This prevents overwriting multi-genre selections set by auto-fill.
+    setSelectedGenres(prev => {
+      const alreadyHas = prev.some(g => g.label.toLowerCase() === genre.toLowerCase());
+      if (alreadyHas) return prev;
+      return normalizeGenreOptions([genre]);
+    });
   }, [genre]);
 
   useEffect(() => {
@@ -572,7 +578,19 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
     // and so React's controlled-input updates flush in a clear sequence.
     await new Promise<void>(r => setTimeout(r, 30));
     const fillNonce = nextGenerationNonce('fill');
-    const inferred = inferContextFromDescription(trimmed, fillNonce);
+    // Enrich the prompt with any genres/mood the user already selected
+    // manually so inference considers them even if not typed in the description.
+    let enrichedPrompt = trimmed;
+    const lowerPrompt = trimmed.toLowerCase();
+    for (const g of selectedGenres) {
+      if (!lowerPrompt.includes(g.label.toLowerCase())) {
+        enrichedPrompt += ` ${g.label}`;
+      }
+    }
+    if (mood && !lowerPrompt.includes(mood.toLowerCase())) {
+      enrichedPrompt += ` ${mood}`;
+    }
+    const inferred = inferContextFromDescription(enrichedPrompt, fillNonce);
     console.log('[fillSongFromPrompt] inferred:', inferred);
     const before = {
       title, genre, subgenre, mood, tempo, vocalLanguage, artistInspiration,
@@ -625,6 +643,21 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
     // prompt update object explicitly to avoid unused-variable lint rules
     // tripping a silent build failure on the dev server.
     setTitle(after.title);
+
+    // ── Sync multi-select UI arrays from inference results ──────────
+    // Genre SmartSearchInput uses selectedGenres (GenreOption[])
+    if (inferred.allGenres?.length) {
+      setSelectedGenres(normalizeGenreOptions(inferred.allGenres));
+    } else {
+      setSelectedGenres(normalizeGenreOptions([after.genre]));
+    }
+    // Subgenre SmartSearchInput uses selectedSubgenres (string[])
+    if (inferred.allSubgenres?.length) {
+      setSelectedSubgenres(inferred.allSubgenres);
+    } else if (after.subgenre) {
+      setSelectedSubgenres(after.subgenre.split(',').map(s => s.trim()).filter(Boolean));
+    }
+
     const promptUpdates: Partial<SongPromptState> = {
       genre: after.genre,
       subgenre: after.subgenre,
@@ -767,6 +800,20 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
       structured.description || structured.prompt || result.suggestion || songDescription;
     const inferred = inferContextFromDescription(seedDesc, nextGenerationNonce('suggest'));
     const inferredInstruments = parseInstrumentation(inferred.instrumentation);
+
+    // Sync multi-select genre/subgenre arrays before SongPromptState update
+    const nextGenres = (structured.genre && structured.genre.length > 0)
+      ? structured.genre
+      : (inferred.allGenres?.length ? inferred.allGenres : undefined);
+    if (nextGenres) {
+      setSelectedGenres(normalizeGenreOptions(nextGenres));
+    }
+    const nextSubgenres = Array.isArray(structured.subgenre)
+      ? structured.subgenre
+      : (inferred.allSubgenres?.length ? inferred.allSubgenres : undefined);
+    if (nextSubgenres) {
+      setSelectedSubgenres(nextSubgenres);
+    }
 
     updateSongPrompt(prev => {
       const next: SongPromptState = {

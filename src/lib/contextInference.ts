@@ -245,16 +245,25 @@ function inferContextLocally(description: string, seed: string) {
     'Bossa Nova': 'Portuguese', 'Arabic Pop': 'Arabic',
   };
 
-  let vocalLanguage = '';
+  // Collect ALL matching languages (user may say "punjabi and english")
+  const matchedLanguages: string[] = [];
   for (const [l, kws] of Object.entries(langKeywords)) {
-    if (kws.some(k => text.includes(k))) { vocalLanguage = l; break; }
+    if (kws.some(k => text.includes(k))) { matchedLanguages.push(l); }
   }
-  if (!vocalLanguage) {
-    vocalLanguage = genreLanguageDefaults[genre] || 'English';
+  // Also add genre-implied languages for secondary genres
+  if (matchedLanguages.length === 0) {
+    const primaryLang = genreLanguageDefaults[genre];
+    if (primaryLang) matchedLanguages.push(primaryLang);
+    for (const sg of secondaryGenres) {
+      const sgLang = genreLanguageDefaults[sg];
+      if (sgLang && !matchedLanguages.includes(sgLang)) matchedLanguages.push(sgLang);
+    }
   }
+  if (matchedLanguages.length === 0) matchedLanguages.push('English');
+  const vocalLanguage = matchedLanguages.join(', ');
 
-  // ─── ARTIST INSPIRATION ───────────────────────────────────────────────
-  let artistInspiration = '';
+  // ─── ARTIST INSPIRATION (can match multiple) ────────────────────────
+  const matchedArtists: string[] = [];
   const artistPatterns: [string, string[]][] = [
     ['Drake', ['drake']],
     ['The Weeknd', ['weeknd', 'the weeknd']],
@@ -280,8 +289,9 @@ function inferContextLocally(description: string, seed: string) {
     ['Amelie Lens', ['amelie lens']],
   ];
   for (const [artist, triggers] of artistPatterns) {
-    if (triggers.some(t => text.includes(t))) { artistInspiration = artist; break; }
+    if (triggers.some(t => text.includes(t))) { matchedArtists.push(artist); }
   }
+  const artistInspiration = matchedArtists.join(', ');
 
   // ─── VOCAL STYLE (depends on genre) ───────────────────────────────────
   // Labels MUST match PRESET_VOCAL_STYLES.
@@ -498,6 +508,16 @@ function inferContextLocally(description: string, seed: string) {
   };
   const vocalArrangement = arrangementMap[genre] || 'solo';
 
+  // ─── Multi-select arrays for UI fields ──────────────────────────────
+  // allGenres: primary + secondaries so the genre SmartSearchInput shows all
+  const allGenres = [genre, ...secondaryGenres];
+  // allSubgenres: split comma-separated subgenre into array
+  const allSubgenres = subgenre ? subgenre.split(',').map(s => s.trim()).filter(Boolean) : [];
+  // allLanguages: already collected above
+  const allLanguages = matchedLanguages;
+  // allArtists: already collected above
+  const allArtists = matchedArtists;
+
   return {
     genre,
     subgenre,
@@ -517,6 +537,11 @@ function inferContextLocally(description: string, seed: string) {
     structureType,
     vocalEffects,
     vocalArrangement,
+    // Multi-value arrays for multi-select UI fields
+    allGenres,
+    allSubgenres,
+    allLanguages,
+    allArtists,
   };
 }
 
