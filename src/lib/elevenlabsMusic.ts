@@ -4,29 +4,35 @@ import { formatLyricsForElevenLabs } from "./lyricsFormatter";
 
 const ELEVENLABS_BASE_URL = "https://api.elevenlabs.io/v1";
 
-// Mapping broad vocal styles to specific ElevenLabs Voice IDs
+// Mapping vocal styles from PRESET_VOCAL_STYLES to ElevenLabs Voice IDs
 const VOICE_MAP: Record<string, string> = {
-  "Clean Male": "pNInz6obbf5AWCGqeA", // Example Adam
-  "Clean Female": "EXAVITQu4vr4xnSDxMaL", // Example Bella
+  "Male Vocal": "pNInz6obbf5AWCGqeA",
+  "Female Vocal": "EXAVITQu4vr4xnSDxMaL",
+  "Robotic Vocal": "pNInz6obbf5AWCGqeA",
+  "Rap Vocal": "pNInz6obbf5AWCGqeA",
+  "Choir Vocal": "EXAVITQu4vr4xnSDxMaL",
+  "Whisper Vocal": "EXAVITQu4vr4xnSDxMaL",
+  "Soulful Diva": "EXAVITQu4vr4xnSDxMaL",
+  "Gravely Rock": "pNInz6obbf5AWCGqeA",
+  "Opera Tenor": "pNInz6obbf5AWCGqeA",
+  "Sultry Jazz": "EXAVITQu4vr4xnSDxMaL",
+  "Ethereal Soprano": "EXAVITQu4vr4xnSDxMaL",
+  "Aggressive Growl": "pNInz6obbf5AWCGqeA",
+  // Legacy keys
+  "Clean Male": "pNInz6obbf5AWCGqeA",
+  "Clean Female": "EXAVITQu4vr4xnSDxMaL",
   "Pop Belt Female": "EXAVITQu4vr4xnSDxMaL",
-  // Fallback
-  "default": "pNInz6obbf5AWCGqeA"
+  "default": "pNInz6obbf5AWCGqeA",
 };
 
 export async function generateElevenLabsMusic(context: CreativeContext): Promise<string> {
     const apiKey = process.env.ELEVENLABS_API_KEY;
     if (!apiKey) throw new Error("ELEVENLABS_API_KEY is not set");
 
-    const prompt = buildElevenLabsMusicPrompt(context);
-    const lyrics = formatLyricsForElevenLabs(context.lyrics);
-
-    // Call the ElevenLabs Sound Generation API (hypothetical/preview API structure for music)
-    // As ElevenLabs music is still in preview for some, we use the standard structure
-    // If they have a dedicated /music endpoint, it would go here.
-    
-    // THIS IS A PLACEHOLDER FOR THE ACTUAL ELEVENLABS MUSIC ENDPOINT
-    // If it's standard TTS used for singing:
-    return generateElevenLabsTTS(context); 
+    // ElevenLabs does not have a dedicated music generation endpoint.
+    // Use the TTS endpoint with the multilingual v2 model, which produces
+    // expressive speech/singing suitable for vocal tracks.
+    return generateElevenLabsTTS(context);
 }
 
 export async function generateElevenLabsTTS(context: CreativeContext): Promise<string> {

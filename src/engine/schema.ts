@@ -4,7 +4,7 @@ export const RawUserInputSchema = z.object({
   creation_mode: z.enum(['single', 'album']),
   album_song_count: z.number().int().min(2).max(20).optional(),
   track_name: z.string().min(1),
-  music_prompt: z.string().min(10).max(2000),
+  music_prompt: z.string().min(10).max(12000),
   genres: z.array(z.string().min(1)).min(1),
   subgenres: z.array(z.string()).optional(),
   tempo_bpm: z.number().min(40).max(220),

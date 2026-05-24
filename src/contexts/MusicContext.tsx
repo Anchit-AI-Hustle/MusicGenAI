@@ -590,6 +590,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       if (input.vocalsEnabled === false) return 'none';
       const raw = String(input.vocalArrangement || 'solo').trim().toLowerCase();
       if (raw === 'solo' || raw === 'duet' || raw === 'choir' || raw === 'none') return raw;
+      if (raw === 'group' || raw === 'ensemble') return 'choir';
       return 'solo';
     })();
 

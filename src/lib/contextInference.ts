@@ -517,8 +517,9 @@ function inferContextLocally(description: string, seed: string) {
   const vocalEffects = effectsMap[genre] || [];
 
   // ─── VOCAL ARRANGEMENT (depends on genre) ─────────────────────────────
+  // Values MUST be one of: 'solo' | 'duet' | 'choir' | 'none'
   const arrangementMap: Record<string, string> = {
-    'K-Pop': 'group', 'Bollywood': 'duet', 'Bhangra': 'group',
+    'K-Pop': 'choir', 'Bollywood': 'duet', 'Bhangra': 'choir',
     'Classical': 'choir', 'Choir Vocal': 'choir',
   };
   const vocalArrangement = arrangementMap[genre] || 'solo';
