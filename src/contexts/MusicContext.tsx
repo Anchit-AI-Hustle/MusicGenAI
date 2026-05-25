@@ -1918,23 +1918,33 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           suggestionValue = pickNovelCandidate(candidates, currentValue, history, globalHistory);
           break;
         }
-        case 'vocalLanguage':
-          suggestionValue = pickNovelCandidate(
-            [
-              unique([
-                ...parseList(effectiveContext.vocalLanguage),
-                'English',
-                'Hindi',
-                'Spanish',
-              ]).slice(0, 3).join(', '),
-              unique(['English', 'Hindi', 'Punjabi']).slice(0, 3).join(', '),
-              unique(['English', 'Spanish', 'French']).slice(0, 3).join(', '),
-            ],
-            currentValue,
-            history,
-            globalHistory,
-          );
+        case 'vocalLanguage': {
+          const genreLanguageMap: Record<string, string[]> = {
+            'hip-hop': ['English'], trap: ['English'], drill: ['English'],
+            pop: ['English'], rock: ['English'], metal: ['English'],
+            jazz: ['English'], classical: ['Latin', 'Italian', 'German'],
+            edm: ['English'], house: ['English'], techno: ['English'],
+            rnb: ['English'], folk: ['English'],
+            reggaeton: ['Spanish', 'English'], 'latin pop': ['Spanish', 'English'],
+            country: ['English'], blues: ['English'],
+            'k-pop': ['Korean', 'English'], 'j-pop': ['Japanese', 'English'],
+            bollywood: ['Hindi', 'English'], bhangra: ['Punjabi', 'English'],
+            'punjabi drill': ['Punjabi', 'English'],
+            'desi hip hop': ['Hindi', 'English', 'Punjabi'],
+            'arabic pop': ['Arabic', 'English'],
+            'bossa nova': ['Portuguese', 'English'],
+            afrobeats: ['English', 'Yoruba', 'Pidgin'],
+          };
+          const langPool = genreLanguageMap[baseGenre] ?? ['English'];
+          const existing = parseList(effectiveContext.vocalLanguage);
+          const candidates = [
+            unique([...existing, ...langPool]).slice(0, 3).join(', '),
+            langPool.join(', '),
+            unique([...langPool, 'English']).join(', '),
+          ];
+          suggestionValue = pickNovelCandidate(candidates, currentValue, history, globalHistory);
           break;
+        }
         case 'vocalIntensity':
           suggestionValue = action === 'new'
             ? String(Math.max(1, Math.min(10, Math.round(suggestionContext.mood.arousal + (suggestionContext.mood.arousal >= 6 ? -2 : 2)))))
@@ -1954,46 +1964,63 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             globalHistory,
           );
           break;
-        case 'vocalArrangement':
+        case 'vocalArrangement': {
+          const genreArrangementMap: Record<string, string> = {
+            classical: 'choir', 'k-pop': 'choir', bhangra: 'choir',
+            bollywood: 'duet', rnb: 'duet', soul: 'duet',
+            edm: 'solo', ambient: 'none', techno: 'solo',
+            'hip-hop': 'solo', trap: 'solo', drill: 'solo',
+            pop: 'solo', rock: 'solo', metal: 'solo',
+            jazz: 'solo', folk: 'solo', country: 'solo',
+          };
+          const genreDefault = genreArrangementMap[baseGenre] ?? 'solo';
           suggestionValue = pickNovelCandidate(
-            [
-              baseGenre === 'classical'
-                ? 'choir'
-                : baseGenre === 'edm' || baseGenre === 'ambient'
-                  ? 'solo'
-                  : baseGenre === 'rnb'
-                    ? 'duet'
-                    : 'solo',
-              'duet',
-              'solo',
-              'choir',
-            ],
+            [genreDefault, 'solo', 'duet', 'choir'],
             currentValue,
             history,
             globalHistory,
           );
           break;
+        }
         case 'energyLevel':
           suggestionValue = action === 'new'
             ? String(Math.max(1, Math.min(10, Math.round(suggestionContext.mood.arousal + (suggestionContext.mood.arousal >= 6 ? -2 : 2)))))
             : String(Math.max(1, Math.min(10, Math.round(suggestionContext.mood.arousal))));
           break;
-        case 'instruments':
-          suggestionValue = pickNovelCandidate(
-            [
-              unique([
-                ...parseList(effectiveContext.instruments),
-                ...(baseGenre === 'rock' ? ['electric guitar', 'bass', 'drums'] : []),
-                ...(baseGenre === 'pop' ? ['synth', 'drum machine', 'acoustic guitar'] : []),
-                ...(baseGenre === 'classical' ? ['strings', 'piano'] : []),
-              ]).slice(0, 3).join(', '),
-              unique(['piano', 'strings', 'synthesizer']).slice(0, 3).join(', '),
-            ],
-            currentValue,
-            history,
-            globalHistory,
-          );
+        case 'instruments': {
+          const genreInstrumentMap: Record<string, string[]> = {
+            'hip-hop': ['808 Bass', 'Drums', 'Piano', 'Synth', 'Sampler'],
+            trap: ['808 Bass', 'Hi-Hat Rolls', 'Snare', 'Synth', 'Piano'],
+            drill: ['Sliding 808', 'Drill Drums', 'Piano', 'Dark Strings'],
+            pop: ['Piano', 'Drums', 'Synth', 'Bass', 'Guitar'],
+            rock: ['Electric Guitar', 'Drums', 'Bass Guitar', 'Keys'],
+            metal: ['Distorted Guitar', 'Double Kick', 'Bass', 'Orchestral'],
+            jazz: ['Piano', 'Saxophone', 'Drums', 'Double Bass'],
+            classical: ['Strings', 'Woodwinds', 'Brass', 'Piano'],
+            edm: ['Supersaw Lead', 'Kick', 'Bass Drop', 'Pluck Synth'],
+            house: ['Piano', '909 Drums', 'Bass', 'Organ', 'Vocal Chops'],
+            techno: ['Kick', 'Hi-Hats', 'Acid Bass', 'Synth Stabs'],
+            ambient: ['Pad Synth', 'Reverb Guitar', 'Field Recordings'],
+            rnb: ['Piano', 'Synth', '808', 'Guitar'],
+            folk: ['Acoustic Guitar', 'Banjo', 'Fiddle', 'Harmonica'],
+            country: ['Acoustic Guitar', 'Pedal Steel', 'Fiddle', 'Drums'],
+            reggaeton: ['Dembow Drums', '808 Bass', 'Synth', 'Latin Percussion'],
+            blues: ['Electric Guitar', 'Harmonica', 'Piano', 'Bass'],
+            funk: ['Bass Guitar', 'Drums', 'Guitar', 'Brass', 'Organ'],
+            soul: ['Piano', 'Organ', 'Brass', 'Bass', 'Drums'],
+          };
+          const pool = genreInstrumentMap[baseGenre] ?? ['Piano', 'Drums', 'Synth', 'Bass'];
+          // Shuffle pool for variety, pick 3-5
+          const shuffled = [...pool].sort(() => procRng() - 0.5);
+          const count = 3 + Math.floor(procRng() * 3);
+          const candidates = [
+            shuffled.slice(0, count).join(', '),
+            shuffled.slice(1, count + 1).join(', '),
+            [...pool].sort(() => procRng() - 0.5).slice(0, count).join(', '),
+          ];
+          suggestionValue = pickNovelCandidate(candidates, currentValue, history, globalHistory);
           break;
+        }
         case 'duration':
           suggestionValue = action === 'new'
             ? pickNovelCandidate(

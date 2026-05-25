@@ -185,7 +185,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
     if (lastFailedCreationIdRef.current === currentCreation.id) return;
     lastFailedCreationIdRef.current = currentCreation.id;
 
-    const reason = currentCreation.errorMessage || currentCreation.error_message || 'AI backend unavailable';
+    const reason = (currentCreation as any).errorMessage || (currentCreation as any).error_message || 'AI backend unavailable';
     setFallbackReason(reason);
     toast.error(`AI generation failed — running local synth fallback. (${reason})`);
 
@@ -699,6 +699,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
       energyLevel: String(after.energyLevel),
       vocalIntensity: String(after.vocalIntensity),
       instruments: after.instruments.join(', '),
+      vocalEffects: after.vocalEffects.join(', '),
       duration: String(after.duration),
     });
     console.log('[fillSongFromPrompt] applied:', after);
@@ -911,10 +912,7 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
       case 'energyLevel': updateSongPrompt({ energyLevel: Math.max(1, Math.min(10, parseInt(value) || 5)) }); break;
       case 'instruments': {
         const newInst = value.split(',').map(e => e.trim()).filter(Boolean);
-        updateSongPrompt(prev => ({
-          ...prev,
-          instruments: Array.from(new Set([...prev.instruments, ...newInst])),
-        }));
+        updateSongPrompt({ instruments: newInst });
         break;
       }
       case 'lyricsTheme': updateSongPrompt({ lyricsTheme: value }); break;
