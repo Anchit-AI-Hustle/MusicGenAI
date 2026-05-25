@@ -98,7 +98,7 @@ export const GlobalGenerationTicker: React.FC<{
   };
 
   return (
-    <div className={`fixed top-0 left-0 right-0 z-50 flex flex-col items-center pt-3 px-4 pointer-events-none transition-[left] duration-300 ${sidebarOffsetClass}`}>
+    <div className={`fixed top-0 left-0 right-0 z-30 flex flex-col items-center pt-3 px-4 pointer-events-none transition-[left] duration-300 ${sidebarOffsetClass}`}>
       <AnimatePresence>
         {displayCreations.slice(0, 1).map((creation) => {
           const activeTrack = creation.tracks.find(t => inPipeline.has(t.status)) || creation.tracks[0];

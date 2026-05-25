@@ -80,7 +80,7 @@ const AppContent: React.FC = () => {
           onNavigate={handleNavigate}
           sidebarOffsetClass={sidebarCollapsed ? 'lg:left-20' : 'lg:left-64'}
         />
-        <main className={`${isMobile ? "pt-20" : `${sidebarCollapsed ? "ml-20" : "ml-64"} pt-14 transition-all duration-300`} ${currentTrack ? 'pb-24' : ''}`}>
+        <main className={`${isMobile ? "pt-20" : `${sidebarCollapsed ? "ml-20" : "ml-64"} pt-14 transition-all duration-300`} ${currentTrack ? 'pb-28' : 'pb-[env(safe-area-inset-bottom,0px)]'}`}>
           {renderPage()}
         </main>
         <SystemDemoDiagnostics />

@@ -318,7 +318,7 @@ export const GlobalPlayer: React.FC<GlobalPlayerProps> = ({ sidebarOffsetClass =
   return (
     <>
       <div
-        className={`fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl transition-[left] duration-300 ${sidebarOffsetClass}`}
+        className={`fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card/95 backdrop-blur-xl transition-[left] duration-300 pb-[env(safe-area-inset-bottom,0px)] ${sidebarOffsetClass}`}
         onClick={() => setIsExpanded(true)}
       >
         <MiniProgress />
@@ -406,7 +406,7 @@ export const GlobalPlayer: React.FC<GlobalPlayerProps> = ({ sidebarOffsetClass =
                   </div>
                 </div>
 
-                <div className="grid h-[calc(100%-73px)] grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+                <div className="grid h-[calc(100%-73px)] grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
                   <div className="flex flex-col p-4 md:p-6 lg:p-8 min-h-0">
                     <div className="flex items-start justify-between gap-4 mb-5">
                       <div className="min-w-0">
