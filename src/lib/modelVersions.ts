@@ -1,4 +1,5 @@
 import Replicate from "replicate";
+import { PUNJABI_ACE_STEP_MODEL_ID } from "./env";
 
 export interface ModelVersion {
   id: string;
@@ -54,7 +55,7 @@ export async function getLatestModelVersion(modelId: string, replicate?: Replica
 
 function getFallbackVersion(modelId: string): string {
   switch (modelId) {
-    case process.env.PUNJABI_ACE_STEP_MODEL_ID:
+    case PUNJABI_ACE_STEP_MODEL_ID:
         return "latest";
     case MODELS.ACE_STEP:
       return "cc38668bd8b0304ddfa0c9fbdd26bed70defd6e246db1cc60cceebba54b4239e"; // March 2024 stable

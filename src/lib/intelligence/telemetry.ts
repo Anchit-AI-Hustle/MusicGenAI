@@ -12,6 +12,7 @@
  * Without telemetry we cannot tell which providers are slow, which genres
  * fail, or how often we re-roll. T1.4 in MODEL_IMPROVEMENT_ROADMAP.
  */
+import { TELEMETRY_DISABLE_CONSOLE, TELEMETRY_SINK_URL } from "@/lib/env";
 
 export type Stage =
   | "request-received"
@@ -53,8 +54,8 @@ export interface RunContext {
   events: TelemetryEvent[];
 }
 
-const SINK_URL = (typeof process !== "undefined" && process.env?.TELEMETRY_SINK_URL) || "";
-const ENABLE_CONSOLE = (typeof process !== "undefined" && process.env?.TELEMETRY_DISABLE_CONSOLE !== "1");
+const SINK_URL = TELEMETRY_SINK_URL;
+const ENABLE_CONSOLE = TELEMETRY_DISABLE_CONSOLE !== "1";
 
 export function newRunId(): string {
   const t = Date.now().toString(36);
@@ -129,7 +130,6 @@ function emit(ctx: RunContext, ev: TelemetryEvent) {
     const tag = ev.success ? "tlm" : "tlm.err";
     const dur = typeof ev.latencyMs === "number" ? ` ${ev.latencyMs}ms` : "";
     const extra = compactMeta(ev);
-    // eslint-disable-next-line no-console
     console.log(`[${tag}] ${ev.runId} ${ev.stage}${dur}${extra}`);
   }
   if (SINK_URL) {

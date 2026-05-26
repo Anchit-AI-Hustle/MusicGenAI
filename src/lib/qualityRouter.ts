@@ -1,4 +1,5 @@
 import { CreativeContext, shouldUseElevenLabsMusic, shouldUseTTSMixPath, shouldRecommendHighQualityVocals } from "@/types/creative-context";
+import { ELEVENLABS_API_KEY } from "./env";
 
 export type RoutingPath = "elevenlabs-music" | "tts-mix" | "ace-step" | "stable-audio";
 
@@ -9,7 +10,7 @@ export interface QualityRouteResult {
 }
 
 export function determineGenerationPath(context: CreativeContext): QualityRouteResult {
-  const hasElevenLabsKey = !!process.env.ELEVENLABS_API_KEY;
+  const hasElevenLabsKey = !!ELEVENLABS_API_KEY;
 
   if (context.instrumentalOnly) {
     if (context.useHighQualityVocals) { // if the user requested HQ but it's instrumental only, Stable Audio is better

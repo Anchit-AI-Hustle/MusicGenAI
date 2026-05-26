@@ -1,6 +1,7 @@
 import { CreativeContext } from "@/types/creative-context";
 import { buildElevenLabsMusicPrompt, buildElevenLabsTTSPrompt } from "./promptBuilder";
 import { formatLyricsForElevenLabs } from "./lyricsFormatter";
+import { ELEVENLABS_API_KEY } from "./env";
 
 const ELEVENLABS_BASE_URL = "https://api.elevenlabs.io/v1";
 
@@ -26,7 +27,7 @@ const VOICE_MAP: Record<string, string> = {
 };
 
 export async function generateElevenLabsMusic(context: CreativeContext): Promise<string> {
-    const apiKey = process.env.ELEVENLABS_API_KEY;
+    const apiKey = ELEVENLABS_API_KEY;
     if (!apiKey) throw new Error("ELEVENLABS_API_KEY is not set");
 
     // ElevenLabs does not have a dedicated music generation endpoint.
@@ -36,7 +37,7 @@ export async function generateElevenLabsMusic(context: CreativeContext): Promise
 }
 
 export async function generateElevenLabsTTS(context: CreativeContext): Promise<string> {
-   const apiKey = process.env.ELEVENLABS_API_KEY;
+   const apiKey = ELEVENLABS_API_KEY;
    if (!apiKey) throw new Error("ELEVENLABS_API_KEY is not set");
 
    const voiceId = VOICE_MAP[context.vocalStyle] || VOICE_MAP["default"];

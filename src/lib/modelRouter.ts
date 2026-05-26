@@ -3,6 +3,7 @@ import { CreativeContext } from "@/types/creative-context";
 import { MODELS, getLatestModelVersion } from "./modelVersions";
 import { buildMinimaxPrompt, buildStableAudioPrompt } from "./promptBuilder";
 import { formatLyricsForMinimax } from "./lyricsFormatter";
+import { PUNJABI_ACE_STEP_MODEL_ID } from "./env";
 
 // Internal interface for the raw Replicate API response
 interface ReplicateJob {
@@ -33,7 +34,7 @@ export async function submitAceStepJob(context: CreativeContext, replicate: Repl
 }
 
 export async function submitPunjabiAceStepJob(context: CreativeContext, replicate: Replicate): Promise<string> {
-    if (!process.env.PUNJABI_ACE_STEP_MODEL_ID) {
+    if (!PUNJABI_ACE_STEP_MODEL_ID) {
         console.warn("PUNJABI_ACE_STEP_MODEL_ID not found, falling back to standard ACE-Step");
         return submitAceStepJob(context, replicate);
     }
@@ -49,7 +50,7 @@ export async function submitPunjabiAceStepJob(context: CreativeContext, replicat
 
     // Fine-tunes use the models.predictions.create endpoint
     // Format is owner/model-name
-    const modelId = process.env.PUNJABI_ACE_STEP_MODEL_ID;
+    const modelId = PUNJABI_ACE_STEP_MODEL_ID;
     
     console.log(`[Model Router] Submitting Punjabi Fine-tuned job to ${modelId}`);
     const prediction = await replicate.predictions.create({
