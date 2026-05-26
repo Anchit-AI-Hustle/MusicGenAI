@@ -538,6 +538,58 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
     return `${themeLine}[Verse 1]\n${verse}\n\n[Chorus]\n${chorus}`;
   };
 
+  // Genre → fallback artist suggestions when inference didn't catch any name.
+  // Keeps the artist-inspiration field from staying blank on "Fill all fields".
+  const ARTIST_DEFAULTS: Record<string, string[]> = {
+    'Hip Hop': ['Kendrick Lamar', 'Tyler, The Creator', 'J. Cole'],
+    'Trap': ['Travis Scott', 'Future', 'Young Thug'],
+    'Drill': ['Headie One', 'Pop Smoke', 'Central Cee'],
+    'Punjabi Drill': ['Sidhu Moose Wala', 'Shubh', 'AP Dhillon'],
+    'Phonk': ['Kordhell', 'Ghostface Playa', 'Memphis Black'],
+    'Pop': ['Taylor Swift', 'Dua Lipa', 'Olivia Rodrigo'],
+    'Indie Pop': ['Phoebe Bridgers', 'Clairo', 'Boy Pablo'],
+    'Synth-pop': ['The 1975', 'Carly Rae Jepsen', 'CHVRCHES'],
+    'K-Pop': ['BLACKPINK', 'NewJeans', 'LE SSERAFIM'],
+    'J-Pop': ['YOASOBI', 'Fujii Kaze', 'Ado'],
+    'Bollywood': ['Arijit Singh', 'Shreya Ghoshal', 'Pritam'],
+    'Bhangra': ['Diljit Dosanjh', 'AP Dhillon', 'Karan Aujla'],
+    'Reggaeton': ['Bad Bunny', 'Karol G', 'Rauw Alejandro'],
+    'Afrobeats': ['Burna Boy', 'Rema', 'Asake'],
+    'R&B': ['SZA', 'Frank Ocean', 'Daniel Caesar'],
+    'Soul': ['Leon Bridges', 'H.E.R.', 'Anderson .Paak'],
+    'Funk': ['Bruno Mars', 'Vulfpeck', 'Anderson .Paak'],
+    'Rock': ['Arctic Monkeys', 'The Strokes', 'Tame Impala'],
+    'Metal': ['Sleep Token', 'Bring Me The Horizon', 'Spiritbox'],
+    'Punk': ['Idles', 'Fontaines D.C.', 'Turnstile'],
+    'Electronic': ['Fred again..', 'Bicep', 'ODESZA'],
+    'House': ['Disclosure', 'Honey Dijon', 'Peggy Gou'],
+    'Deep House': ['Lane 8', 'Yotto', 'Ben Böhmer'],
+    'Techno': ['Charlotte de Witte', 'Amelie Lens', 'I Hate Models'],
+    'Hard Techno': ['Sara Landry', '999999999', 'I Hate Models'],
+    'Drum and Bass': ['Chase & Status', 'Sub Focus', 'Hybrid Minds'],
+    'EDM': ['Martin Garrix', 'Calvin Harris', 'Marshmello'],
+    'Dubstep': ['Excision', 'Skrillex', 'Subtronics'],
+    'Synthwave': ['The Midnight', 'FM-84', 'Timecop1983'],
+    'Lo-fi': ['Idealism', 'Saib', 'Aso'],
+    'Ambient': ['Brian Eno', 'Tycho', 'Hammock'],
+    'Country': ['Zach Bryan', 'Morgan Wallen', 'Chris Stapleton'],
+    'Folk': ['Bon Iver', 'Fleet Foxes', 'Big Thief'],
+    'Jazz': ['Robert Glasper', 'Kamasi Washington', 'Snarky Puppy'],
+    'Classical': ['Max Richter', 'Ólafur Arnalds', 'Ludovico Einaudi'],
+    'Blues': ['Gary Clark Jr.', 'Joe Bonamassa', 'Kenny Wayne Shepherd'],
+    'Reggae': ['Chronixx', 'Protoje', 'Koffee'],
+    'Dancehall': ['Spice', 'Shenseea', 'Skillibeng'],
+    'Industrial': ['Health', 'Author & Punisher', 'Perturbator'],
+  };
+  const pickDefaultArtists = (genreLabel: string, nonce: string): string => {
+    const pool = ARTIST_DEFAULTS[genreLabel];
+    if (!pool || pool.length === 0) return '';
+    const r = createFillRng(nonce + ':artists');
+    // Pick 2 distinct artists to seed the field.
+    const shuffled = [...pool].sort(() => r() - 0.5);
+    return shuffled.slice(0, 2).join(', ');
+  };
+
   const inferVocalGender = (genreLabel: string, artistList: string[]): 'male' | 'female' | 'neutral' => {
     const fem = ['Taylor Swift', 'Billie Eilish', 'Dua Lipa', 'Olivia Rodrigo', 'Sabrina Carpenter', 'Chappell Roan', 'SZA', 'Doja Cat', 'Ariana Grande', 'Beyoncé', 'Karol G', 'Tems', 'BLACKPINK', 'NewJeans', 'LE SSERAFIM', 'Phoebe Bridgers', 'Mitski', 'Lana Del Rey', 'boygenius'];
     const masc = ['The Weeknd', 'Drake', 'Bad Bunny', 'Kendrick Lamar', 'Travis Scott', 'Tyler, The Creator', 'Frank Ocean', 'Peso Pluma', 'Rauw Alejandro', 'Burna Boy', 'Rema', 'Asake', 'AP Dhillon', 'Karan Aujla', 'Diljit Dosanjh', 'Shubh', 'Sidhu Moose Wala', 'Arijit Singh', 'Hanumankind', 'Anuv Jain', 'BTS', 'Stray Kids', 'Zach Bryan', 'Morgan Wallen', 'Chris Stapleton'];
@@ -612,13 +664,22 @@ export const CreateMusicPage: React.FC<CreateMusicPageProps> = ({ onAuthClick, o
     const inferredInstruments = parseInstrumentation(inferred.instrumentation);
     const nextGenre = inferred.genre || genre;
     const nextMood = inferred.mood || mood;
-    const nextArtist = inferred.artistInspiration || artistInspiration;
+    // Artist inspiration: prefer inference → keep current → fall back to a
+    // genre-appropriate default pair so the field is never blank after Fill.
+    const nextArtist =
+      inferred.artistInspiration ||
+      artistInspiration ||
+      pickDefaultArtists(nextGenre, fillNonce);
     const artistList = nextArtist.split(',').map(s => s.trim()).filter(Boolean);
     const nextLyricsTheme = inferred.lyricTheme || lyricsTheme;
     // Track name, full lyrics, vocal gender, duration, and visualizer flag
     // are all derived here so EVERY field on the page ends up populated.
     const nextTitle = title.trim() || buildTrackName(nextMood, nextGenre, fillNonce);
-    const nextLyricsText = lyricsText.trim() || buildLyricsBody(nextLyricsTheme, fillNonce);
+    // Lyrics: ALWAYS regenerate when the user clicks "Fill all fields" — they
+    // explicitly asked for everything below to be (re-)derived from the prompt.
+    // We previously kept old lyrics when present, which made the button feel
+    // half-broken on subsequent clicks.
+    const nextLyricsText = buildLyricsBody(nextLyricsTheme, fillNonce);
     const nextVocalGender = inferVocalGender(nextGenre, artistList);
     const nextDuration = duration && duration !== 180 ? duration : inferDurationFromGenre(nextGenre);
     const after = {

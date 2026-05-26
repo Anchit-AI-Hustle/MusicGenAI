@@ -811,6 +811,9 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       // Resolve lyrics early so both vocal synthesis AND lyric cues can use them.
       // If user didn't provide lyrics but vocals are enabled, auto-generate them.
       let resolvedLyrics = (runtimeInput.lyricsText || '').trim();
+      // If the user typed lyrics, force vocals on — they clearly want them
+      // sung, regardless of what the arrangement/intent flag resolved to.
+      const lyricsForceVocals = !!resolvedLyrics;
       if (!resolvedLyrics && runtimeInput.vocalsEnabled) {
         resolvedLyrics = generateDefaultLyrics(
           runtimeInput.songDescription || runtimeInput.songTitle || intent.genre,
@@ -821,7 +824,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         );
       }
 
-      if (runtimeInput.vocalsEnabled && resolvedLyrics) {
+      if ((runtimeInput.vocalsEnabled || lyricsForceVocals) && resolvedLyrics) {
         updateTrackLocal(creationId, trackId, { status: 'processing', currentStage: 'Synthesizing vocals', progress: 0.65 });
 
         const { generateVocals, mixVocalsIntoInstrumental, inferVocalStyle } = await import('@/lib/vocal-engine');
