@@ -488,7 +488,7 @@ function syllableEventsForBar(
       freq: midiToFreq(midi),
       velocity: vel,
       kind: "chant",
-      vowel: syll.vowel,
+      vowel: syll.vowel as Vowel,
       sectionName,
     });
   }

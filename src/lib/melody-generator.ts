@@ -63,10 +63,10 @@ function generateMotif(rng: () => number, energy: number): Motif {
 /**
  * Apply variation to a motif (transposition, rhythmic shift, ornamentation).
  */
-function varyMotif(motif: Motif, variationType: number, rng: () => number): Motif {
-  const intervals = [...motif.intervals];
-  const durations = [...motif.durations];
-  const velocities = [...motif.velocities];
+function varyMotif(motif, variationType: number, rng: () => number): Motif {
+  const intervals = [motif.intervals];
+  const durations = [motif.durations];
+  const velocities = [motif.velocities];
 
   switch (variationType % 5) {
     case 0: // Transpose up
@@ -99,7 +99,7 @@ function varyMotif(motif: Motif, variationType: number, rng: () => number): Moti
  * Render a motif as MelodyEvents at a given time position.
  */
 function renderMotif(
-  motif: Motif, notes: number[], startNote: number,
+  motif, notes: number[], startNote: number,
   startTime: number, beatDur: number, energy: number,
 ): MelodyEvent[] {
   const events: MelodyEvent[] = [];

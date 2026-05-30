@@ -753,7 +753,7 @@ async function renderSegment(
   leadWaveform: OscillatorType,
   bassWaveform: OscillatorType,
   rng: () => number,
-  trackMotif: Motif,
+  trackMotMotif,
   trackHook: Motif,
 ): Promise<AudioStems> {
   renderRandomSource = rng;
@@ -895,7 +895,7 @@ async function renderSegment(
       const melEvents = generateMelody(
         root, parsedScale, effStart, effEnd - effStart, beatDuration, energy,
         sectionMelodyStyle, rng,
-        trackMotif, // pass the track's motif for coherence
+        trackMotMotif, // pass the track's motif for coherence
         trackHook,  // pass the track's hook for high-energy sections
       );
       for (const evt of melEvents) {
@@ -1108,7 +1108,7 @@ export async function generateTrack(
       ...profile,
       swing: newSwing,
       density: newDensity,
-      rhythmStyle: newRhythmStyle,
+      rhythmStyle: newRhythmStyle as GenreProfile['rhythmStyle'],
       characteristics: [...(profile.characteristics ?? []), ...dnaCharacteristics],
     };
   }
