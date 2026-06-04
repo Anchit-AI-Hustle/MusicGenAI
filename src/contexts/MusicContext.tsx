@@ -225,7 +225,8 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       
       // If description (songDescription) changed, apply inference
       if (updates.songDescription !== undefined) {
-        return applyInferenceToContext(updates.songDescription, merged);
+        const inferred = inferContextFromDescription(updates.songDescription, merged.variationSeed);
+        return applyInferenceToContext(merged, inferred);
       }
       
       // Otherwise just resolve any direct dependency changes

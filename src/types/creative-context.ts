@@ -46,6 +46,7 @@ export interface CreativeContext {
   // Legacy/Internal (to be phased out or mapped)
   vocalLanguages?: string[];
   songStructure?: string;
+  prompt?: string;
 }
 
 export type SuggestionField = keyof CreativeContext;
