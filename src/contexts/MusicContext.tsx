@@ -416,6 +416,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     audioUrl: string,
     dna: GenerationDNA,
     lyricCues: LyricCue[] = [],
+    localAudioUrl?: string,
   ) => {
     try {
       updateTrackLocal(creationId, trackId, { status: 'analyzing_beat_structure', currentStage: 'Analyzing beats', progress: 0.84, audioUrl });
@@ -425,7 +426,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const dur = input.duration || 120;
       const videoBlob = await withTimeout(
         generateVideoFromAudio(
-          audioUrl,
+          localAudioUrl || audioUrl,
           dur,
           [input.genre || 'Pop'],
           input.mood || '',
@@ -959,9 +960,13 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       // 8. Handle Video. Works with both Supabase public URLs and local
       // blob: URLs — the video generator fetches from whatever URL we have,
-      // and blob: URLs are valid for same-tab fetch() calls.
+      // and blob: URLs are valid for same-tab fetch() calls. We pass a local
+      // blob URL specifically for video generation to avoid remote fetch CORS issues.
       if (runtimeInput.videoStyle) {
-        runAsyncVideoRender(trackId, creationId, runtimeInput, trackTitle, publicAudioUrl, dna, lyricCues).catch(console.warn);
+        const videoLocalAudioUrl = publicAudioUrl.startsWith('blob:')
+          ? publicAudioUrl
+          : URL.createObjectURL(mastered.blob);
+        runAsyncVideoRender(trackId, creationId, runtimeInput, trackTitle, publicAudioUrl, dna, lyricCues, videoLocalAudioUrl).catch(console.warn);
       }
 
       return 'completed';
