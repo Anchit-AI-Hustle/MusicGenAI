@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
-import { inferContextFromDescription } from "../contextInference";
-import { buildMasterPrompt } from "../promptBuilder";
-import { CreativeContext } from "../../types/creative-context";
+import { inferContextFromDescription } from "@/lib/contextInference";
+import { buildMasterPrompt } from "@/lib/promptBuilder";
+import { CreativeContext } from "@/types/creative-context";
 
 describe("Logic Layer Verification", () => {
   test("Infers Punjabi Drill context correctly", () => {
