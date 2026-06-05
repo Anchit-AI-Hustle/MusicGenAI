@@ -24,7 +24,7 @@ import {
   suggestVocalStyle,
 } from '@/engine';
 import { moodToVector } from '@/engine/normalizer';
-import { applyInferenceToContext, resolveCreativeContext } from '@/lib/contextInference';
+import { applyInferenceToContext, resolveCreativeContext, inferContextFromDescription } from '@/lib/contextInference';
 import { nextGenerationNonce } from '@/lib/intelligence';
 import { ARTIST_NAMES } from '@/lib/musicData/artists';
 import { CreativeContext } from '@/types/creative-context';

@@ -47,6 +47,9 @@ export interface CreativeContext {
   vocalLanguages?: string[];
   songStructure?: string;
   prompt?: string;
+  title?: string;
+  musicalKey?: string;
+  vocalArrangement?: string;
 }
 
 export type SuggestionField = keyof CreativeContext;
