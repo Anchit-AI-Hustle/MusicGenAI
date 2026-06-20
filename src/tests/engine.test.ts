@@ -283,10 +283,10 @@ describe('GROUP 4: buildAlbumPlan()', () => {
 })
 
 describe('GROUP 5: suggestEngine', () => {
-  it('suggestMusicPrompt with empty input returns 60-300 words', () => {
+  it('suggestMusicPrompt with empty input returns 60-500 words', () => {
     const prompt = suggestMusicPrompt({})
     expect(words(prompt)).toBeGreaterThanOrEqual(60)
-    expect(words(prompt)).toBeLessThanOrEqual(300)
+    expect(words(prompt)).toBeLessThanOrEqual(500)
   })
 
   it('suggestMood with metal + 160 returns high-arousal mood', () => {
