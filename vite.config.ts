@@ -64,6 +64,13 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // spessasynth_lib v4 moved and renamed the AudioWorklet processor into
+      // dist/. Keep the renderer's legacy import stable while pointing Vite at
+      // the package's current file so `?url` emits a deployable worker asset.
+      "spessasynth_lib/synthetizer/worklet_processor.min.js": path.resolve(
+        __dirname,
+        "./node_modules/spessasynth_lib/dist/spessasynth_processor.min.js",
+      ),
     },
   },
 }));
