@@ -5,6 +5,10 @@ import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 
 const disablePwaForLocalPath = __dirname.includes("'") && !process.env.VERCEL;
+const spessaSynthProcessor = `${path.resolve(
+  __dirname,
+  "./node_modules/spessasynth_lib/dist/spessasynth_processor.min.js",
+)}?url`;
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -64,13 +68,10 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      // spessasynth_lib v4 moved and renamed the AudioWorklet processor into
-      // dist/. Keep the renderer's legacy import stable while pointing Vite at
-      // the package's current file so `?url` emits a deployable worker asset.
-      "spessasynth_lib/synthetizer/worklet_processor.min.js": path.resolve(
-        __dirname,
-        "./node_modules/spessasynth_lib/dist/spessasynth_processor.min.js",
-      ),
+      // The renderer imports the historical v3 worklet path with `?url`.
+      // SpessaSynth v4 renamed/moved it into dist/, so match the complete
+      // queried specifier and preserve Vite's URL-asset transform.
+      "spessasynth_lib/synthetizer/worklet_processor.min.js?url": spessaSynthProcessor,
     },
   },
 }));
