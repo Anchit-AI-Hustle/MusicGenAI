@@ -72,6 +72,7 @@
     "recharts": "^2.15.4",
     "replicate": "^1.4.0",
     "sonner": "^1.7.4",
+    "spessasynth_core": "^4.3.15",
     "spessasynth_lib": "^4.3.11",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
