@@ -1,3 +1,5 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createClient } from '@supabase/supabase-js';
 import { checkRateLimit } from '../src/lib/rateLimiter';
 
 type ApiRequest = {
@@ -17,6 +19,11 @@ function getSingle(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || '' : value || '';
 }
 
+function getHeader(req: ApiRequest, name: string): string {
+  const headers = req.headers || {};
+  return getSingle(headers[name.toLowerCase()] || headers[name] || headers[name.toUpperCase()]);
+}
+
 function configuredEndpoint(): string | null {
   const raw = process.env.AI_MUSIC_API_URL?.trim();
   if (!raw) return null;
@@ -30,6 +37,43 @@ function configuredEndpoint(): string | null {
   }
 }
 
+async function authenticatedUserId(req: ApiRequest): Promise<string | null> {
+  const authorization = getHeader(req, 'authorization');
+  const accessToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!accessToken) return null;
+
+  const url = (
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    ''
+  ).trim();
+  const anonKey = (
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    ''
+  ).trim();
+  if (!url || !anonKey) return null;
+
+  const supabase = createClient(url, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await supabase.auth.getUser(accessToken);
+  return error ? null : data.user?.id || null;
+}
+
+function statusSignature(apiKey: string, userId: string, jobId: string): string {
+  return createHmac('sha256', apiKey)
+    .update(`${userId}:${jobId}`)
+    .digest('base64url');
+}
+
+function signaturesMatch(expected: string, received: string): boolean {
+  const a = Buffer.from(expected);
+  const b = Buffer.from(received);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   res.setHeader?.('Cache-Control', 'no-store');
 
@@ -40,14 +84,18 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return;
   }
 
+  const userId = await authenticatedUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: 'Authentication required.' });
+    return;
+  }
+
   const method = (req.method || '').toUpperCase();
   let target = endpoint;
   let body: string | undefined;
 
   if (method === 'POST') {
-    const forwardedFor = getSingle(req.headers?.['x-forwarded-for']);
-    const ip = forwardedFor.split(',')[0]?.trim() || '127.0.0.1';
-    const limit = await checkRateLimit(ip);
+    const limit = await checkRateLimit(`ai-music:${userId}`);
     if (!limit.allowed) {
       res.status(429).json({
         error: 'Generation rate limit exceeded.',
@@ -55,12 +103,17 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       });
       return;
     }
-
     body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {});
   } else if (method === 'GET') {
     const id = getSingle(req.query?.id);
+    const token = getSingle(req.query?.token);
     if (!/^[A-Za-z0-9_-]{1,200}$/.test(id)) {
       res.status(400).json({ error: 'A valid generation ID is required.' });
+      return;
+    }
+    const expected = statusSignature(apiKey, userId, id);
+    if (!token || !signaturesMatch(expected, token)) {
+      res.status(403).json({ error: 'Generation status access denied.' });
       return;
     }
     target = `${endpoint}/${encodeURIComponent(id)}`;
@@ -86,6 +139,18 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const payload = await upstream.json().catch(() => ({
       error: 'Music provider returned an invalid response.',
     }));
+
+    if (method === 'POST' && upstream.ok && payload && typeof payload === 'object') {
+      const jobId = (payload as { id?: unknown }).id;
+      if (typeof jobId === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(jobId)) {
+        res.status(upstream.status).json({
+          ...payload,
+          statusToken: statusSignature(apiKey, userId, jobId),
+        });
+        return;
+      }
+    }
+
     res.status(upstream.status).json(payload);
   } catch (error) {
     const timedOut = error instanceof Error && error.name === 'AbortError';
