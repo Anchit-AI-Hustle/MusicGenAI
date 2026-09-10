@@ -46,7 +46,7 @@ export default defineConfig(({ mode }) => {
   return {
     envPrefix: ["VITE_", "NEXT_PUBLIC_"],
     server: {
-      host: "::",
+      host: musicProxy ? "127.0.0.1" : "::",
       port: 8080,
       hmr: {},
       proxy: musicProxy ? { "/api/ai-music": musicProxy } : undefined,
