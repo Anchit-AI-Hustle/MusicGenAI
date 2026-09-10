@@ -1,4 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/integrations/supabase/client', () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn().mockResolvedValue({
+        data: { session: { access_token: 'user-session-token' } },
+        error: null,
+      }),
+    },
+  },
+}));
+
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: vi.fn(() => ({
+    auth: {
+      getUser: vi.fn().mockResolvedValue({
+        data: { user: { id: 'user-1' } },
+        error: null,
+      }),
+    },
+  })),
+}));
+
 import handler from '../../api/ai-music';
 import { aiMusicClient } from '@/lib/ai-music-client';
 
@@ -25,17 +48,21 @@ describe('AI music credential boundary', () => {
   beforeEach(() => {
     process.env.AI_MUSIC_API_URL = 'https://provider.example/v1/generate';
     process.env.AI_MUSIC_API_KEY = 'server-secret';
+    process.env.VITE_SUPABASE_URL = 'https://project.supabase.co';
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY = 'publishable-key';
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     delete process.env.AI_MUSIC_API_URL;
     delete process.env.AI_MUSIC_API_KEY;
+    delete process.env.VITE_SUPABASE_URL;
+    delete process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   });
 
-  it('never attaches provider credentials in the browser client', async () => {
+  it('sends only the user session from the browser', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ id: 'job_123' }), {
+      new Response(JSON.stringify({ id: 'job_123', statusToken: 'signed-status-token' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -46,14 +73,14 @@ describe('AI music credential boundary', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/ai-music', expect.objectContaining({
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: expect.objectContaining({ Authorization: 'Bearer user-session-token' }),
     }));
-    expect(fetchMock.mock.calls[0][1]?.headers).not.toHaveProperty('Authorization');
+    expect(JSON.stringify(fetchMock.mock.calls[0][1])).not.toContain('server-secret');
   });
 
-  it('attaches the credential only while proxying from the server', async () => {
+  it('authenticates the user and attaches the provider key only on the server', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ id: 'job_123' }), {
+      new Response(JSON.stringify({ id: 'job_456' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -64,10 +91,14 @@ describe('AI music credential boundary', () => {
     await handler({
       method: 'POST',
       body: { prompt: 'test', genre: 'ambient' },
-      headers: { 'x-forwarded-for': '203.0.113.10' },
+      headers: { authorization: 'Bearer user-session-token' },
     }, response);
 
     expect(state.status).toBe(200);
+    expect(state.body).toEqual(expect.objectContaining({
+      id: 'job_456',
+      statusToken: expect.any(String),
+    }));
     expect(fetchMock).toHaveBeenCalledWith(
       'https://provider.example/v1/generate',
       expect.objectContaining({
@@ -76,13 +107,43 @@ describe('AI music credential boundary', () => {
     );
   });
 
+  it('rejects unauthenticated generation before spending provider quota', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { state, response } = responseRecorder();
+
+    await handler({ method: 'POST', body: {} }, response);
+
+    expect(state.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects status polling without a user-bound signature', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { state, response } = responseRecorder();
+
+    await handler({
+      method: 'GET',
+      query: { id: 'job_456', token: 'tampered' },
+      headers: { authorization: 'Bearer user-session-token' },
+    }, response);
+
+    expect(state.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('rejects unsafe provider URLs before making a request', async () => {
     process.env.AI_MUSIC_API_URL = 'http://127.0.0.1/internal';
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const { state, response } = responseRecorder();
 
-    await handler({ method: 'POST', body: {} }, response);
+    await handler({
+      method: 'POST',
+      body: {},
+      headers: { authorization: 'Bearer user-session-token' },
+    }, response);
 
     expect(state.status).toBe(503);
     expect(fetchMock).not.toHaveBeenCalled();
