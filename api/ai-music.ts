@@ -15,6 +15,11 @@ type ApiResponse = {
   setHeader?(name: string, value: string): void;
 };
 
+type AuthenticatedUser = {
+  id: string;
+  client: ReturnType<typeof createClient>;
+};
+
 function getSingle(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || '' : value || '';
 }
@@ -37,29 +42,31 @@ function configuredEndpoint(): string | null {
   }
 }
 
-async function authenticatedUserId(req: ApiRequest): Promise<string | null> {
+async function authenticatedUser(req: ApiRequest): Promise<AuthenticatedUser | null> {
   const authorization = getHeader(req, 'authorization');
   const accessToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
   if (!accessToken) return null;
 
   const url = (
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.VITE_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
     ''
   ).trim();
   const anonKey = (
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     ''
   ).trim();
   if (!url || !anonKey) return null;
 
   const supabase = createClient(url, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
   });
   const { data, error } = await supabase.auth.getUser(accessToken);
-  return error ? null : data.user?.id || null;
+  const id = error ? null : data.user?.id || null;
+  return id ? { id, client: supabase } : null;
 }
 
 function statusSignature(apiKey: string, userId: string, jobId: string): string {
@@ -84,8 +91,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return;
   }
 
-  const userId = await authenticatedUserId(req);
-  if (!userId) {
+  const auth = await authenticatedUser(req);
+  if (!auth) {
     res.status(401).json({ error: 'Authentication required.' });
     return;
   }
@@ -95,7 +102,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   let body: string | undefined;
 
   if (method === 'POST') {
-    const limit = await checkRateLimit(`ai-music:${userId}`);
+    let limit;
+    try {
+      limit = await checkRateLimit(auth.client);
+    } catch {
+      res.status(503).json({ error: 'Generation rate limiter is unavailable.' });
+      return;
+    }
     if (!limit.allowed) {
       res.status(429).json({
         error: 'Generation rate limit exceeded.',
@@ -111,7 +124,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       res.status(400).json({ error: 'A valid generation ID is required.' });
       return;
     }
-    const expected = statusSignature(apiKey, userId, id);
+    const expected = statusSignature(apiKey, auth.id, id);
     if (!token || !signaturesMatch(expected, token)) {
       res.status(403).json({ error: 'Generation status access denied.' });
       return;
@@ -145,7 +158,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (typeof jobId === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(jobId)) {
         res.status(upstream.status).json({
           ...payload,
-          statusToken: statusSignature(apiKey, userId, jobId),
+          statusToken: statusSignature(apiKey, auth.id, jobId),
         });
         return;
       }

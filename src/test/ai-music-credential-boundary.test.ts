@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { createClientMock, rateLimitRpcMock } = vi.hoisted(() => ({
+  createClientMock: vi.fn(),
+  rateLimitRpcMock: vi.fn(),
+}));
+
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
     auth: {
@@ -12,13 +17,14 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: vi.fn(() => ({
+  createClient: createClientMock.mockImplementation(() => ({
     auth: {
       getUser: vi.fn().mockResolvedValue({
         data: { user: { id: 'user-1' } },
         error: null,
       }),
     },
+    rpc: rateLimitRpcMock,
   })),
 }));
 
@@ -46,6 +52,11 @@ function responseRecorder() {
 
 describe('AI music credential boundary', () => {
   beforeEach(() => {
+    createClientMock.mockClear();
+    rateLimitRpcMock.mockReset().mockResolvedValue({
+      data: [{ allowed: true, remaining: 4, reset_after_ms: 3_600_000 }],
+      error: null,
+    });
     process.env.AI_MUSIC_API_URL = 'https://provider.example/v1/generate';
     process.env.AI_MUSIC_API_KEY = 'server-secret';
     process.env.VITE_SUPABASE_URL = 'https://project.supabase.co';
@@ -58,6 +69,8 @@ describe('AI music credential boundary', () => {
     delete process.env.AI_MUSIC_API_KEY;
     delete process.env.VITE_SUPABASE_URL;
     delete process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   });
 
   it('sends only the user session from the browser', async () => {
@@ -104,6 +117,48 @@ describe('AI music credential boundary', () => {
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer server-secret' }),
       }),
+    );
+    expect(rateLimitRpcMock).toHaveBeenCalledWith('consume_ai_music_generation_quota');
+  });
+
+  it('fails closed when durable rate-limit storage is unavailable', async () => {
+    rateLimitRpcMock.mockResolvedValue({ data: null, error: { message: 'database unavailable' } });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { state, response } = responseRecorder();
+
+    await handler({
+      method: 'POST',
+      body: { prompt: 'test' },
+      headers: { authorization: 'Bearer user-session-token' },
+    }, response);
+
+    expect(state.status).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('validates sessions against the same Supabase variables as the browser', async () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://different.supabase.co';
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'different-key';
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 'job_789' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { response } = responseRecorder();
+
+    await handler({
+      method: 'POST',
+      body: { prompt: 'test' },
+      headers: { authorization: 'Bearer user-session-token' },
+    }, response);
+
+    expect(createClientMock).toHaveBeenCalledWith(
+      'https://project.supabase.co',
+      'publishable-key',
+      expect.any(Object),
     );
   });
 
