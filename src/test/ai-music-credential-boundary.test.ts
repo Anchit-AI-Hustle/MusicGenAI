@@ -30,6 +30,7 @@ vi.mock('@supabase/supabase-js', () => ({
 
 import handler from '../../api/ai-music';
 import { aiMusicClient } from '@/lib/ai-music-client';
+import { checkRateLimit } from '@/lib/rateLimiter';
 
 function responseRecorder() {
   const state: { status?: number; body?: unknown; headers: Record<string, string> } = {
@@ -71,6 +72,16 @@ describe('AI music credential boundary', () => {
     delete process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    delete process.env.VITE_SUPABASE_PROJECT_ID;
+    delete process.env.NEXT_PUBLIC_SUPABASE_PROJECT_ID;
+    delete process.env.NEXT_PUBLIC_SUPABASE_MUSIC_GEN_AI_SUPABASE_URL;
+    delete process.env.SUPABASE_MUSIC_GEN_AI_SUPABASE_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_MUSIC_GEN_AI_SUPABASE_PUBLISHABLE_KEY;
+    delete process.env.NEXT_PUBLIC_SUPABASE_MUSIC_GEN_AI_SUPABASE_ANON_KEY;
+    delete process.env.SUPABASE_MUSIC_GEN_AI_SUPABASE_PUBLISHABLE_KEY;
+    delete process.env.SUPABASE_MUSIC_GEN_AI_SUPABASE_ANON_KEY;
+    delete process.env.VITE_FORCE_PRODUCTION_SUPABASE;
+    delete process.env.NEXT_PUBLIC_FORCE_PRODUCTION_SUPABASE;
   });
 
   it('sends only the user session from the browser', async () => {
@@ -89,6 +100,17 @@ describe('AI music credential boundary', () => {
       headers: expect.objectContaining({ Authorization: 'Bearer user-session-token' }),
     }));
     expect(JSON.stringify(fetchMock.mock.calls[0][1])).not.toContain('server-secret');
+  });
+
+  it('preserves the legacy string-based generate-route limiter', async () => {
+    const identifier = `legacy-route-${Date.now()}`;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await expect(checkRateLimit(identifier)).resolves.toEqual(expect.objectContaining({ allowed: true }));
+    }
+    await expect(checkRateLimit(identifier)).resolves.toEqual(expect.objectContaining({
+      allowed: false,
+      remaining: 0,
+    }));
   });
 
   it('authenticates the user and attaches the provider key only on the server', async () => {
@@ -158,6 +180,33 @@ describe('AI music credential boundary', () => {
     expect(createClientMock).toHaveBeenCalledWith(
       'https://project.supabase.co',
       'publishable-key',
+      expect.any(Object),
+    );
+  });
+
+  it('derives the server Supabase URL from the project ID like the browser', async () => {
+    delete process.env.VITE_SUPABASE_URL;
+    delete process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    process.env.NEXT_PUBLIC_SUPABASE_PROJECT_ID = 'music-project';
+    process.env.NEXT_PUBLIC_SUPABASE_MUSIC_GEN_AI_SUPABASE_PUBLISHABLE_KEY = 'legacy-publishable-key';
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 'job_project' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { response } = responseRecorder();
+
+    await handler({
+      method: 'POST',
+      body: { prompt: 'test' },
+      headers: { authorization: 'Bearer user-session-token' },
+    }, response);
+
+    expect(createClientMock).toHaveBeenCalledWith(
+      'https://music-project.supabase.co',
+      'legacy-publishable-key',
       expect.any(Object),
     );
   });

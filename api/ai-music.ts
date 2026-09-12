@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-import { checkRateLimit } from '../src/lib/rateLimiter';
+import { checkDurableRateLimit } from '../src/lib/rateLimiter';
 
 type ApiRequest = {
   method?: string;
@@ -29,6 +29,42 @@ function getHeader(req: ApiRequest, name: string): string {
   return getSingle(headers[name.toLowerCase()] || headers[name] || headers[name.toUpperCase()]);
 }
 
+function normalizeEnvValue(value: string | undefined): string {
+  if (!value) return '';
+  return value.trim().replace(/^['"]|['"]$/g, '').replace(/\\n/g, '').replace(/\r?\n/g, '');
+}
+
+function supabaseConfig(): { url: string; anonKey: string } {
+  const projectRef =
+    normalizeEnvValue(process.env.VITE_SUPABASE_PROJECT_ID) ||
+    normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_PROJECT_ID) ||
+    normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_MUSIC_GEN_AI_SUPABASE_URL).match(/^https:\/\/([a-z0-9-]+)\.supabase\.co$/)?.[1] ||
+    normalizeEnvValue(process.env.SUPABASE_MUSIC_GEN_AI_SUPABASE_URL).match(/^https:\/\/([a-z0-9-]+)\.supabase\.co$/)?.[1] ||
+    '';
+  const explicitUrl =
+    normalizeEnvValue(process.env.VITE_SUPABASE_URL) ||
+    normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_URL) ||
+    normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_MUSIC_GEN_AI_SUPABASE_URL) ||
+    normalizeEnvValue(process.env.SUPABASE_MUSIC_GEN_AI_SUPABASE_URL);
+  const anonKey =
+    normalizeEnvValue(process.env.VITE_SUPABASE_PUBLISHABLE_KEY) ||
+    normalizeEnvValue(process.env.VITE_SUPABASE_ANON_KEY) ||
+    normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) ||
+    normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_MUSIC_GEN_AI_SUPABASE_PUBLISHABLE_KEY) ||
+    normalizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_MUSIC_GEN_AI_SUPABASE_ANON_KEY) ||
+    normalizeEnvValue(process.env.SUPABASE_MUSIC_GEN_AI_SUPABASE_PUBLISHABLE_KEY) ||
+    normalizeEnvValue(process.env.SUPABASE_MUSIC_GEN_AI_SUPABASE_ANON_KEY);
+  const forceProduction =
+    normalizeEnvValue(process.env.VITE_FORCE_PRODUCTION_SUPABASE).toLowerCase() === 'true' ||
+    normalizeEnvValue(process.env.NEXT_PUBLIC_FORCE_PRODUCTION_SUPABASE).toLowerCase() === 'true';
+  const productionUrl = projectRef ? `https://${projectRef}.supabase.co` : '';
+
+  return {
+    url: forceProduction && productionUrl ? productionUrl : (explicitUrl || productionUrl),
+    anonKey,
+  };
+}
+
 function configuredEndpoint(): string | null {
   const raw = process.env.AI_MUSIC_API_URL?.trim();
   if (!raw) return null;
@@ -47,17 +83,7 @@ async function authenticatedUser(req: ApiRequest): Promise<AuthenticatedUser | n
   const accessToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
   if (!accessToken) return null;
 
-  const url = (
-    process.env.VITE_SUPABASE_URL ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    ''
-  ).trim();
-  const anonKey = (
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.VITE_SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    ''
-  ).trim();
+  const { url, anonKey } = supabaseConfig();
   if (!url || !anonKey) return null;
 
   const supabase = createClient(url, anonKey, {
@@ -104,7 +130,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (method === 'POST') {
     let limit;
     try {
-      limit = await checkRateLimit(auth.client);
+      limit = await checkDurableRateLimit(auth.client);
     } catch {
       res.status(503).json({ error: 'Generation rate limiter is unavailable.' });
       return;
