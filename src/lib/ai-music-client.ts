@@ -1,9 +1,11 @@
 /**
  * Neural AI Music Client
- * 
- * Handles interaction with cloud-based neural music generation APIs.
- * Supports asynchronous generation with polling for progress and completion.
+ *
+ * Browser requests carry only the signed-in user's Supabase access token.
+ * Provider credentials are attached by the server and never enter the bundle.
  */
+
+import { supabase } from '@/integrations/supabase/client';
 
 export interface GenerationOptions {
   prompt: string;
@@ -34,8 +36,8 @@ export interface GenerationStatus {
 
 export class AiMusicClient {
   private static instance: AiMusicClient;
-  private apiEndpoint: string = import.meta.env.VITE_AI_MUSIC_API_URL || 'https://api.musevibe.ai/v1/generate';
-  private apiKey: string = import.meta.env.VITE_AI_MUSIC_API_KEY || '';
+  private readonly apiEndpoint = '/api/ai-music';
+  private readonly statusTokens = new Map<string, string>();
 
   private constructor() {}
 
@@ -46,59 +48,60 @@ export class AiMusicClient {
     return AiMusicClient.instance;
   }
 
-  /**
-   * Validates the client configuration.
-   */
   public validateConfig(): { valid: boolean; error?: string } {
-    if (!this.apiKey && !this.apiEndpoint.includes('musevibe.ai')) {
-       return { valid: false, error: 'VITE_AI_MUSIC_API_KEY is missing.' };
-    }
-    if (!this.apiEndpoint) {
-      return { valid: false, error: 'VITE_AI_MUSIC_API_URL is not configured.' };
-    }
     return { valid: true };
   }
 
-  /**
-   * Triggers a new music generation request.
-   */
+  private async sessionHeaders(): Promise<Record<string, string>> {
+    const { data, error } = await supabase.auth.getSession();
+    const accessToken = data.session?.access_token;
+    if (error || !accessToken) {
+      throw new Error('Sign in before using neural music generation.');
+    }
+    return { Authorization: `Bearer ${accessToken}` };
+  }
+
   async triggerGeneration(options: GenerationOptions): Promise<string> {
     console.log('[AiMusicClient] Triggering neural generation:', options.prompt);
-    
-    // In a real implementation, this would be a POST request to the API
-    // For now, we simulate the trigger and return a mock generation ID
+    const authHeaders = await this.sessionHeaders();
+
     const response = await fetch(this.apiEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`
+        ...authHeaders,
       },
-      body: JSON.stringify(options)
+      body: JSON.stringify(options),
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `API error: ${response.status}`);
+      throw new Error(errorData.message || errorData.error || `API error: ${response.status}`);
     }
 
     const data = await response.json();
+    if (!data.id || !data.statusToken) {
+      throw new Error('Music provider returned an incomplete generation response');
+    }
+    this.statusTokens.set(data.id, data.statusToken);
     return data.id;
   }
 
-  /**
-   * Polls the status of a generation request until it completes or fails.
-   */
   async pollStatus(id: string, onProgress?: (p: number) => void): Promise<GenerationStatus> {
     let status: GenerationStatus = { id, status: 'pending', progress: 0 };
-    const maxAttempts = 120; // 10 minutes at 5s interval
-    let attempts = 0;
+    const maxAttempts = 120;
+    const statusToken = this.statusTokens.get(id);
+    if (!statusToken) throw new Error('Generation status token is unavailable.');
 
+    let attempts = 0;
     while (attempts < maxAttempts) {
       attempts++;
-      
+
       try {
-        const response = await fetch(`${this.apiEndpoint}/${id}`, {
-          headers: { 'Authorization': `Bearer ${this.apiKey}` }
+        const authHeaders = await this.sessionHeaders();
+        const query = new URLSearchParams({ id, token: statusToken });
+        const response = await fetch(`${this.apiEndpoint}?${query.toString()}`, {
+          headers: authHeaders,
         });
 
         if (!response.ok) {
@@ -108,41 +111,37 @@ export class AiMusicClient {
           if (onProgress) onProgress(status.progress);
 
           if (status.status === 'completed' || status.status === 'failed') {
+            this.statusTokens.delete(id);
             return status;
           }
         }
-      } catch (e) {
-        console.warn(`[AiMusicClient] Network error during poll:`, e);
+      } catch (error) {
+        console.warn('[AiMusicClient] Network error during poll:', error);
       }
 
-      // Wait 5 seconds before next poll
       await new Promise(resolve => setTimeout(resolve, 5000));
     }
 
+    this.statusTokens.delete(id);
     throw new Error('Neural generation timed out after 10 minutes (Cold Start or Queue Depth issue).');
   }
 
-  /**
-   * High-level method to Generate -> Poll -> Return URL
-   */
   async generateMusic(options: GenerationOptions, onProgress?: (p: number, stage: string) => void): Promise<string> {
     try {
       if (onProgress) onProgress(0.1, 'Sending prompt to neural model');
       const id = await this.triggerGeneration(options);
-      
+
       if (onProgress) onProgress(0.2, 'Neural inference in progress');
-      const result = await this.pollStatus(id, (p) => {
-        if (onProgress) onProgress(0.2 + (p * 0.6), 'Neural inference in progress');
+      const result = await this.pollStatus(id, (progress) => {
+        if (onProgress) onProgress(0.2 + (progress * 0.6), 'Neural inference in progress');
       });
 
       if (result.status === 'failed') {
         throw new Error(result.errorMessage || 'Neural generation failed');
       }
-
       if (!result.audioUrl) {
         throw new Error('No audio URL returned from neural engine');
       }
-
       return result.audioUrl;
     } catch (error) {
       console.error('[AiMusicClient] Generation failure:', error);
