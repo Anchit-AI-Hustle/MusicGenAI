@@ -4,6 +4,11 @@ updates:
     directory: "/"
     schedule: { interval: "weekly" }
     open-pull-requests-limit: 5
+    ignore:
+      # Tailwind 4 drops the PostCSS plugin and the tailwind.config.ts setup
+      # this app uses: the move needs a migration, not a version bump.
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule: { interval: "monthly" }
